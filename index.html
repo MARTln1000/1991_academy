@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>1991 Academy — Learn deeply, enjoy the process</title>
+  <meta name="description" content="1991 Academy — a structured, joyful path through mathematics, web, machine learning, deep learning, agentic AI, and algorithms, with a hands-on Lab to implement and visualize them." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%236366f1'/><text x='50' y='62' font-size='34' font-family='sans-serif' font-weight='800' fill='white' text-anchor='middle'>1991</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Armenian:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/game.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="logo" href="index.html">
+        <span class="logo-mark">1991</span>
+        1991 Academy
+      </a>
+      <a class="nav-link" href="lab.html" data-i18n="Lab">Lab</a>
+      <a class="nav-link" href="missions.html" data-i18n="Missions">Missions</a>
+      <a class="nav-link" href="practice.html" data-i18n="Practice">Practice</a>
+      <div class="nav-spacer"></div>
+      <span class="xp-pill" data-xp>⚡</span>
+      <span class="streak-pill" data-streak>🔥</span>
+      <a class="nav-link" href="account.html" data-account>Sign in</a>
+      <button class="icon-btn" data-lang-toggle aria-label="Language">ՀԱՅ</button>
+      <button class="icon-btn" data-theme-toggle aria-label="Toggle theme">☀️</button>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container hero-inner">
+      <span class="hero-kicker rise" data-i18n="hero.kicker">⚡ Your personal learning universe</span>
+      <h1 class="rise" data-i18n="hero.title">Learn deeply.<br /><span class="grad">Enjoy the process.</span></h1>
+      <p class="hero-sub rise" data-i18n="hero.sub">
+        Seven structured tracks — mathematics, programming, web, machine learning,
+        deep learning, agentic AI, and algorithms — plus a Lab where you implement models and
+        algorithms in JavaScript, Python or C++ and watch them run. Lessons,
+        video lectures, active-recall quizzes, real code. No fluff, no grind.
+      </p>
+      <div class="hero-stats" id="hero-stats"></div>
+    </div>
+  </header>
+
+  <main>
+    <section class="section" style="padding-top: 0">
+      <div class="container">
+        <div class="dashboard" id="dashboard"></div>
+      </div>
+    </section>
+
+    <section class="section" id="tracks" style="padding-top: 0">
+      <div class="container">
+        <h2 class="section-title" data-i18n="tracks.title">Choose your track</h2>
+        <p class="section-sub" data-i18n="tracks.sub">Each track is a sequence of bite-sized lessons with quizzes. Start anywhere — your progress is saved on this device.</p>
+        <div class="tracks-grid" id="tracks-grid"></div>
+      </div>
+    </section>
+
+    <section class="section" id="missions">
+      <div class="container">
+        <h2 class="section-title" data-i18n="missions.title">🛰️ Missions: where tracks collide</h2>
+        <p class="section-sub" data-i18n="missions.sub">Real problems that need ideas from two tracks at once — learn algorithms, learn web, then build the thing that requires both. Complete the linked lessons to unlock each mission.</p>
+        <div class="missions-grid" id="missions-teaser"></div>
+      </div>
+    </section>
+
+    <section class="section" id="leaderboard-section" hidden>
+      <div class="container">
+        <h2 class="section-title" data-i18n="lb.title">🏆 Leaderboard</h2>
+        <p class="section-sub" data-i18n="lb.sub">Learners who opted in, ranked by lifetime XP. Join from your account page.</p>
+        <div class="lb-list" id="leaderboard"></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <h2 class="section-title" data-i18n="badges.title">🏅 Achievements</h2>
+        <p class="section-sub" data-i18n="badges.sub">Earned by doing, not by showing up.</p>
+        <div class="badges-strip" id="badges"></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <h2 class="section-title" data-i18n="features.title">Built on how learning actually works</h2>
+        <p class="section-sub" data-i18n="features.sub">The structure is not decoration — every element maps to a principle from learning science.</p>
+        <div class="features-grid">
+          <div class="feature">
+            <div class="f-icon">🍱</div>
+            <h3 data-i18n="f1.title">Bite-sized lessons</h3>
+            <p data-i18n="f1.body">10–15 minute lessons keep cognitive load low. One core idea per lesson, explained from first principles.</p>
+          </div>
+          <div class="feature">
+            <div class="f-icon">🧠</div>
+            <h3 data-i18n="f2.title">Active recall</h3>
+            <p data-i18n="f2.body">Every lesson ends with a quiz. Retrieving an idea from memory strengthens it far more than re-reading ever will.</p>
+          </div>
+          <div class="feature">
+            <div class="f-icon">📊</div>
+            <h3 data-i18n="f3.title">Visible progress</h3>
+            <p data-i18n="f3.body">Progress rings, completion states and streaks turn an abstract journey into something you can feel moving.</p>
+          </div>
+          <div class="feature">
+            <div class="f-icon">🔗</div>
+            <h3 data-i18n="f4.title">Connected ideas</h3>
+            <p data-i18n="f4.body">Tracks reference each other — gradient descent appears in ML, returns in DL, and powers the agents track. Repetition with depth.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container" style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+      <span data-i18n="footer.left">1991 Academy — built for the joy of learning.</span>
+      <span data-i18n="footer.right">Progress lives in your browser. Clear site data to reset.</span>
+    </div>
+  </footer>
+
+  <script src="js/common.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/progress.js"></script>
+  <script src="js/xp.js"></script>
+  <script src="js/review.js"></script>
+  <script src="js/data/math.js"></script>
+  <script src="js/data/prog.js"></script>
+  <script src="js/data/web.js"></script>
+  <script src="js/data/ml.js"></script>
+  <script src="js/data/ml-course.js"></script>
+  <script src="js/data/dl.js"></script>
+  <script src="js/data/dl-course.js"></script>
+  <script src="js/data/agents.js"></script>
+  <script src="js/data/dsa.js"></script>
+  <script src="js/data/missions.js"></script>
+  <script src="js/data/lab.js"></script>
+  <script src="js/missions-page.js"></script>
+  <script src="js/data/i18n-hy.js"></script>
+  <script src="js/data/i18n-hy-web.js"></script>
+  <script src="js/data/i18n-hy-dsa.js"></script>
+  <script src="js/data/i18n-hy-agents.js"></script>
+  <script src="js/data/i18n-hy-math.js"></script>
+  <script src="js/data/i18n-hy-ml.js"></script>
+  <script src="js/data/i18n-hy-dl.js"></script>
+  <script src="js/data/i18n-hy-prog.js"></script>
+  <script src="js/data/i18n-hy-missions.js"></script>
+  <script src="js/data/i18n-hy-lab.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
