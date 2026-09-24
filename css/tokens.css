@@ -1,0 +1,83 @@
+/* ============================================
+   1991 Academy — Design Tokens
+   Single source of truth for colors, type,
+   spacing, radii and shadows. Dark by default.
+   ============================================ */
+
+:root {
+  /* Brand */
+  --brand-1: #6366f1;
+  --brand-2: #a855f7;
+  --brand-gradient: linear-gradient(135deg, var(--brand-1), var(--brand-2));
+
+  /* Surfaces (dark) */
+  --bg: #0b0e14;
+  --bg-elevated: #11151f;
+  --card: #151a26;
+  --card-hover: #1a2030;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  /* Text */
+  --text: #e8ecf4;
+  --text-muted: #98a1b3;
+  --text-faint: #5c6478;
+
+  /* Semantic */
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.14);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.14);
+  --warning: #fbbf24;
+
+  /* Default accent (overridden per track) */
+  --accent: #6366f1;
+  --accent-soft: rgba(99, 102, 241, 0.14);
+
+  /* Typography — "Noto Sans Armenian" carries the hy content (falls back gracefully) */
+  --font-display: "Space Grotesk", "Noto Sans Armenian", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", "Noto Sans Armenian", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Shape */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  /* Elevation */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+  --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.45);
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #f6f7fb;
+  --bg-elevated: #ffffff;
+  --card: #ffffff;
+  --card-hover: #fafbff;
+  --border: rgba(15, 23, 42, 0.09);
+  --border-strong: rgba(15, 23, 42, 0.16);
+
+  --text: #101527;
+  --text-muted: #55607a;
+  --text-faint: #98a1b8;
+
+  --shadow-card: 0 1px 2px rgba(16, 21, 39, 0.06), 0 8px 24px rgba(16, 21, 39, 0.07);
+  --shadow-pop: 0 12px 40px rgba(16, 21, 39, 0.16);
+
+  color-scheme: light;
+}
+
+/* Per-track accent colors */
+body[data-track="web"]    { --accent: #f59e0b; --accent-soft: rgba(245, 158, 11, 0.14); }
+body[data-track="ml"]     { --accent: #a855f7; --accent-soft: rgba(168, 85, 247, 0.14); }
+body[data-track="dl"]     { --accent: #22d3ee; --accent-soft: rgba(34, 211, 238, 0.14); }
+body[data-track="agents"] { --accent: #34d399; --accent-soft: rgba(52, 211, 153, 0.14); }
+body[data-track="dsa"]    { --accent: #fb7185; --accent-soft: rgba(251, 113, 133, 0.14); }
+body[data-track="math"]   { --accent: #818cf8; --accent-soft: rgba(129, 140, 248, 0.14); }
+body[data-track="prog"]   { --accent: #3b82f6; --accent-soft: rgba(59, 130, 246, 0.14); }

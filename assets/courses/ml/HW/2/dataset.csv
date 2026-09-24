@@ -1,0 +1,408 @@
+Pass,Age,Education type,Educational institution name,Programming languages
+0,19,High school,Other,"Python, Java Script, C++, C, Other"
+0,18,High school,Eurnekian school,"Python, Java Script"
+0,17,High school,NPUA,"Python, Other"
+0,1,Bachelor,Other,No
+0,23,Master,No,Java Script
+0,20,Bachelor,NPUA,C++
+0,17,High school,H. Kojoyan educational complex,"Java, Java Script, C++, Other"
+1,20,Bachelor,YSU,"Python, C++, Other"
+0,36,Master,No,Other
+0,25,Master,YSU,No
+1,18,High school,NPUA,"Python, Java Script, C++, Other"
+0,19,Bachelor,YSU,C++
+0,18,High school,ASPU,Java Script
+0,18,High school,Physmath,"Python, Java, Java Script, Other"
+0,18,Graduate,N5 high school,Other
+0,19,Graduate,IT college,Other
+0,18,High school,Physmath,No
+0,20,Bachelor,NPUA,"Python, C++, Other"
+0,18,High school,IT college,No
+0,18,Bachelor,NPUA,Other
+0,18,Graduate,P. Ghevondyan secondary school,Other
+1,22,Bachelor,YSU,"Python, Java, Java Script, C++, Other"
+0,20,Bachelor,Other,"Python, Java Script, C++"
+0,19,Bachelor,NPUA,C++
+0,18,High school,N3 high school,No
+0,20,Bachelor,YSU,C++
+0,18,High school,N62 high school,"Java Script, Other"
+0,18,High school,Physmath,"Java Script, C++, Other"
+0,18,Bachelor,NPUA,"Python, Java, Java Script, C++"
+0,21,Bachelor,Other,"Java, Java Script"
+0,1,Bachelor,YSU,"Python, C++"
+0,15,High school,N129,"Java Script, C++, Other"
+0,22,Bachelor,RAU,Java
+0,17,High school,NPUA high school,"Java Script, Other"
+1,24,Graduate,NPUA high school,"Python, Java, C++, C"
+0,20,Bachelor,UFAR,"Python, Other"
+1,19,Graduate,IT college,"Java Script, C++, Other"
+0,19,Graduate,IT college,"Java, Java Script, C++, Other"
+0,18,High school,N105,Java Script
+0,18,High school,N83,"Java Script, C++"
+0,19,Bachelor,NPUA,"Java, Java Script, C++"
+0,21,Bachelor,NPUA,"C++, C"
+1,18,Bachelor,NPUA,C++
+0,18,High school,Eurnekian school,No
+0,18,High school,Physmath,C++
+0,17,High school,N43 high school ,"Java Script, C++"
+0,21,Bachelor,NPUA,"Python, Other"
+0,19,Bachelor,NPUA,No
+0,17,High school,NPUA high school,C++
+0,22,Bachelor,RAU,"C++, Other"
+0,17,High school,Physmath,"Python, Java, Java Script, C++"
+1,19,Bachelor,YSU,"Python, C++, C"
+0,16,High school,Garni N2 high school,"Java Script, C++"
+0,18,High school,Vanadzor N11 high school,Java Script
+0,18,High school,NPUA high school,"Python, Java Script"
+1,18,Bachelor,RAU,"Python, C++"
+0,17,High school,N43 high school ,Java Script
+0,18,High school,N3 high school,"Python, Java, Java Script, C++, C"
+0,18,Bachelor,AUA,"Python, Java"
+0,17,High school,N5 high school,Java Script
+0,18,High school,Physmath,Java Script
+0,18,High school,Macsedan high school,"Java, Java Script, C++"
+0,18,High school,NPUA high school,"Java Script, Other"
+0,21,Bachelor,AUA,"Java, Other"
+0,19,High school,Sardarapat secondary school,Java Script
+0,17,High school,H. Kojoyan educational complex,No
+0,18,High school,Mrgashat N1,"Java Script, Other"
+1,20,Bachelor,YSU,"Python, Java Script, Other"
+0,19,High school,NPUA high school,C++
+0,18,High school,NPUA high school,"Python, Java Script"
+0,17,High school,NPUA high school,"Python, Java Script, C++, Other"
+0,18,High school,NPUA high school,"Java, C++, Other"
+0,18,High school,Haytagh secondary school,"Python, Java Script, Other"
+0,17,High school,NPUA high school,"Java Script, Other"
+0,20,Bachelor,NPUA,No
+0,18,High school,Shirakatsy Lyceum,Other
+0,18,High school,NPUA high school,Other
+0,17,High school,NPUA high school,"Java Script, Other"
+0,17,High school,Physmath,No
+0,17,High school,NPUA high school,Java Script
+0,17,High school,NPUA high school,No
+0,19,High school,Other,"Java Script, C++, Other"
+0,17,High school,NPUA high school,Java Script
+0,17,High school,NPUA high school,Java Script
+0,18,High school,N148 high school,"Java Script, Other"
+0,18,High school,NPUA high school,Other
+0,18,High school,Verin Dvin secondary school,No
+0,22,Bachelor,NPUA,"Python, C++, Other"
+0,17,High school,N5 high school,Java Script
+0,21,Bachelor,NPUA,"Java Script, C++, C"
+0,18,High school,Physmath,C++
+0,17,High school,NPUA high school,Python
+1,18,High school,NPUA high school,"C++, Other"
+0,19,High school,NPUA college,"Java, C++, Other"
+0,16,High school,NPUA high school,Java Script
+0,18,Bachelor,YSU,"Java Script, C++, Other"
+0,17,High school,Physmath,Java Script
+0,18,High school,NPUA high school,No
+0,21,Bachelor,RAU,Java
+0,1,High school,N65 high school,No
+1,18,Bachelor,RAU,"Python, C"
+0,22,Bachelor,UFAR,No
+0,18,High school,NPUA high school,"Python, Java Script"
+0,16,High school,Chinese-Armenian Friendship school,"Java Script, Other"
+0,17,High school,NPUA high school,"Java, Java Script, C++"
+0,16,High school,N114 high school,No
+0,18,High school,Quantum,Python
+0,19,Bachelor,YSU,C++
+1,21,Bachelor,Other,"Python, Java, C++, C, Other"
+0,17,High school,Physmath,C++
+0,22,Bachelor,NPUA,"C++, C"
+0,18,High school,NPUA high school,"Python, Java, Java Script, C++, Other"
+0,17,High school,N94 high school,"Java Script, C++"
+0,16,High school,Other,"Java, Java Script"
+0,18,High school,Yerevak,"Java Script, Other"
+0,18,High school,Quantum,"C++, Other"
+0,18,Bachelor,NPUA,Python
+0,16,High school,IT college,"Java Script, C, Other"
+0,18,High school,Physmath,"Python, C++, C"
+0,17,High school,Quantum,C++
+0,17,High school,N199,Other
+0,18,High school,N118 high school,Other
+0,18,High school,Shirakatsy Lyceum,C++
+0,19,High school,NPUA high school,"C++, C, Other"
+0,21,Bachelor,YSU,"Python, Java, Java Script, C++, Other"
+0,21,Bachelor,NPUA,Python
+0,19,Graduate,IT college,"Python, Java, Java Script, C++, Other"
+0,17,High school,NPUA high school,No
+0,19,Bachelor,UFAR,"Python, Java, C++"
+0,18,Bachelor,YSU,C++
+0,18,High school,NPUA high school,"Python, Java, Java Script, C++, Other"
+0,22,Bachelor,NPUA,"Python, C++, C, Other"
+0,21,Bachelor,NPUA,"Python, Java Script"
+1,18,High school,Physmath,"Python, C++"
+0,17,High school,Hovtashat middle school,Other
+1,21,Bachelor,YSU,"Python, C++"
+0,18,High school,NPUA high school,"Python, Java Script, C++, Other"
+0,17,High school,Physmath,"Java Script, C++"
+0,19,High school,IT college,"Java Script, C++"
+0,18,High school,N190 high school,No
+0,19,High school,No,"Java Script, C++, Other"
+0,22,Bachelor,NPUA,Java Script
+1,18,High school,Physmath,Python
+0,18,High school,NPUA high school,"Java, Java Script, Other"
+0,21,Bachelor,YSU,Other
+0,21,Bachelor,RAU,Java
+0,17,High school,N190 high school,"Python, Java, Java Script, C++, C"
+1,21,Bachelor,RAU,"Python, Other"
+0,21,Bachelor,RAU,"Java Script, C++"
+0,18,High school,ASPU,No
+0,18,High school,Physmath,"Java Script, C++"
+0,18,High school,N87,Python
+0,18,High school,Real school,"Python, Java Script, C++"
+0,18,High school,IT college,No
+0,18,High school,NPUA high school,No
+0,18,High school,NPUA high school,Java Script
+0,19,High school,Physmath,C++
+0,18,High school,IT college,No
+0,24,Master,Other,Other
+0,17,High school,Physmath,"Python, Java Script, C++, Other"
+0,1,High school,N54,C++
+0,21,Bachelor,NPUA,"Python, Java, C++, Other"
+1,21,Bachelor,NPUA,"Python, Java, Java Script, C++"
+0,17,High school,Eurnekian school,No
+1,18,Graduate,NPUA,"Java Script, C++, Other"
+1,18,Graduate,NPUA,"Java Script, C++, Other"
+0,21,Bachelor,Other,"Java Script, C++, Other"
+0,18,Graduate,Surenavan middle school,Other
+1,21,Bachelor,NPUA,Other
+0,16,High school,NPUA high school,No
+0,1,High school,N182 high school,Other
+0,18,Graduate,Meghrashen middle school,"Java Script, Other"
+0,18,High school,N127 high school,Python
+1,18,High school,NPUA high school,"Python, Java, Java Script, C++"
+0,21,Bachelor,NPUA,Other
+0,17,High school,Aregnazan school,No
+0,22,Bachelor,NPUA,"Python, C++, C"
+0,19,Bachelor,NPUA,"Java, Java Script, C++, Other"
+0,18,High school,IT college,Python
+0,17,High school,NPUA high school,Java Script
+0,19,Graduate,IT college,"Java Script, C++, Other"
+0,19,Graduate,IT college,"Java Script, C++, Other"
+0,17,High school,NPUA high school,C++
+0,19,Graduate,NPUA college,"Java, C++, Other"
+0,19,Graduate,NPUA college,C++
+0,19,Bachelor,NPUA,No
+0,18,High school,IT college,Other
+0,18,Bachelor,Other,"Python, Java Script, C++, Other"
+0,20,Bachelor,NPUA,C++
+0,18,Graduate,N148 high school,No
+0,19,Graduate,IT college,"C++, Other"
+0,19,Graduate,IT college,"Java Script, C++, Other"
+0,16,High school,Quantum,"Java Script, C++, Other"
+1,21,Bachelor,NPUA,Java
+0,17,High school,N119 high school,"Python, Java Script, Other"
+0,21,Bachelor,YSU,"Java, Java Script, C++, C, Other"
+0,19,High school,Other,C++
+0,19,Graduate,N87,Other
+1,22,Bachelor,AUA,"Python, Java Script"
+0,18,High school,NPUA high school,No
+0,19,Graduate,IT college,"C++, Other"
+1,18,High school,Physmath,"Python, C++"
+0,21,Bachelor,NPUA,"Java Script, Other"
+1,20,Bachelor,YSU,"Python, Java Script, C++, C, Other"
+0,22,Bachelor,RAU,"Java, Other"
+0,18,High school,Quantum,C++
+0,18,High school,NPUA high school,Java Script
+0,18,High school,Physmath,Java
+0,21,Bachelor,NPUA,"Python, Java Script, C++"
+0,20,Bachelor,YSU,"Java Script, C++"
+0,18,High school,NPUA high school,"C++, C, Other"
+0,18,High school,N108,No
+0,18,Bachelor,NPUA,"Java, C++, Other"
+0,15,High school,Aregnazan school,"Python, Java Script, Other"
+0,17,High school,NPUA high school,Python
+0,19,Bachelor,AUA,"Python, Java Script"
+0,21,Bachelor,NPUA,Other
+0,16,High school,Quantum,C++
+0,21,Bachelor,NPUA,Java
+1,21,Bachelor,NPUA,"Java Script, C++, Other"
+0,19,Graduate,IT college,"Java Script, Other"
+1,21,Bachelor,YSU,"Python, C++"
+1,18,High school,Physmath,C++
+0,17,Graduate,Other,No
+0,21,Bachelor,YSU,"Java Script, C++, Other"
+0,22,Bachelor,NPUA,"Python, C++"
+0,18,Graduate,N116,"C++, Other"
+0,20,Bachelor,NPUA,"Python, Java Script, C++, Other"
+0,21,Bachelor,UFAR,Other
+0,18,Bachelor,AUA,Python
+0,1,High school,IT college,"Python, Other"
+0,21,Bachelor,YSU,Python
+0,21,Bachelor,NPUA,"Java, Java Script, C++"
+0,17,High school,N190 high school,No
+0,21,Bachelor,NPUA,"Java Script, Other"
+0,18,Graduate,Other,Other
+0,18,High school,IT college,"Python, Java Script, C++, Other"
+0,18,High school,Academy college,Python
+0,22,Bachelor,YSU,No
+0,18,High school,NPUA high school,"Python, Java, C++"
+0,21,Bachelor,UFAR,No
+0,19,Bachelor,YSU,"Java Script, C++"
+0,20,Bachelor,UFAR,No
+0,21,Bachelor,UFAR,"C, Other"
+0,19,High school,NPUA,"Java, Java Script, C++"
+0,21,Bachelor,UFAR,C
+0,18,High school,N105 high school,"Java Script, Other"
+0,20,Bachelor,YSU,"C, Other"
+0,18,High school,Physmath,C++
+0,21,Bachelor,NPUA,"C++, Other"
+0,17,High school,NPUA high school,Java Script
+0,18,High school,A. Yeritsyan gymnasium,C++
+0,21,Bachelor,YSU,C++
+0,18,High school,N29 school,Python
+0,18,High school,NPUA high school,Java Script
+0,18,High school,IT college,"Python, Java Script, Other"
+1,21,Bachelor,AUA,"Java, Java Script, C++, Other"
+0,18,High school,N29,C++
+0,19,High school,N118 high school,"Java Script, Other"
+0,22,Bachelor,RAU,Other
+0,18,High school,Garni N2 high school,Java Script
+0,18,High school,N159 high school,"Python, Java Script, C++, C, Other"
+0,22,Bachelor,NPUA,Java
+0,19,Bachelor,RAU,"Java Script, C++"
+0,22,Bachelor,NPUA,"Java Script, C++, Other"
+0,19,High school,Physmath,C++
+0,18,Bachelor,RAU,No
+0,22,Bachelor,NPUA,"Python, Other"
+0,18,High school,NPUA high school,"Python, Java, Java Script, C++, Other"
+0,19,High school,NPUA college,No
+1,21,Bachelor,NPUA,"Java Script, C++, Other"
+0,22,Bachelor,RAU,C++
+0,19,Bachelor,Other,No
+0,18,High school,N62 high school,Python
+0,21,Bachelor,YSU,C++
+0,20,Bachelor,YSU,"Python, C++, C, Other"
+0,19,Graduate,Other,No
+0,22,Bachelor,YSU,"Java Script, Other"
+0,19,Bachelor,NPUA,C++
+0,18,Graduate,N6,Other
+0,18,High school,N159 high school,"Java Script, Other"
+0,19,Bachelor,AUA,"Python, Java Script"
+0,18,Bachelor,UFAR,No
+0,17,High school,NPUA high school,C++
+0,18,High school,NPUA high school,No
+0,18,High school,Physmath,Other
+1,18,High school,Physmath,"Python, C++"
+0,18,High school,Quantum,C++
+1,18,Bachelor,AUA,"Python, Java Script, C++, Other"
+0,21,Bachelor,YSU,"Python, Java Script"
+0,18,Bachelor,RAU,No
+0,18,Bachelor,AUA,"Python, Java Script, Other"
+0,19,Bachelor,UFAR,"Python, Java"
+0,18,Bachelor,AUA,"Python, Java Script"
+0,25,Master,Other,C++
+0,19,Bachelor,YSU,"Java Script, C++"
+0,18,High school,NPUA high school,"Java Script, C++, Other"
+0,18,Bachelor,AUA,"Python, Java, Java Script, C++"
+0,21,Bachelor,NPUA,Java Script
+0,16,High school,NPUA high school,No
+0,16,High school,N188,No
+0,18,High school,N5 high school,No
+0,18,High school,N4 high school,"Java, C++"
+0,21,Bachelor,NPUA,Java Script
+1,18,High school,Ayb,"Python, Java Script, C++"
+1,17,High school,NPUA high school,"Java Script, C++, Other"
+0,17,High school,NPUA high school,No
+0,18,High school,Physmath,"Python, C++, Other"
+0,18,High school,Physmath,"Python, C++, Other"
+1,21,Bachelor,YSU,"Python, C++"
+0,22,Bachelor,NPUA,No
+0,19,Bachelor,NPUA,"Java, Java Script, Other"
+0,21,Bachelor,NPUA,Java Script
+1,18,Bachelor,YSU,"C++, C"
+0,17,High school,Quantum,"Java Script, C++"
+0,19,Bachelor,UFAR,"Python, Java Script, C++"
+0,22,Bachelor,NPUA,"Java, C++, Other"
+1,18,High school,UWC Dilijan college,"Java Script, C++, Other"
+0,18,High school,NPUA high school,"Python, Java, C++, Other"
+0,18,High school,Voskevaz middle school,Other
+1,21,Bachelor,NPUA,"Java, C++, Other"
+0,26,Master,Other,"Python, C++, Other"
+0,22,Bachelor,YSU,C++
+0,18,High school,Physmath,"Python, C++"
+0,18,High school,Physmath,No
+0,18,High school,Voskevaz middle school,Other
+0,18,High school,N139 high school,"Java Script, C++"
+0,19,Bachelor,AUA,No
+0,18,High school,N118 high school,No
+0,18,High school,Ayb,Python
+0,19,Bachelor,AUA,"Python, Other"
+0,18,High school,Eurnekian school,Java
+0,21,Bachelor,NPUA,"Python, C++, C, Other"
+0,18,High school,NPUA high school,Other
+0,1,High school,NPUA high school,"Java Script, Other"
+0,18,High school,Quantum,C++
+1,18,High school,NPUA high school,"Java Script, C++, Other"
+0,19,Graduate,UWC Dilijan college,"Python, Java Script, Other"
+0,21,Bachelor,YSU,"C++, Other"
+1,18,High school,Physmath,"Java, Java Script, C++"
+0,17,High school,Quantum,"Python, Java, Java Script, C++"
+0,22,Bachelor,YSU,"Python, Java Script, C++, Other"
+0,18,High school,Ayb,Python
+0,18,High school,Physmath,"Java Script, Other"
+0,21,Bachelor,NPUA,"Java Script, Other"
+0,21,Bachelor,NPUA,"Java Script, C++, Other"
+0,16,High school,NPUA high school,"Python, Java, Java Script"
+0,17,High school,N16,No
+0,19,High school,NPUA,"Python, Java Script, C++"
+0,18,High school,ASPU,Other
+0,18,Graduate,NPUA high school,Other
+0,19,High school,Other,Other
+0,22,Bachelor,NPUA,No
+0,17,High school,N29,No
+1,18,Bachelor,AUA,"Python, Java Script"
+0,18,High school,IT college,"C++, Other"
+0,18,High school,IT college,No
+0,24,Bachelor,No,Other
+0,18,High school,NPUA high school,No
+0,17,High school,Yerevan Olympic college,Other
+0,17,High school,Real school,"C++, Other"
+0,17,High school,NPUA high school,"Java Script, Other"
+0,21,Bachelor,AUA,No
+0,21,Bachelor,NPUA,No
+0,20,Bachelor,NPUA,"Java Script, C++, Other"
+0,22,Bachelor,RAU,"Python, Java Script"
+0,18,High school,NPUA,"C++, Other"
+0,17,High school,Physmath,"Java Script, C++"
+0,22,Bachelor,RAU,"Java Script, Other"
+0,19,Graduate,Other,Other
+0,18,High school,IT college,No
+0,19,High school,NPUA college,"Java, Java Script, C++, Other"
+0,21,Bachelor,NPUA,"Python, Java, Java Script, C++, C, Other"
+0,18,High school,N2 high school,No
+0,18,High school,Geghahovit N1,No
+0,21,Bachelor,YSU,"Python, Other"
+0,21,Bachelor,YSU,"C++, Other"
+0,19,High school,NPUA,"Java, Java Script, C++"
+1,22,Bachelor,YSU,"Python, C++, C, Other"
+1,21,Bachelor,RAU,"Java, Java Script, C++, Other"
+0,18,High school,IT college,No
+1,21,Bachelor,YSU,"Python, Java Script, C++"
+0,18,High school,IT college,No
+0,18,Graduate,Other,Other
+0,22,Bachelor,NPUA,C++
+0,21,Bachelor,YSU,"Python, Java, C++, C"
+0,18,Graduate,IT college,No
+0,21,Bachelor,NPUA,"Java Script, C++, Other"
+0,23,Bachelor,NPUA,"Python, Java Script, C++, Other"
+0,17,High school,N3 high school,No
+0,18,High school,NPUA high school,No
+0,18,High school,Ayb,"Python, C++, C, Other"
+0,20,Bachelor,AUA,No
+0,29,Bachelor,NPUA,No
+0,18,High school,Ayb,"Python, Java Script, Other"
+0,17,High school,N139 high school,"Java Script, Other"
+0,19,High school,Geghahovit N1,No
+0,18,High school,Ayb,"Python, C, Other"
+0,24,Master,Other,No
+1,18,High school,Quantum,"Python, Java, C++, Other"
+0,18,High school,N127 high school,No
+0,18,High school,Shirakatsy Lyceum,"Java Script, C++, Other"
+0,21,Bachelor,RAU,Java
+0,18,High school,Ayb,"Python, Java Script, C++, Other"
+0,18,High school,Physmath,Other
+0,17,High school,Real school,"Python, Java Script"
+1,19,High school,Physmath,"C++, Python"
