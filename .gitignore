@@ -1,0 +1,20 @@
+# The database holds real accounts and password hashes. Never commit it.
+1991_academy.db
+1991_academy.db-wal
+1991_academy.db-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local secrets (SMTP credentials etc.)
+.env
+.env.*
+
+# macOS
+.DS_Store
