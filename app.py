@@ -21,6 +21,8 @@ Design notes that matter if you touch this file:
 
 Environment:
     PORT           listen port                      (default 8735)
+    ACADEMY_HOST   bind address                     (default 0.0.0.0 — reachable on
+                   your LAN; production binds 127.0.0.1 behind the proxy)
     ACADEMY_DB     SQLite path                      (default ./1991_academy.db)
     ACADEMY_DEBUG  1 = dev mode: no-store caching   (default 1)
     ACADEMY_CPP    1 = enable the C++ runner        (default 1; it executes
@@ -84,6 +86,10 @@ VERSION = "2.3"
 
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PORT", 8735))
+# Only used by `python app.py`. Behind a reverse proxy this must be 127.0.0.1:
+# with ACADEMY_TRUST_PROXY=1, anyone who can reach the port directly could
+# forge X-Forwarded-For and walk around the per-IP rate limits.
+HOST = os.environ.get("ACADEMY_HOST", "0.0.0.0")
 DB_PATH = os.environ.get("ACADEMY_DB", str(ROOT / "1991_academy.db"))
 DEBUG = os.environ.get("ACADEMY_DEBUG", "1") == "1"
 ENABLE_CPP = os.environ.get("ACADEMY_CPP", "1") == "1"
@@ -122,6 +128,14 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,20}$")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 CPP_COMPILER = shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")
+
+# The git commit this release was built from. deploy/deploy.sh writes the file
+# into every release; /api/health reports it so a deploy can confirm the live
+# site is serving what was just shipped. Absent in a plain checkout.
+try:
+    REVISION = (ROOT / "REVISION").read_text().strip() or None
+except OSError:
+    REVISION = None
 
 STARTED_AT = time.time()
 
@@ -1108,6 +1122,7 @@ async def api_health():
         "trust_proxy": TRUST_PROXY,
         "week": current_week_id(),
         "version": VERSION,
+        "revision": REVISION,
     }
 
 # static site LAST so /api/* wins (the guard middleware has already restricted
@@ -1117,10 +1132,10 @@ app.mount("/", StaticFiles(directory=str(ROOT), html=True), name="site")
 
 if __name__ == "__main__":
     cpp = "C++ ✓" if (ENABLE_CPP and CPP_COMPILER) else "C++ ✗"
-    log.info("1991 Academy backend on http://localhost:%d  [%s, debug=%s, secure_cookies=%s, trust_proxy=%s]",
-             PORT, cpp, DEBUG, SECURE_COOKIES, TRUST_PROXY)
+    log.info("1991 Academy backend on http://localhost:%d  [%s, debug=%s, secure_cookies=%s, trust_proxy=%s, rev=%s]",
+             PORT, cpp, DEBUG, SECURE_COOKIES, TRUST_PROXY, (REVISION or "dev")[:7])
     # Loud warning if a public-looking config still has the RCE runner on.
     if not DEBUG and ENABLE_CPP:
         log.warning("SECURITY: ACADEMY_CPP is ON in a non-debug run — the C++ runner "
                     "executes arbitrary code on this host. Set ACADEMY_CPP=0 on public servers.")
-    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
+    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")

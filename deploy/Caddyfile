@@ -1,0 +1,10 @@
+# Installed to /etc/caddy/Caddyfile by deploy/setup-server.sh, which puts your
+# domain in place of the site address below.
+#
+# Caddy gets and renews the HTTPS certificate on its own once DNS points at
+# this server, and redirects http:// to https://. It also sets X-Forwarded-For
+# to the real client address and drops any value the client sent, which is
+# what makes ACADEMY_TRUST_PROXY=1 safe.
+academy.example.com {
+	reverse_proxy 127.0.0.1:8735
+}

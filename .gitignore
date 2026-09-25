@@ -15,6 +15,10 @@ __pycache__/
 # Local secrets (SMTP credentials etc.)
 .env
 .env.*
+!.env.example
+
+# Database snapshots from `make backup`: real accounts, same as the .db
+backups/
 
 # macOS
 .DS_Store

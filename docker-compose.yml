@@ -1,0 +1,80 @@
+# 1991 Academy with Docker. Use it through the Makefile: `make up`, `make logs`,
+# `make backup` and so on (`make` lists them). What `make up` starts depends on
+# DOMAIN in .env:
+#
+#   DOMAIN=academy.example.com   this file: the app + Caddy serving https://DOMAIN
+#   DOMAIN= (empty)              this file + docker-compose.local.yml, app only:
+#                                http://localhost:8735 on your own computer
+#
+# Two containers, and that's everything:
+#   app    app.py: the API *and* the frontend. The database is a SQLite file in
+#          the `data` volume, created on first start; there is no database server.
+#   caddy  HTTPS: gets and renews the certificate for $DOMAIN, forwards to app.
+#
+# Settings come from .env (copy .env.example). README.md → "Run with Docker".
+
+# Fixed, so the volumes are always academy_data etc. Without it they'd be named
+# after this folder, and renaming or re-cloning it would start an empty database.
+name: academy
+
+x-logging: &logging
+  # Docker keeps container logs forever by default; cap them at 5 × 10 MB.
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        REVISION: ${REVISION:-}
+    image: 1991-academy
+    restart: unless-stopped
+    env_file:
+      - path: .env        # SMTP settings for password-reset emails
+        required: false
+    environment:
+      # Only Caddy (on the internal Docker network) and this machine reach the
+      # app, and Caddy sets X-Forwarded-For itself, so it can be trusted.
+      ACADEMY_TRUST_PROXY: "1"
+      ACADEMY_BASE_URL: https://${DOMAIN:-localhost}
+    volumes:
+      - data:/data
+    ports:
+      # Loopback only: for `make status` on a server, and the site itself on
+      # your own computer. Never publish it on 0.0.0.0: Docker's published
+      # ports bypass ufw, and clients could then forge X-Forwarded-For.
+      - "127.0.0.1:8735:8735"
+    # The app writes only its database; everything else is read-only.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      DOMAIN: ${DOMAIN:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./deploy/Caddyfile.docker:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data       # the HTTPS certificates: keep this volume
+      - caddy-config:/config
+    logging: *logging
+
+volumes:
+  data:          # the database (academy.db) and in-container backups
+  caddy-data:
+  caddy-config:
