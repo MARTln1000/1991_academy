@@ -1,4 +1,16 @@
 # syntax=docker/dockerfile:1
+
+# The site's files with normalized permissions: everything readable, folders
+# enterable. COPY keeps the host's permissions, and on the Mac the course
+# folders under assets/ are owner-only (drwx------), which the app's user
+# couldn't read. This is done with chmod in a stage of its own, not with
+# `COPY --chmod=u=rwX,go=rX`: BuildKit up to at least v0.20 (Docker 28)
+# ignores the X there and makes every folder unenterable, so the app could
+# serve no JS, CSS or PDFs. Only this stage's result reaches the final image.
+FROM python:3.12-slim AS site
+COPY . /app
+RUN chmod -R u=rwX,go=rX /app
+
 # The whole of 1991 Academy in one image: app.py serves the API *and* the
 # frontend (the HTML/CSS/JS files next to it), and the database is a SQLite
 # file the app creates on first start. There is no separate frontend or
@@ -31,12 +43,9 @@ COPY requirements.txt requirements.lock ./
 RUN pip install -r requirements.txt -c requirements.lock
 
 # The folder as it is on disk, uncommitted changes included, minus everything
-# .dockerignore excludes (the local database, .venv, .env, docs, tests).
-# COPY keeps the host's permissions, and on the Mac the
-# course folders under assets/ are owner-only (drwx------), which the academy
-# user couldn't read. --chmod makes everything world-readable (X: directories
-# searchable), whatever machine builds the image.
-COPY --chmod=u=rwX,go=rX . .
+# .dockerignore excludes (the local database, .venv, .env, docs, tests), with
+# the permissions fixed in the `site` stage above.
+COPY --from=site /app /app
 
 # The commit this image was built from (the Makefile passes it). /api/health
 # reports it, so you can see which version is live. Empty = "dev".

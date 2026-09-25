@@ -59,9 +59,15 @@ jobs:
           assert h["ok"] is True and h["revision"] == sys.argv[2], h
           assert not h["debug"] and not h["cpp"] and h["secure_cookies"] and h["trust_proxy"], h' \
             "$health" "$(git rev-parse HEAD)"
-          curl -fsS -o /dev/null http://127.0.0.1:8735/            # the frontend is served
+          # the frontend is served: pages, and files from inside its folders
+          for path in / /tracks/dl.html /js/common.js /css/tokens.css "/assets/courses/math/Homeworks/Homework%201.pdf"; do
+            curl -fsS -o /dev/null "http://127.0.0.1:8735$path" || { echo "::error::$path is not served"; exit 1; }
+          done
           code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8735/app.py)
           [ "$code" = 404 ] || { echo "/app.py answered $code, expected 404"; exit 1; }
+          # the app's own user can read every file and enter every folder of the site
+          blocked=$(docker compose exec -T app find /app \( ! -readable -o -type d ! -executable \) -print)
+          [ -z "$blocked" ] || { echo "::error::unreadable for the app: $(echo "$blocked" | head -5 | tr '\n' ' ')"; exit 1; }
       - name: Backup and restore (make backup, make restore)
         run: |
           make backup
