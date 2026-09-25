@@ -1,0 +1,12 @@
+# Added on top of docker-compose.yml when DOMAIN in .env is empty, i.e. when
+# the site runs on your own computer: http://localhost:8735, no Caddy, no
+# HTTPS. `make up` and the other make commands pick this automatically. With
+# plain docker compose, pass both files and name the app:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d app
+services:
+  app:
+    environment:
+      ACADEMY_SECURE_COOKIES: "0"   # plain http: browsers won't send a Secure cookie back
+      ACADEMY_TRUST_PROXY: "0"      # there is no proxy in front
+      ACADEMY_BASE_URL: http://localhost:8735

@@ -1,0 +1,33 @@
+# What `COPY . .` in the Dockerfile leaves out. The image needs app.py, the
+# page files and the css/ js/ tracks/ assets/ trees; everything else stays out.
+
+# Never ship: real accounts, secrets, local environments.
+# (A bare `*.db` would only match at the top level; `**/` matches at any depth.)
+**/*.db
+**/*.db-wal
+**/*.db-shm
+.env
+.env.*
+backups/
+.venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+tests/
+
+# Repository and tooling
+.git/
+.gitignore
+.github/
+.claude/
+.DS_Store
+.dockerignore
+Dockerfile
+docker-compose*.yml
+Makefile
+*.md
+requirements-dev.txt
+
+# The systemd deploy path; the image only runs the backup script
+deploy/
+!deploy/backup.sh

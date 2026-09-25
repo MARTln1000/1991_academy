@@ -288,6 +288,13 @@ def test_health(client):
     h = client.get("/api/health").json()
     assert h["ok"] is True and h["version"] == app.VERSION
     assert h["email"] is False  # SMTP unset in tests
+    assert h["revision"] is None  # no REVISION file outside a deployed release
+
+
+def test_health_reports_the_deployed_revision(client, monkeypatch):
+    # deploy/activate.sh and deploy.sh compare this against the commit they shipped
+    monkeypatch.setattr(app, "REVISION", "0123456789abcdef0123456789abcdef01234567")
+    assert client.get("/api/health").json()["revision"] == app.REVISION
 
 
 # ---------------------------------------------------------------- security
@@ -335,6 +342,21 @@ def test_rate_limit_per_proxy_ip(client, monkeypatch):
     "/DEPLOYMENT.md",
     "/.venv/pyvenv.cfg",
     "/.claude/launch.json",
+    # shipped inside every release by deploy/deploy.sh — never web-visible
+    "/REVISION",
+    "/requirements.lock",
+    "/deploy/activate.sh",
+    "/deploy/academy.env.example",
+    "/.github/workflows/deploy.yml",
+    # the Docker setup; deploy/backup.sh is also inside the image
+    "/Dockerfile",
+    "/docker-compose.yml",
+    "/docker-compose.local.yml",
+    "/Makefile",
+    "/.env.example",
+    "/.env",
+    "/deploy/backup.sh",
+    "/deploy/Caddyfile.docker",
 ])
 def test_non_web_files_are_not_served(client, path):
     assert client.get(path).status_code == 404
