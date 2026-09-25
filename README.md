@@ -194,10 +194,9 @@ This part is for whoever puts the site on the internet.
 6. **Existing accounts** (optional). Copy the export to the server with
    `scp academy-export.db.gz root@SERVER:1991_academy/`, then on the server,
    in `1991_academy`, run `make restore FILE=academy-export.db.gz`.
-7. **Nightly backups.** Run `crontab -e` and add this line (adjust the path):
-   ```
-   30 3 * * * cd /root/1991_academy && make backup >> backups/cron.log 2>&1
-   ```
+7. **Nightly backups.** Run `make nightly-backup`. It adds a cron job that runs
+   `make backup` every night at 03:30, logging to `backups/cron.log`.
+   `crontab -l` shows it.
 8. **Firewall** (recommended):
    `ufw allow OpenSSH && ufw allow 80,443/tcp && ufw allow 443/udp && ufw enable`.
    The app's own port 8735 is published on `127.0.0.1` only, so it isn't
