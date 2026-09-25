@@ -31,8 +31,8 @@ COPY requirements.txt requirements.lock ./
 RUN pip install -r requirements.txt -c requirements.lock
 
 # The folder as it is on disk, uncommitted changes included, minus everything
-# .dockerignore excludes (the local database, .venv, .env, docs, tests, the
-# systemd deploy files). COPY keeps the host's permissions, and on the Mac the
+# .dockerignore excludes (the local database, .venv, .env, docs, tests).
+# COPY keeps the host's permissions, and on the Mac the
 # course folders under assets/ are owner-only (drwx------), which the academy
 # user couldn't read. --chmod makes everything world-readable (X: directories
 # searchable), whatever machine builds the image.

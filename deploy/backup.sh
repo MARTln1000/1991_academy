@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Installed as /usr/local/sbin/academy-backup and run (as the academy user) by
-# academy-backup.service: nightly via its timer, and before every deploy.
+# Runs inside the app container: `make backup` (and `make restore`, before it
+# overwrites anything) call it with `docker compose exec`/`run`.
 #
-# Writes /var/backups/academy/academy-<UTC time>.db.gz and deletes backups
-# older than $ACADEMY_BACKUP_KEEP_DAYS days. Restoring: README.md → Deploy.
+# Writes /data/backups/academy-<UTC time>.db.gz, in the same volume as the
+# database, and deletes backups there older than $ACADEMY_BACKUP_KEEP_DAYS
+# days. `make backup` then copies them out to backups/ on the host.
 set -euo pipefail
 
-db=${ACADEMY_DB:-/var/lib/academy/academy.db}
-dest=${ACADEMY_BACKUP_DIR:-/var/backups/academy}
+db=${ACADEMY_DB:-/data/academy.db}
+dest=${ACADEMY_BACKUP_DIR:-/data/backups}
 keep_days=${ACADEMY_BACKUP_KEEP_DAYS:-30}
 
 if [[ ! -f $db ]]; then
@@ -15,6 +16,7 @@ if [[ ! -f $db ]]; then
   exit 0
 fi
 
+mkdir -p "$dest"
 stamp=$(date -u +%Y%m%d-%H%M%S)
 tmp="$dest/.partial-$stamp.db"
 trap 'rm -f "$tmp" "$tmp.gz"' EXIT

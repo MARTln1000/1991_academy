@@ -1,5 +1,5 @@
 # Exact versions of every runtime dependency, used as pip constraints by CI
-# and by each production release:  pip install -r requirements.txt -c requirements.lock
+# and by the Docker image:  pip install -r requirements.txt -c requirements.lock
 # requirements.txt says what the app needs; this file pins what gets installed.
 # Regenerate after changing requirements.txt — see README.md → "Updating dependencies".
 annotated-doc==0.0.4

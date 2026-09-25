@@ -69,7 +69,7 @@ services:
       - "443:443"
       - "443:443/udp"   # HTTP/3
     volumes:
-      - ./deploy/Caddyfile.docker:/etc/caddy/Caddyfile:ro
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data       # the HTTPS certificates: keep this volume
       - caddy-config:/config
     logging: *logging
