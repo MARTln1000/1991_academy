@@ -28,6 +28,7 @@ Makefile
 *.md
 requirements-dev.txt
 
-# The systemd deploy path; the image only runs the backup script
+# The image needs only the backup script from deploy/ (Caddy reads the
+# Caddyfile from the host)
 deploy/
 !deploy/backup.sh

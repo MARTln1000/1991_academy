@@ -22,7 +22,7 @@ Design notes that matter if you touch this file:
 Environment:
     PORT           listen port                      (default 8735)
     ACADEMY_HOST   bind address                     (default 0.0.0.0 — reachable on
-                   your LAN; production binds 127.0.0.1 behind the proxy)
+                   your LAN; in Docker, compose publishes it on 127.0.0.1 only)
     ACADEMY_DB     SQLite path                      (default ./1991_academy.db)
     ACADEMY_DEBUG  1 = dev mode: no-store caching   (default 1)
     ACADEMY_CPP    1 = enable the C++ runner        (default 1; it executes
@@ -86,9 +86,11 @@ VERSION = "2.3"
 
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PORT", 8735))
-# Only used by `python app.py`. Behind a reverse proxy this must be 127.0.0.1:
-# with ACADEMY_TRUST_PROXY=1, anyone who can reach the port directly could
-# forge X-Forwarded-For and walk around the per-IP rate limits.
+# Only used by `python app.py`. Behind a reverse proxy, nothing but the proxy
+# may reach this port: with ACADEMY_TRUST_PROXY=1, anyone who can reach it
+# directly could forge X-Forwarded-For and walk around the per-IP rate limits.
+# In Docker the container binds 0.0.0.0 and docker-compose.yml publishes the
+# port on 127.0.0.1 only, so just Caddy and the host itself can reach it.
 HOST = os.environ.get("ACADEMY_HOST", "0.0.0.0")
 DB_PATH = os.environ.get("ACADEMY_DB", str(ROOT / "1991_academy.db"))
 DEBUG = os.environ.get("ACADEMY_DEBUG", "1") == "1"
@@ -129,9 +131,10 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 CPP_COMPILER = shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")
 
-# The git commit this release was built from. deploy/deploy.sh writes the file
-# into every release; /api/health reports it so a deploy can confirm the live
-# site is serving what was just shipped. Absent in a plain checkout.
+# The git commit this image was built from ("-dirty" = with uncommitted
+# changes). The Dockerfile writes the file from the REVISION build argument the
+# Makefile passes; /api/health reports it, so `make status` shows which
+# version is live. Absent in a plain checkout.
 try:
     REVISION = (ROOT / "REVISION").read_text().strip() or None
 except OSError:

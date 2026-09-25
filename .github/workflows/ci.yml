@@ -1,0 +1,73 @@
+# Every push runs the API tests, and builds and smoke-tests the Docker image
+# with the production settings from docker-compose.yml. Nothing is deployed
+# from here: a server picks up new code with `make update` (README.md → Run
+# with Docker).
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push to the same branch cancels the older, now-outdated run.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.12 is the Python in the Docker image; 3.14 is the dev machine's.
+        python: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements.lock
+      - name: Install dependencies (pinned by requirements.lock)
+        run: pip install -r requirements-dev.txt -c requirements.lock
+      - name: Run the API tests
+        run: pytest -q
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and start the app container (docker-compose.yml)
+        run: REVISION=$(git rev-parse HEAD) docker compose up -d --build --wait app
+      - name: Smoke test
+        run: |
+          health=$(curl -fsS http://127.0.0.1:8735/api/health)
+          echo "$health"
+          # production settings, and the commit that was just built
+          python3 -c 'import json, sys
+          h = json.loads(sys.argv[1])
+          assert h["ok"] is True and h["revision"] == sys.argv[2], h
+          assert not h["debug"] and not h["cpp"] and h["secure_cookies"] and h["trust_proxy"], h' \
+            "$health" "$(git rev-parse HEAD)"
+          curl -fsS -o /dev/null http://127.0.0.1:8735/            # the frontend is served
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8735/app.py)
+          [ "$code" = 404 ] || { echo "/app.py answered $code, expected 404"; exit 1; }
+      - name: Backup and restore (make backup, make restore)
+        run: |
+          make backup
+          ls -l backups/
+          make restore FILE="$(ls backups/academy-*.db.gz | tail -n 1)"
+          curl -fsS http://127.0.0.1:8735/api/health
+      - name: Container log
+        if: always()
+        run: docker compose logs app

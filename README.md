@@ -61,9 +61,8 @@ make dev       # → http://localhost:8735   (accounts, sync, leaderboard, C++ r
 `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -c requirements.lock`,
 then `.venv/bin/python app.py`.
 
-Putting it on a real server with HTTPS: [Run with Docker](#run-with-docker) is
-the simplest way. [Deploy](#deploy) is the alternative without Docker, with
-automatic deploys from GitHub.
+Running it as a server, on your Mac or on the internet with HTTPS: see
+[Run with Docker](#run-with-docker).
 
 `app.py` is an ordinary ASGI app, so `.venv/bin/uvicorn app:app --port 8735`
 works too — the schema and the expiry sweep are set up by its lifespan handler,
@@ -95,6 +94,20 @@ make test    # API tests against a temp DB; no real accounts touched
 
 (That is `.venv/bin/pip install -r requirements-dev.txt -c requirements.lock`
 once, then `.venv/bin/pytest -q`.)
+
+### Updating dependencies
+
+`requirements.txt` says what the app needs. `requirements.lock` pins the exact
+versions that CI tests and the Docker image installs. After changing
+`requirements.txt`, or to take newer versions, regenerate the lock and re-run
+the tests:
+
+```bash
+rm -rf /tmp/lockenv && .venv/bin/python -m venv /tmp/lockenv
+/tmp/lockenv/bin/pip install -r requirements.txt -c requirements.lock   # drop "-c requirements.lock" to upgrade everything
+{ grep '^#' requirements.lock; /tmp/lockenv/bin/pip freeze; } > /tmp/requirements.lock && mv /tmp/requirements.lock requirements.lock
+.venv/bin/pip install -r requirements-dev.txt -c requirements.lock && .venv/bin/pytest -q
+```
 
 ## Run with Docker
 
@@ -150,8 +163,14 @@ This part is for whoever puts the site on the internet.
 
 **Steps:**
 
-1. **DNS.** Point an `A` record (plus `AAAA` for IPv6) for the domain at the
-   server's IP address. It can take a few minutes to take effect.
+1. **DNS.** Point an `A` record for the domain at the server's IP address. It
+   can take a few minutes to take effect.
+   - Add an `AAAA` record only if the server really has a working IPv6
+     address. A wrong one makes the certificate request fail.
+   - If the DNS is on Cloudflare, set the record to **DNS only** (grey cloud),
+     not Proxied. Through Cloudflare's proxy every visitor would appear to
+     come from Cloudflare's addresses, which breaks the per-visitor sign-in
+     rate limits.
 2. **Docker, git and make**, as root on the server:
    ```bash
    curl -fsSL https://get.docker.com | sh
@@ -164,6 +183,11 @@ This part is for whoever puts the site on the internet.
 4. **Settings.** Run `cp .env.example .env`, then in `.env` set
    `DOMAIN=your-domain` (no `https://`). Fill in the `ACADEMY_SMTP_*` lines
    if you have them.
+
+   If the server already runs a web server for other sites (nginx, Apache;
+   check with `ss -tlnp | grep -E ':(80|443) '`), also set `PROXY=external`,
+   and configure that web server to forward the domain to `127.0.0.1:8735`
+   (`DEPLOYMENT.md` §3 has the nginx config). Otherwise leave `PROXY=caddy`.
 5. **Start it.** Run `make up`. The first build takes a few minutes. It should
    end with `running on server: https://your-domain`. Open that address; the
    padlock should show a valid certificate.
@@ -179,8 +203,8 @@ This part is for whoever puts the site on the internet.
    The app's own port 8735 is published on `127.0.0.1` only, so it isn't
    reachable from outside either way.
 
-**Checking it works:** `make status` should show both containers `Up`, the app
-`(healthy)`, and `"debug":false,"cpp":false,"secure_cookies":true,"trust_proxy":true`.
+**Checking it works:** `make status` should show the app `Up (healthy)` (and
+`caddy` `Up`, unless `PROXY=external`), and `"debug":false,"cpp":false,"secure_cookies":true,"trust_proxy":true`.
 Then create an account on the site and sign in.
 
 ### Day to day
@@ -188,6 +212,7 @@ Then create an account on the site and sign in.
 | Command | What it does |
 |---------|--------------|
 | `make update` | On a server: `git pull`, rebuild, restart. This is how new code goes live |
+| `git checkout <commit> && make up` | Roll back to an earlier version (`git log --oneline` lists them). `git checkout master && make update` returns to the latest |
 | `make logs` | Requests, sign-ins, errors, certificate renewals (Ctrl-C stops watching) |
 | `make status` | Containers, health, and `revision`: the commit that is live (`-dirty` = built with uncommitted changes) |
 | `make restart` | After editing `.env` |
@@ -203,208 +228,19 @@ The image is always built on the machine that runs it. Don't copy an image
 built on an M1 Mac to a server: it is ARM (`linux/arm64`), most servers are
 Intel/AMD (`amd64`), and it would fail there with `exec format error`.
 
-On a server the app runs with the same production settings as the systemd
-setup (`DEPLOYMENT.md` §1): no debug mode, C++ runner off, secure cookies,
-trusting Caddy's `X-Forwarded-For`. It runs as a non-root user on a read-only
+On a server the app runs with production settings (`DEPLOYMENT.md` explains
+each one): no debug mode, C++ runner off, secure cookies, trusting Caddy's
+`X-Forwarded-For`. It runs as a non-root user on a read-only
 filesystem, where the database volume is the only writable path. CI builds the
 image on every push and smoke-tests it, including a backup.
 
 | Symptom | Cause, and fix |
 |---------|----------------|
 | On a server, `make up` says `running on this computer` | `DOMAIN` in `.env` is empty. Set it and run `make up` again |
-| `port is already allocated` / `address already in use` | On a server (80 or 443): something else serves the web there, e.g. nginx, Apache or Caddy. Stop it, e.g. `systemctl disable --now nginx`. On a Mac (8735): `make dev` is still running |
+| `port is already allocated` / `address already in use` | On a server (80 or 443): another web server (nginx, Apache) already uses them. If it serves other sites, keep it and set `PROXY=external` (step 4). If not, stop it: `systemctl disable --now nginx`. On a Mac (8735): `make dev` is still running |
 | Certificate errors, or the site doesn't load | DNS doesn't point at the server yet, or the provider's firewall blocks ports 80/443. `make logs` shows Caddy's attempts |
 | `Cannot connect to the Docker daemon` | On a Mac: start Docker Desktop. On a server: `systemctl start docker` |
 | Reset emails never arrive | Set `ACADEMY_SMTP_*` in `.env`, then `make restart`. `make status` shows `"email":true` once they're in place |
-
-## Deploy
-
-This is the setup **without Docker**: the app runs under systemd and GitHub
-Actions deploys every push to `master`. On a server, use this or
-[Run with Docker](#run-with-docker), not both. The GitHub deploy job only runs
-once `DEPLOY_HOST` is set, so with Docker simply leave it unset.
-
-
-Production is one small Linux server. **Caddy** serves HTTPS (it gets and
-renews the certificate itself) and proxies to the FastAPI app, which
-**systemd** runs from `/opt/academy/current`. The database lives apart from
-the code in `/var/lib/academy`. **GitHub Actions** runs the tests on every
-push and deploys every push to `master` that passes them:
-
-```
-git push ──► GitHub Actions: pytest on Python 3.12 (the server's) and 3.14
-                │  master only, tests green
-                ▼
-            deploy/deploy.sh ── rsync ──► /opt/academy/releases/20260924-101500-3fb8571/
-                │                         only changed files are sent; the rest are
-                │                         hard links to the live release
-                └── ssh ──► deploy/activate.sh, on the server:
-                              1. build the release's .venv from requirements.lock; must import
-                              2. back up the database
-                              3. stop the app, point `current` at the release, start the app
-                              4. /api/health must report the new commit, or roll back
-                              5. keep the 5 newest releases
-```
-
-A broken release never stays live. One that doesn't import is rejected before
-the site is touched. One that crashes on startup or fails its health check is
-replaced by the previous release within seconds, automatically. Either way the
-run goes red with the traceback or the service log in it. A normal deploy
-makes the site unavailable for about half a second while the app restarts.
-
-| File | Role |
-|------|------|
-| `.github/workflows/deploy.yml` | The **Test & Deploy** workflow |
-| `deploy/setup-server.sh` | One-time server bootstrap. Safe to re-run |
-| `deploy/deploy.sh` | Ships a commit and activates it. CI runs it, and so can you |
-| `deploy/activate.sh` | The server half of a deploy; also `--rollback` |
-| `deploy/academy.service` | systemd unit: production settings and a sandbox |
-| `deploy/academy-backup.{service,timer}`, `deploy/backup.sh` | Nightly and pre-deploy database backups |
-| `deploy/Caddyfile` | HTTPS reverse proxy |
-| `deploy/academy.env.example` | Template for `/etc/academy/academy.env`: your domain, SMTP secrets |
-| `requirements.lock` | Exact dependency versions for CI and production |
-
-`DEPLOYMENT.md` explains every setting and what the scripts build on the server.
-
-### One-time setup
-
-You need a server running **Ubuntu 24.04 LTS** (Debian 12+ works too) that you
-can SSH into as root, and a domain. 1 vCPU and 1 GB of RAM is plenty
-(`DEPLOYMENT.md` §7).
-
-1. **DNS.** Point an `A` record (plus `AAAA` for IPv6) for your domain at the server.
-2. **Deploy key.** GitHub Actions gets an SSH key of its own:
-   ```bash
-   ssh-keygen -t ed25519 -N "" -C "1991-academy deploy" -f ~/.ssh/academy_deploy
-   ```
-3. **Server.** From the repo root:
-   ```bash
-   scp -r deploy ~/.ssh/academy_deploy.pub root@SERVER:
-   ssh root@SERVER bash deploy/setup-server.sh academy.example.com academy_deploy.pub
-   ```
-   If you log in as a sudo user rather than root, run `sudo bash deploy/setup-server.sh …`.
-   It takes about a minute and ends by printing what's left, including the
-   server's SSH host-key fingerprints.
-4. **Email** (optional). Fill in the `ACADEMY_SMTP_*` lines of
-   `/etc/academy/academy.env` on the server, then `sudo systemctl restart academy`.
-   Until you do, password-reset links go to the log instead of the learner.
-5. **GitHub.** In the repository, open **Settings → Secrets and variables → Actions**:
-
-   | Tab | Name | Value |
-   |-----|------|-------|
-   | Variables | `DEPLOY_HOST` | The server's hostname or IP |
-   | Variables | `ACADEMY_URL` | `https://academy.example.com` |
-   | Secrets | `DEPLOY_SSH_KEY` | The private key, all of it: `pbcopy < ~/.ssh/academy_deploy` |
-   | Secrets | `DEPLOY_KNOWN_HOSTS` | The output of `ssh-keyscan <DEPLOY_HOST>`. Compare its keys with the fingerprints from step 3 |
-
-   Create them at **repository** level, not environment level: the workflow
-   checks `DEPLOY_HOST` before an environment is loaded. Two optional
-   variables: `DEPLOY_USER` (default `deploy`) and `DEPLOY_PORT` (default `22`).
-   While `DEPLOY_HOST` is unset the deploy job is skipped, so pushing the
-   workflow before the server exists is harmless.
-6. **First deploy.** Push to `master`, or go to **Actions → Test & Deploy → Run
-   workflow**. The first upload carries the ~90 MB of course assets; later
-   deploys send only what changed.
-
-**Bringing over existing accounts** (optional, do it before step 6). The local
-`1991_academy.db` can become the production database:
-
-```bash
-sqlite3 1991_academy.db ".backup /tmp/academy-export.db"    # consistent copy, even while app.py runs
-scp /tmp/academy-export.db root@SERVER:/tmp/
-ssh root@SERVER 'install -o academy -g academy -m 600 /tmp/academy-export.db /var/lib/academy/academy.db && rm /tmp/academy-export.db'
-```
-
-### Deploying
-
-- **Push to `master`.** That's the whole routine. The run page shows each step
-  and links the site. Pushes to other branches only run the tests.
-- **From your own machine**, with the same script and the same safety checks.
-  Add this to `~/.ssh/config`:
-  ```
-  Host academy
-    HostName academy.example.com
-    User deploy
-    IdentityFile ~/.ssh/academy_deploy
-  ```
-  Then:
-  ```bash
-  deploy/deploy.sh academy            # deploys HEAD: committed files only, never the local DB or .venv
-  deploy/deploy.sh academy 3fb8571    # or any commit or tag
-  ```
-  Prefix `ACADEMY_URL=https://academy.example.com` to also check the public site.
-
-### Rolling back
-
-- **Automatic** for releases that don't start (see above).
-- **Instantly, to the previous release.** It is already built, so this takes
-  about a second:
-  ```bash
-  ssh academy bash /opt/academy/current/deploy/activate.sh --rollback
-  ```
-  Run it again to go back further. The next push to `master` deploys forward again.
-- **To any commit:** **Actions → Test & Deploy → Run workflow** with `ref` set
-  to that commit, or `deploy/deploy.sh academy <commit>`.
-
-The database is not rolled back. That's fine: `init_db()` migrations only ever
-add columns and indexes, so older code runs on a newer database.
-
-### Running the server
-
-```bash
-systemctl status academy                    # running? since when?
-journalctl -u academy -f                    # live log: API calls, sign-ins, errors
-curl -s localhost:8735/api/health           # settings, plus the commit that is live
-sudoedit /etc/academy/academy.env && sudo systemctl restart academy   # change a setting
-ls -l /opt/academy                          # current -> the live release
-```
-
-### Backups
-
-The database is snapshotted nightly (around 03:30 UTC) and before every deploy
-into `/var/backups/academy/academy-<UTC time>.db.gz`. Each snapshot is
-integrity-checked, and they are kept for 30 days. They sit on the same disk as
-the database, so copy them off the server now and then, e.g.
-`scp 'root@SERVER:/var/backups/academy/*.gz' .`
-
-Take one right now with `sudo systemctl start academy-backup`. To restore one:
-
-```bash
-sudo systemctl start academy-backup    # snapshot the current state first, just in case
-sudo systemctl stop academy
-sudo -u academy sh -c 'rm -f /var/lib/academy/academy.db-wal /var/lib/academy/academy.db-shm &&
-  gunzip -c /var/backups/academy/academy-20260924-033012.db.gz > /var/lib/academy/academy.db'
-sudo systemctl start academy
-```
-
-### Updating dependencies
-
-`requirements.txt` says what the app needs. `requirements.lock` pins the exact
-versions that CI tests and production installs. After changing
-`requirements.txt`, or to take newer versions, regenerate the lock and re-run
-the tests:
-
-```bash
-rm -rf /tmp/lockenv && .venv/bin/python -m venv /tmp/lockenv
-/tmp/lockenv/bin/pip install -r requirements.txt -c requirements.lock   # drop "-c requirements.lock" to upgrade everything
-{ grep '^#' requirements.lock; /tmp/lockenv/bin/pip freeze; } > /tmp/requirements.lock && mv /tmp/requirements.lock requirements.lock
-.venv/bin/pip install -r requirements-dev.txt -c requirements.lock && .venv/bin/pytest -q
-```
-
-### When something goes wrong
-
-| Symptom | Cause, and fix |
-|---------|----------------|
-| The deploy job is skipped | `DEPLOY_HOST` isn't set as a *repository* variable |
-| `Deploy settings missing: …` | Add the secret or variable it names (setup step 5) |
-| `Host key verification failed` | `DEPLOY_KNOWN_HOSTS` doesn't match. Re-run `ssh-keyscan` with exactly the `DEPLOY_HOST` value |
-| `Permission denied (publickey)` | `DEPLOY_SSH_KEY` isn't the private half of the key given to `setup-server.sh` |
-| `… has no /opt/academy/releases` | `setup-server.sh` hasn't been run on that server |
-| `the release fails to import` | The traceback above it says why. The live site was not touched |
-| `crashed on startup` or `did not pass the health check` | The service log follows it. The previous release is live again |
-| `the database backup failed` | Nothing was deployed. On the server: `journalctl -u academy-backup` (disk full?) |
-| Site unreachable, or certificate errors | DNS doesn't point at the server yet, or the provider's firewall blocks ports 80/443. See `journalctl -u caddy` |
-| Reset emails never arrive | Set `ACADEMY_SMTP_*`. `/api/health` shows `"email": true` once they're in place |
 
 ## Structure
 
@@ -418,9 +254,8 @@ rm -rf /tmp/lockenv && .venv/bin/python -m venv /tmp/lockenv
 ├── docker-compose.local.yml  Mac/local overrides, used when DOMAIN in .env is empty
 ├── DEPLOYMENT.md         Production reference: every setting, the server layout, why
 ├── .github/workflows/
-│   └── deploy.yml        CI/CD: tests + Docker image check on every push, deploys master
-├── deploy/               Server bootstrap, deploy + rollback scripts, systemd/Caddy config
-│                         (see Deploy above; Caddyfile.docker is the Docker one)
+│   └── ci.yml            CI: API tests + Docker image smoke test on every push
+├── deploy/               Caddyfile (HTTPS proxy) and backup.sh (run by make backup)
 ├── index.html            Dashboard: goal ring, level, tracks, missions, badges
 ├── missions.html         Cross-track coding challenges (editor + tests)
 ├── lab.html              The Lab: implement + visualize problems

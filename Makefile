@@ -12,9 +12,11 @@
 PYTHON := .venv/bin/python
 VENV   := .venv/.installed
 
-# make reads only the DOMAIN line of .env, so an SMTP password containing
-# $ or # elsewhere in the file can't confuse it.
-DOMAIN := $(shell sed -n 's/^DOMAIN=//p' .env 2>/dev/null | tail -n 1 | tr -d '\r" ')
+# make reads only the DOMAIN and PROXY lines of .env, so an SMTP password
+# containing $ or # elsewhere in the file can't confuse it.
+env_value = $(shell sed -n 's/^$(1)=//p' .env 2>/dev/null | tail -n 1 | tr -d '\r" ')
+DOMAIN := $(call env_value,DOMAIN)
+PROXY  := $(call env_value,PROXY)
 
 ifeq ($(DOMAIN),)
   WHERE    := this computer
@@ -25,7 +27,12 @@ else
   WHERE    := server
   URL      := https://$(DOMAIN)
   COMPOSE  := docker compose
-  SERVICES :=
+  ifeq ($(PROXY),external)
+    # the server's own web server (nginx, Apache...) handles HTTPS: no Caddy
+    SERVICES := app
+  else
+    SERVICES :=
+  endif
 endif
 
 # The commit being built, with "-dirty" if tracked files have uncommitted
@@ -71,6 +78,9 @@ shell: ## open a shell inside the app container (sqlite3 /data/academy.db opens 
 update: ## on a server: pull the latest code from git, rebuild and restart
 	git pull --ff-only
 	$(MAKE) up
+	@# Each rebuild leaves the previous image behind; drop the unused ones so a
+	@# small server's disk doesn't slowly fill up.
+	docker image prune -f
 
 .env:
 	cp .env.example .env
@@ -79,7 +89,7 @@ update: ## on a server: pull the latest code from git, rebuild and restart
 ##@ Database (Docker)
 
 backup: ## snapshot the database into backups/ (safe while the site is running)
-	$(COMPOSE) exec -T -e ACADEMY_BACKUP_DIR=/data/backups app sh -c 'mkdir -p /data/backups && bash deploy/backup.sh'
+	$(COMPOSE) exec -T app bash deploy/backup.sh
 	@mkdir -p backups
 	$(COMPOSE) cp app:/data/backups/. backups/
 
@@ -88,7 +98,7 @@ restore: ## put a backup back: make restore FILE=backups/academy-<time>.db.gz
 	gzip -t "$(FILE)"
 	$(COMPOSE) stop app
 	@echo "==> Snapshotting the current database first, just in case"
-	$(COMPOSE) run --rm -T --no-deps -e ACADEMY_BACKUP_DIR=/data/backups app sh -c 'mkdir -p /data/backups && bash deploy/backup.sh' \
+	$(COMPOSE) run --rm -T --no-deps app bash deploy/backup.sh \
 	  || { $(COMPOSE) start app; echo "That backup failed, so nothing was restored."; exit 1; }
 	gunzip -c "$(FILE)" | $(COMPOSE) run --rm -T --no-deps app sh -c 'rm -f /data/academy.db-wal /data/academy.db-shm && cat > /data/academy.db'
 	$(COMPOSE) up -d --wait app

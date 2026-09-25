@@ -1,134 +1,119 @@
-# Deploying 1991 Academy
+# Deploying 1991 Academy: reference
 
-**README.md → Deploy** is the workflow. You prepare a server once with
-`deploy/setup-server.sh`; after that, every push to `master` that passes the
-tests is deployed by GitHub Actions (`.github/workflows/deploy.yml` runs
-`deploy/deploy.sh`, which runs `deploy/activate.sh` on the server). This file
-is the reference behind it: every setting, what the scripts build on the
-server, and why.
+**README.md → Run with Docker** is the walkthrough: running it on your own
+computer, publishing it on a server, and the day-to-day commands. This file is
+the reference behind it: every setting, what runs where, and why.
 
 The backend is a single FastAPI app (`app.py`) serving both the API and the
-static site. Locally: `make dev` (or `.venv/bin/python app.py`).
+static site. The database is one SQLite file. Without Docker, for
+development: `make dev` (or `.venv/bin/python app.py`).
 
-**With Docker instead** (README.md → Run with Docker): `docker-compose.yml`
-runs the same app with the same production values as the table in §1. The
-`Dockerfile` sets most of them and the compose file sets the proxy trust. The
-database is `/data/academy.db` in the `academy_data` volume, and
-`deploy/Caddyfile.docker` does the job of §4. §2, §3 and the scripts they
-describe apply only to the systemd setup.
+## 1. Settings
 
-## 1. Environment
-
-| Variable | `python app.py` default | Production (`academy.service`) | Meaning |
-|----------|-------------------------|--------------------------------|---------|
-| `PORT` | `8735` | `8735` | Listen port. Caddy and the deploy health check expect 8735 |
-| `ACADEMY_HOST` | `0.0.0.0` | `127.0.0.1` | Bind address. Behind a proxy it **must** be loopback; see §4 |
-| `ACADEMY_DB` | `./1991_academy.db` | `/var/lib/academy/academy.db` | SQLite path. Outside the code, so no release can touch it |
+| Variable | `python app.py` default | Docker on a server | Meaning |
+|----------|-------------------------|--------------------|---------|
+| `PORT` | `8735` | `8735` | Listen port |
+| `ACADEMY_HOST` | `0.0.0.0` | `0.0.0.0` inside the container, published on the host's `127.0.0.1` only | Bind address. Nothing but the proxy may reach the app; see §3 |
+| `ACADEMY_DB` | `./1991_academy.db` | `/data/academy.db`, in the `academy_data` volume | SQLite path |
 | `ACADEMY_DEBUG` | `1` | `0` | `0` enables asset caching and hides the API docs |
-| `ACADEMY_CPP` | `1` | `0` | **Must be `0` on any public server.** The C++ runner compiles and executes learner code on the host. It is a local-development convenience, not a sandbox |
+| `ACADEMY_CPP` | `1` | `0` | **Must be `0` on any public server.** The C++ runner compiles and executes learner code on the host. It is a local-development convenience, not a sandbox. (The image has no compiler, so it couldn't run anyway) |
 | `ACADEMY_SECURE_COOKIES` | on unless `ACADEMY_DEBUG=1` | on | Marks the session cookie `Secure` (HTTPS only) and sends HSTS |
-| `ACADEMY_TRUST_PROXY` | `0` | `1` | **Set `1` when, and only when, a trusted reverse proxy sets `X-Forwarded-For`.** See the warning in §4 |
+| `ACADEMY_TRUST_PROXY` | `0` | `1` | **`1` when, and only when, a trusted reverse proxy sets `X-Forwarded-For`.** See §3 |
+| `ACADEMY_BASE_URL` | `http://localhost:8735` | `https://$DOMAIN` | Public origin used to build password-reset links |
 
-The production column is set by `deploy/academy.service`. The service then
-reads `/etc/academy/academy.env`, which holds the site-specific values and
-secrets; anything set there overrides the unit. `deploy/activate.sh` prints a
-warning after every deploy if `/api/health` reports debug mode or the C++
-runner switched on.
+Where each one is set:
+
+- **`Dockerfile`**: `ACADEMY_HOST`, `PORT`, `ACADEMY_DB`, `ACADEMY_DEBUG`, `ACADEMY_CPP`.
+- **`docker-compose.yml`**: `ACADEMY_TRUST_PROXY`, `ACADEMY_BASE_URL`.
+- **`docker-compose.local.yml`**: used instead when `DOMAIN` is empty (your own
+  computer, plain http). It turns `ACADEMY_SECURE_COOKIES` and
+  `ACADEMY_TRUST_PROXY` off, and sets `ACADEMY_BASE_URL=http://localhost:8735`.
+- **`.env`** (from `.env.example`, never committed): `DOMAIN`, `PROXY` and the
+  SMTP settings. Values set by the compose files take precedence over `.env`,
+  so a stray line there can't switch a production setting off.
 
 Password reset needs SMTP. With these unset, the reset link is written to the
-log instead of emailed (fine for local dev, useless in production):
+log (`make logs`) instead of emailed:
 
 | Variable | Meaning |
 |----------|---------|
-| `ACADEMY_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` / `_FROM` | Outbound mail relay (STARTTLS) |
-| `ACADEMY_BASE_URL` | Public origin used to build reset links, e.g. `https://academy.example.com`. `setup-server.sh` fills it in |
+| `ACADEMY_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` / `_FROM` | Outbound mail relay (STARTTLS). `_PORT` defaults to 587 |
 
-## 2. What the server looks like
+## 2. What runs where
 
 ```
-/opt/academy/                                  owned by deploy
-├── releases/
-│   ├── 20260923-181502-ad3ab77/               one per deploy: the commit's files + its own .venv
-│   └── 20260924-101500-3fb8571/               files unchanged since the previous release are hard links
-├── current -> releases/20260924-101500-3fb8571   what systemd runs
-└── .deploy.lock                               one activation at a time
-/etc/academy/academy.env                       root:academy 0640: domain, SMTP credentials
-/var/lib/academy/academy.db                    academy, dir 0700: the database
-/var/backups/academy/                          academy, dir 0700: nightly + pre-deploy snapshots
-/etc/caddy/Caddyfile                           https://your-domain → 127.0.0.1:8735
-/etc/sudoers.d/academy-deploy                  the deploy user's five sudo commands
+container academy-app-1    image 1991-academy, built from this folder   127.0.0.1:8735
+container academy-caddy-1  caddy:2-alpine                               :80, :443 (tcp + udp)
+
+volume academy_data           /data in the app: academy.db (+ -wal, -shm) and backups/
+volume academy_caddy-data     the HTTPS certificates and Caddy's ACME account
+volume academy_caddy-config   Caddy's saved config
+
+this folder (the git clone)
+├── .env                      DOMAIN, PROXY, SMTP. Gitignored
+└── backups/                  copies made by `make backup`. Gitignored
 ```
 
-Two users, each with only what it needs:
+The Compose project is always named `academy`, whatever the folder is called,
+so the volumes keep their names if the folder is renamed or cloned again.
 
-- **`academy`** runs the app. It owns the database and the backups and can't
-  write the code it runs.
-- **`deploy`** is who GitHub Actions logs in as, with a key marked `restrict`
-  (no forwarding, no terminal) and no password. It owns `/opt/academy`. Through
-  sudo it may stop and start `academy.service`, start a backup, and read the
-  last lines of those two logs, nothing else. It can read neither
-  `academy.env` nor the database.
+**The image** is `python:3.12-slim`, plus the `sqlite3` CLI (for backups), the
+dependencies pinned by `requirements.lock`, and the site's files.
+`.dockerignore` keeps out the local database, `.env`, `.venv`, tests and docs.
+A `REVISION` file records the commit it was built from (with `-dirty` if there
+were uncommitted changes), and `/api/health` reports it. The app runs as the
+unprivileged user `academy` (uid 10001).
 
-A release is exactly the files of one commit (`git archive`, so never
-untracked files like a local database or `.env`), plus a `REVISION` file that
-`/api/health` reports. Each release builds its own virtualenv from
-`requirements.lock`, so rolling back restores the code and its exact
-dependencies together. The five newest releases are kept.
+**The app container** has a read-only filesystem. Its only writable places
+are the `academy_data` volume and a `/tmp` in memory. It holds no Linux
+capabilities and can't gain privileges. A compromised app therefore can't
+modify its own code. Logs are capped at 5 × 10 MB per container.
+`restart: unless-stopped` means Docker starts both containers again after a
+reboot.
 
-## 3. The service
+**Updating** (`make update`) runs `git pull`, rebuilds the image and recreates
+the app container. The site is unavailable for a few seconds while the app
+restarts. Afterwards the old, now unused images are deleted. The database is
+untouched: `init_db()` migrations only ever add columns and indexes, so older
+code also runs on a newer database.
 
-`deploy/academy.service` runs `/opt/academy/current/.venv/bin/python app.py`
-as `academy`.
+**Rolling back** to an earlier version: `git log --oneline` to find it,
+`git checkout <commit>`, then `make up`. To return to the latest version:
+`git checkout master && make update`.
 
-- **Switching releases.** `activate.sh` stops the service *before* repointing
-  `current` and starts it after. The whole switch is atomic from the service's
-  point of view, and a running process never has the symlink change under it
-  (a lazy import would otherwise load the new release's code into the old
-  process).
-- **Sandbox.** The filesystem is read-only apart from `/var/lib/academy`.
-  There are no capabilities, a private `/tmp` and `/dev`, and no namespaces,
-  SUID or realtime scheduling. `systemd-analyze security academy.service`
-  rates it 3.5 "OK"; an unhardened unit scores about 9.6.
-- **Restarts.** `Restart=on-failure` with no start-rate limit. Whether a
-  release is good is decided by the deploy's health check, and a tripped
-  limit would make the automatic rollback's `systemctl start` fail. During a
-  deploy the health check treats the first automatic restart as a failed
-  release and rolls back at once, instead of waiting out its 30-second timeout.
-
-## 4. HTTPS reverse proxy
+## 3. HTTPS and the reverse proxy
 
 Cookies carry sessions, so HTTPS is mandatory on the open internet.
 
-> **Set `ACADEMY_TRUST_PROXY=1` whenever you put a proxy in front.** Without it
-> the app sees every request as coming from the proxy's own address, so all
-> per-IP rate limits collapse into a single shared bucket for the entire
-> internet: one attacker would lock everyone out of logging in.
+> **`ACADEMY_TRUST_PROXY=1` is required behind a proxy.** Without it the app
+> sees every request as coming from the proxy's own address, so all per-IP
+> rate limits collapse into a single shared bucket for the entire internet:
+> one attacker would lock everyone out of logging in.
 >
-> The flag is off by default because a client can forge `X-Forwarded-For`
-> directly. Only turn it on once a proxy you control is the sole way in. The
-> production setup does both: the app binds `127.0.0.1` (`ACADEMY_HOST`), and
-> ufw admits only SSH, HTTP and HTTPS.
+> It is safe only while the proxy is the sole way in, because a client can
+> forge `X-Forwarded-For`. That's why the app's port is published on
+> `127.0.0.1` and never on a public address. Note that Docker's published ports
+> bypass ufw, so the firewall alone would not protect a public one.
 
-**Caddy** is what `setup-server.sh` installs, from Caddy's official apt
-repository, configured from `deploy/Caddyfile`. It obtains and renews the
-certificate automatically and redirects HTTP to HTTPS. It sets
-`X-Forwarded-For` to the real client address and drops whatever value the
-client sent:
+**Caddy** (the default, `PROXY=caddy` or unset) runs in the `caddy`
+container, configured by `deploy/Caddyfile`. It obtains and renews the
+certificate for `$DOMAIN` automatically, as soon as the domain's DNS points
+at the server and ports 80 and 443 are reachable. It redirects HTTP to HTTPS
+and sets `X-Forwarded-For` to the real client address, dropping whatever value
+the client sent.
 
-```
-academy.example.com {
-	reverse_proxy 127.0.0.1:8735
-}
-```
-
-**nginx** instead (with certbot for TLS): run `systemctl disable --now caddy`
-after `setup-server.sh`, and use:
+**An existing web server** (`PROXY=external` in `.env`): if the server already
+runs nginx or Apache on ports 80/443 for other sites, the `caddy` container
+can't start there. With `PROXY=external`, `make up` starts only the app, and
+the existing web server handles HTTPS and forwards to it. It must run on the
+same machine, because the app listens on `127.0.0.1:8735` only. For nginx,
+with certbot for the certificate:
 
 ```nginx
 server {
     server_name academy.example.com;
     listen 443 ssl http2;
-    # ssl_certificate ... (certbot)
+    # ssl_certificate ... (certbot --nginx fills these in)
     client_max_body_size 1m;
     location / {
         proxy_pass http://127.0.0.1:8735;
@@ -139,24 +124,33 @@ server {
 }
 ```
 
-## 5. Backups
+Put the site behind Cloudflare's proxy only if you also teach the proxy in
+front of the app to trust Cloudflare's addresses. Otherwise every visitor
+appears to come from Cloudflare. The README therefore says to use "DNS only".
 
-Everything that matters is one SQLite file. `academy-backup.service` runs
-`deploy/backup.sh` (installed as `/usr/local/sbin/academy-backup`), which:
+## 4. Backups
+
+Everything that matters is one SQLite file. `make backup` runs
+`deploy/backup.sh` inside the app container, which:
 
 - takes a consistent online snapshot with sqlite's `.backup`, since a plain
   `cp` of a WAL-mode database can capture a torn state;
 - checks it with `PRAGMA integrity_check`;
-- writes it as `/var/backups/academy/academy-<UTC time>.db.gz`;
-- deletes snapshots older than 30 days (`ACADEMY_BACKUP_KEEP_DAYS`).
+- writes it as `/data/backups/academy-<UTC time>.db.gz`, inside the volume;
+- deletes snapshots there older than 30 days (`ACADEMY_BACKUP_KEEP_DAYS`).
 
-It runs nightly (`academy-backup.timer`, around 03:30 UTC; a run missed while
-the server was off is caught up at boot) and before every deploy. If that
-pre-deploy backup fails, nothing is deployed. Copy the backups somewhere off
-the server too. Restoring is in README.md → Deploy → Backups. Course assets
-and code are static and redeployable from git.
+`make backup` then copies them to `backups/` in this folder. Nightly backups
+are a cron line (README.md → Publishing on a server, step 7). Both copies are
+on the same server as the database, so copy `backups/` somewhere else now and
+then.
 
-## 6. Built-in protections
+`make restore FILE=…` stops the app, snapshots the current database first (if
+that fails, nothing is restored and the app is started again), replaces the
+database with the backup, and starts the app.
+
+Course assets and code are static and can always be rebuilt from git.
+
+## 5. Built-in protections
 
 In `app.py`:
 
@@ -165,24 +159,22 @@ In `app.py`:
 - scrypt password hashing, HttpOnly SameSite=Lax session cookies (30 days),
   `Secure` + HSTS whenever `ACADEMY_SECURE_COOKIES` is on.
 - **Static serving is an allowlist**: only `/`, the five page files and the
-  `css/ js/ tracks/ assets/` trees are reachable. Source, the database, the
-  `deploy/` scripts, `REVISION`, dotfiles and everything else 404, however the
-  path is spelled.
+  `css/ js/ tracks/ assets/` trees are reachable. Source, the database,
+  `deploy/`, `REVISION`, dotfiles and everything else 404, however the path is
+  spelled.
 - Content-Security-Policy, `X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy` on every response.
 - Expired sessions and reset tokens are swept at startup and hourly.
-- Structured request + auth-event logging to stdout (journald picks it up).
+- Structured request + auth-event logging to stdout (`make logs`).
 
-In the deployment:
+In the Docker setup:
 
-- The app listens on loopback only; the firewall admits SSH, HTTP and HTTPS.
-- The service sandbox (§3): a compromised app can't modify its own code or
-  anything outside its database directory.
-- The deploy key can upload releases and restart the app, and nothing else (§2).
-- CI pins the server's SSH host key (`DEPLOY_KNOWN_HOSTS`), so a deploy can't
-  be redirected to an impostor.
+- The app's port is published on `127.0.0.1` only; the proxy is the only way in (§3).
+- The container sandbox (§2): read-only code, no capabilities, non-root.
+- Secrets live in `.env` on the server. They are never in git and never in
+  the image.
 
-## 7. Scale notes
+## 6. Scale notes
 
 Measured on a laptop with SQLite in WAL mode: ~620 state syncs/sec (p50 12 ms)
 and ~47 concurrent scrypt logins/sec, with no lock contention. The expected
