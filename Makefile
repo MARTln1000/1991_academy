@@ -40,10 +40,10 @@ endif
 export REVISION := $(shell sha=$$(git rev-parse HEAD 2>/dev/null) && { git diff --quiet HEAD 2>/dev/null && echo $$sha || echo $$sha-dirty; })
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test up down restart logs status shell update backup restore
+.PHONY: help install dev test up down restart logs status shell update backup nightly-backup restore
 
 help: ## list these commands
-	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 5)} /^[a-z][a-z-]*:.*## / {printf "  make %-8s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 5)} /^[a-z][a-z-]*:.*## / {printf "  make %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo
 	@echo "Docker commands currently target: $(WHERE), $(URL)  (DOMAIN in .env)"
 
@@ -92,6 +92,11 @@ backup: ## snapshot the database into backups/ (safe while the site is running)
 	$(COMPOSE) exec -T app bash deploy/backup.sh
 	@mkdir -p backups
 	$(COMPOSE) cp app:/data/backups/. backups/
+
+nightly-backup: ## on a server: add a cron job that runs 'make backup' every night at 03:30
+	@line="30 3 * * * cd '$(CURDIR)' && mkdir -p backups && make backup >> backups/cron.log 2>&1"; \
+	{ crontab -l 2>/dev/null | grep -vF "cd '$(CURDIR)' && " ; echo "$$line"; } | crontab - \
+	  && echo "==> Nightly backup scheduled (see: crontab -l):" && echo "    $$line"
 
 restore: ## put a backup back: make restore FILE=backups/academy-<time>.db.gz
 	@[ -n "$(FILE)" ] || { echo "usage: make restore FILE=backups/academy-<time>.db.gz"; exit 1; }

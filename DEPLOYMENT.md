@@ -140,7 +140,8 @@ Everything that matters is one SQLite file. `make backup` runs
 - deletes snapshots there older than 30 days (`ACADEMY_BACKUP_KEEP_DAYS`).
 
 `make backup` then copies them to `backups/` in this folder. Nightly backups
-are a cron line (README.md → Publishing on a server, step 7). Both copies are
+are a cron job that `make nightly-backup` installs (README.md → Publishing on
+a server, step 7). Both copies are
 on the same server as the database, so copy `backups/` somewhere else now and
 then.
 
