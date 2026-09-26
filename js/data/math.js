@@ -2,12 +2,12 @@
    Lecture videos from the Foundation for Armenian Science and Technology
    (FAST) "Mathematics | Lectures" course, wrapped with written maps,
    takeaways and active-recall quizzes. */
-window.MARTINIUM = window.MARTINIUM || { tracks: {}, order: [] };
+window.ACADEMY_1991 = window.ACADEMY_1991 || { tracks: {}, order: [] };
 
 var FAST = "FAST Foundation";
 var LEC = "full lecture";
 
-window.MARTINIUM.tracks.math = {
+window.ACADEMY_1991.tracks.math = {
   id: "math",
   title: "Mathematics for ML",
   tagline: "The linear algebra, calculus and probability every model is built on — full university lectures, mapped and quizzed.",
@@ -871,4 +871,4 @@ window.MARTINIUM.tracks.math = {
   ],
 };
 
-window.MARTINIUM.order.unshift("math");
+window.ACADEMY_1991.order.unshift("math");

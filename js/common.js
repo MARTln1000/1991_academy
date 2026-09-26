@@ -5,12 +5,42 @@
    Loaded first on every page.
    ============================================ */
 
-window.MARTINIUM = window.MARTINIUM || { tracks: {}, order: [] };
+window.ACADEMY_1991 = window.ACADEMY_1991 || { tracks: {}, order: [] };
 
-const M = window.MARTINIUM;
+const M = window.ACADEMY_1991;
+
+/* ---------- Storage prefix ----------
+   Everything this site keeps in localStorage (progress, XP, reviews, settings,
+   code drafts) lives under STORE_PREFIX. Until the project was renamed the
+   prefix was "martinium:", so a returning visitor's data is moved over once,
+   here, before any other script reads it. auth.js renames old keys arriving
+   from the server with currentStoreKey(), and the server does the same. */
+const STORE_PREFIX = "1991_academy:";
+const LEGACY_STORE_PREFIX = "martinium:";
+
+function currentStoreKey(key) {
+  return key.startsWith(LEGACY_STORE_PREFIX) ? STORE_PREFIX + key.slice(LEGACY_STORE_PREFIX.length) : key;
+}
+
+(function migrateLegacyStorage() {
+  try {
+    const legacy = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(LEGACY_STORE_PREFIX)) legacy.push(k);
+    }
+    for (const k of legacy) {
+      const renamed = currentStoreKey(k);
+      if (localStorage.getItem(renamed) === null) localStorage.setItem(renamed, localStorage.getItem(k));
+      localStorage.removeItem(k);
+    }
+  } catch {
+    /* storage blocked (private mode, settings): nothing to migrate */
+  }
+})();
 
 /* ---------- Theme ---------- */
-const THEME_KEY = "martinium:theme";
+const THEME_KEY = "1991_academy:theme";
 
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -35,23 +65,23 @@ function initTheme() {
    doesn't re-parse it dozens of times. Anything that writes those keys from
    OUTSIDE those modules (a sync pull, or another tab) must announce it:
 
-     martinium:store-invalidate → caches drop, no re-render
-     martinium:state-changed    → page controllers re-render
+     1991_academy:store-invalidate → caches drop, no re-render
+     1991_academy:state-changed    → page controllers re-render
 
    `notifyStateChanged()` fires both, in that order. */
 
 function invalidateStores() {
-  document.dispatchEvent(new CustomEvent("martinium:store-invalidate"));
+  document.dispatchEvent(new CustomEvent("1991_academy:store-invalidate"));
 }
 
 function notifyStateChanged() {
   invalidateStores();
-  document.dispatchEvent(new CustomEvent("martinium:state-changed"));
+  document.dispatchEvent(new CustomEvent("1991_academy:state-changed"));
 }
 
 /* Page controllers call this instead of wiring the listener by hand. */
 function onStateChanged(handler) {
-  document.addEventListener("martinium:state-changed", handler);
+  document.addEventListener("1991_academy:state-changed", handler);
 }
 
 /* Another tab wrote our keys — adopt its view. Debounced because a sync pull
@@ -59,7 +89,7 @@ function onStateChanged(handler) {
 (function watchOtherTabs() {
   let timer = null;
   window.addEventListener("storage", (e) => {
-    if (e.key && !e.key.startsWith("martinium:")) return;
+    if (e.key && !e.key.startsWith(STORE_PREFIX)) return;
     clearTimeout(timer);
     timer = setTimeout(notifyStateChanged, 150);
   });

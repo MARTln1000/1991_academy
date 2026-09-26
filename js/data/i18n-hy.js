@@ -4,7 +4,7 @@
    use the FAST course's own Armenian wording from the bilingual homework
    notebooks wherever it exists. Load AFTER all data files. */
 (function () {
-  const M = window.MARTINIUM;
+  const M = window.ACADEMY_1991;
   if (!M || !M.tracks) return;
 
   /* ---------- track titles & taglines ---------- */

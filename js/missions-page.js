@@ -7,7 +7,7 @@
 (function () {
   const root = document.getElementById("missions-root");
   const missions = M.missions;
-  const DRAFT_PREFIX = "martinium:draft:";
+  const DRAFT_PREFIX = "1991_academy:draft:";
 
   const TRACK_CHIP_COLORS = {
     web: ["rgba(245,158,11,0.14)", "#f59e0b"],

@@ -5,7 +5,7 @@
    proven lessons slot in where they match a lecture; "Beyond the Course"
    keeps the rest. No lecture videos yet — Martin will provide the playlist. */
 (function () {
-  const track = window.MARTINIUM.tracks.dl;
+  const track = window.ACADEMY_1991.tracks.dl;
   if (!track) return;
   const byId = {};
   for (const m of track.modules) for (const l of m.lessons) byId[l.id] = l;

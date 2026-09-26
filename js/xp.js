@@ -6,7 +6,7 @@
    ============================================ */
 
 const XP = (() => {
-  const KEY = "martinium:xp:v1";
+  const KEY = "1991_academy:xp:v1";
 
   const LEVELS = [
     { at: 0, name: "Spark" },
@@ -55,7 +55,7 @@ const XP = (() => {
     if (window.Sync) Sync.schedule();
   }
 
-  document.addEventListener("martinium:store-invalidate", () => {
+  document.addEventListener("1991_academy:store-invalidate", () => {
     cache = null;
   });
 

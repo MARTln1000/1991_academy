@@ -2,7 +2,7 @@
    title_hy / blurb_hy / brief_hy / hints_hy for all 6 missions. Test names
    and code stay English. Load AFTER js/data/missions.js (and i18n-hy.js). */
 (function () {
-  const M = window.MARTINIUM;
+  const M = window.ACADEMY_1991;
   if (!M || !M.missions) return;
 
   const HY = {

@@ -1,7 +1,7 @@
 /* 1991 Academy track: Machine Learning */
-window.MARTINIUM = window.MARTINIUM || { tracks: {}, order: [] };
+window.ACADEMY_1991 = window.ACADEMY_1991 || { tracks: {}, order: [] };
 
-window.MARTINIUM.tracks.ml = {
+window.ACADEMY_1991.tracks.ml = {
   id: "ml",
   title: "Machine Learning",
   tagline: "Learn to think in data: models, loss, generalization — the ideas underneath every algorithm.",
@@ -509,4 +509,4 @@ fancy model                         → must beat both BY ENOUGH to justify itse
   ],
 };
 
-window.MARTINIUM.order.push("ml");
+window.ACADEMY_1991.order.push("ml");

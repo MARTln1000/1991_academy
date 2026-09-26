@@ -2,7 +2,7 @@
    content_hy / takeaways_hy / quiz *_hy / exercise *_hy. Code/<pre> stay English.
    Load AFTER js/data/dsa.js (and i18n-hy.js). */
 (function () {
-  const M = window.MARTINIUM;
+  const M = window.ACADEMY_1991;
   if (!M || !M.tracks || !M.tracks.dsa) return;
 
   const byId = {};

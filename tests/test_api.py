@@ -117,16 +117,55 @@ def test_login_does_not_leak_which_accounts_exist(client):
 
 def test_state_roundtrip_and_xp_snapshot(client):
     register(client)
-    blob = {"martinium:xp:v1": '{"total": 140}', "martinium:progress:v1": "{}"}
+    blob = {"1991_academy:xp:v1": '{"total": 140}', "1991_academy:progress:v1": "{}"}
     assert client.put("/api/state", json={"data": blob}).status_code == 200
     got = client.get("/api/state").json()
-    assert got["data"]["martinium:xp:v1"] == '{"total": 140}'
+    assert got["data"]["1991_academy:xp:v1"] == '{"total": 140}'
     # opt in → XP should surface on the all-time leaderboard
     client.post("/api/leaderboard-optin", json={"optIn": True})
     lb = client.get("/api/leaderboard").json()
     assert lb["top"] and lb["top"][0]["username"] == "alice" and lb["top"][0]["xp"] == 140
     assert lb["you"] == 1
 
+
+
+# The storage prefix was "martinium:" before the project was renamed. Progress
+# saved under it must survive: accounts synced before the rename, and pages
+# still open from before it, send and hold the old keys.
+
+def test_legacy_prefixed_state_is_renamed_and_counts(client):
+    register(client)
+    blob = {"martinium:xp:v1": '{"total": 77}', "martinium:progress:v1": '{"done": {"web-1-1": 1}}'}
+    assert client.put("/api/state", json={"data": blob}).status_code == 200
+    got = client.get("/api/state").json()["data"]
+    assert got == {"1991_academy:xp:v1": '{"total": 77}', "1991_academy:progress:v1": '{"done": {"web-1-1": 1}}'}
+    client.post("/api/leaderboard-optin", json={"optIn": True})
+    assert client.get("/api/leaderboard").json()["top"][0]["xp"] == 77
+
+
+def test_current_key_wins_over_legacy_one(client):
+    register(client)
+    blob = {"martinium:xp:v1": '{"total": 1}', "1991_academy:xp:v1": '{"total": 2}'}
+    client.put("/api/state", json={"data": blob})
+    assert client.get("/api/state").json()["data"] == {"1991_academy:xp:v1": '{"total": 2}'}
+
+
+def test_init_db_migrates_stored_legacy_blobs(client):
+    register(client)
+    client.put("/api/state", json={"data": {}})
+    # a blob as a pre-rename server stored it; the draft's text mentions the old
+    # prefix, and values must never be rewritten
+    old = {"martinium:xp:v1": '{"total": 5}', "martinium:draft:ex:web-1-1:0": 'print("martinium:")'}
+    with app.db() as conn:
+        conn.execute("UPDATE state SET data = ?", (json.dumps(old),))
+        conn.commit()
+    app.init_db()
+    with app.db() as conn:
+        stored = json.loads(conn.execute("SELECT data FROM state").fetchone()["data"])
+    assert stored == {"1991_academy:xp:v1": '{"total": 5}', "1991_academy:draft:ex:web-1-1:0": 'print("martinium:")'}
+    app.init_db()  # idempotent
+    with app.db() as conn:
+        assert json.loads(conn.execute("SELECT data FROM state").fetchone()["data"]) == stored
 
 def test_state_requires_auth(client):
     assert client.get("/api/state").status_code == 401
@@ -148,13 +187,13 @@ def test_corrupt_xp_never_breaks_the_state_write(client, total):
     abort the surrounding transaction and 500, so the learner's whole progress
     stopped syncing."""
     register(client)
-    blob = {"martinium:xp:v1": json.dumps({"total": total}),
-            "martinium:progress:v1": '{"done": {"web-1-1": 1}}'}
+    blob = {"1991_academy:xp:v1": json.dumps({"total": total}),
+            "1991_academy:progress:v1": '{"done": {"web-1-1": 1}}'}
     r = client.put("/api/state", json={"data": blob})
     assert r.status_code == 200, r.text
     # the progress half must have been persisted
     got = client.get("/api/state").json()
-    assert got["data"]["martinium:progress:v1"] == '{"done": {"web-1-1": 1}}'
+    assert got["data"]["1991_academy:progress:v1"] == '{"done": {"web-1-1": 1}}'
     # ...and nothing absurd reached the leaderboard
     client.post("/api/leaderboard-optin", json={"optIn": True})
     top = client.get("/api/leaderboard?period=all").json()["top"]
@@ -164,7 +203,7 @@ def test_corrupt_xp_never_breaks_the_state_write(client, total):
 def test_xp_is_clamped_to_a_sane_ceiling(client):
     register(client)
     client.post("/api/leaderboard-optin", json={"optIn": True})
-    client.put("/api/state", json={"data": {"martinium:xp:v1": json.dumps({"total": 10 ** 12})}})
+    client.put("/api/state", json={"data": {"1991_academy:xp:v1": json.dumps({"total": 10 ** 12})}})
     assert client.get("/api/leaderboard?period=all").json()["top"][0]["xp"] == app.MAX_XP
 
 
@@ -181,7 +220,7 @@ def test_stored_state_is_always_valid_json_for_the_browser(client):
     """Whatever we store must survive a strict JSON parse on the way back out —
     Python's json accepts NaN/Infinity, JavaScript's does not."""
     register(client)
-    client.put("/api/state", json={"data": {"martinium:xp:v1": '{"total": 42}'}})
+    client.put("/api/state", json={"data": {"1991_academy:xp:v1": '{"total": 42}'}})
     raw = client.get("/api/state").content.decode()
     json.loads(raw, parse_constant=_reject_constant)
 
@@ -195,7 +234,7 @@ def _reject_constant(c):
 def test_leaderboard_weekly_vs_alltime(client):
     register(client)
     client.post("/api/leaderboard-optin", json={"optIn": True})
-    client.put("/api/state", json={"data": {"martinium:xp:v1": '{"total": 50}'}})
+    client.put("/api/state", json={"data": {"1991_academy:xp:v1": '{"total": 50}'}})
 
     # fresh account: this week's XP == lifetime XP
     wk = client.get("/api/leaderboard?period=week").json()
@@ -206,7 +245,7 @@ def test_leaderboard_weekly_vs_alltime(client):
     with app.db() as conn:
         conn.execute("UPDATE users SET week_id = '1999-W01' WHERE username = 'alice'")
         conn.commit()
-    client.put("/api/state", json={"data": {"martinium:xp:v1": '{"total": 65}'}})
+    client.put("/api/state", json={"data": {"1991_academy:xp:v1": '{"total": 65}'}})
 
     all_time = client.get("/api/leaderboard?period=all").json()
     week = client.get("/api/leaderboard?period=week").json()
@@ -265,7 +304,7 @@ def test_reset_password_end_to_end(client, sent_emails):
 
 def test_delete_account(client):
     register(client)
-    client.put("/api/state", json={"data": {"martinium:xp:v1": '{"total": 10}'}})
+    client.put("/api/state", json={"data": {"1991_academy:xp:v1": '{"total": 10}'}})
     assert client.post("/api/delete-account", json={"password": "WRONG"}).status_code == 403
     assert client.post("/api/delete-account", json={"password": "hunter2pw"}).status_code == 200
     # session gone, login impossible, username freed for re-registration
@@ -427,7 +466,7 @@ def test_sweep_removes_expired_sessions_and_tokens(client):
 
 def test_oversized_body_is_rejected(client):
     register(client)
-    big = {"data": {"martinium:xp:v1": "x" * (app.MAX_BODY + 1000)}}
+    big = {"data": {"1991_academy:xp:v1": "x" * (app.MAX_BODY + 1000)}}
     assert client.put("/api/state", json=big).status_code == 413
 
 

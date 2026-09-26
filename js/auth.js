@@ -10,13 +10,13 @@ const Auth = (() => {
   /* Keys mirrored to the account. Anything not listed here stays on this
      device (theme, per-problem editor language). */
   const SYNC_KEYS = [
-    "martinium:progress:v1",
-    "martinium:xp:v1",
-    "martinium:review:v1",
-    "martinium:lang",
+    "1991_academy:progress:v1",
+    "1991_academy:xp:v1",
+    "1991_academy:review:v1",
+    "1991_academy:lang",
   ];
-  const DRAFT_PREFIX = "martinium:draft:";
-  const LAST_USER_KEY = "martinium:lastUser";
+  const DRAFT_PREFIX = "1991_academy:draft:";
+  const LAST_USER_KEY = "1991_academy:lastUser";
 
   /* The server caps a request body at 300 KB. Stay under it with room for
      JSON overhead; if we're over, code drafts are shed before progress. */
@@ -101,18 +101,19 @@ const Auth = (() => {
      and flashed the whole UI). Reports whether the language changed, since
      that IS baked into every rendered string and needs a reload. */
   function apply(data) {
-    const langBefore = localStorage.getItem("martinium:lang");
+    const langBefore = localStorage.getItem("1991_academy:lang");
     clearLocal();
-    for (const [k, v] of Object.entries(data || {})) {
+    for (const [key, v] of Object.entries(data || {})) {
+      const k = currentStoreKey(key); // a blob saved before the "martinium:" rename
       if (syncedKey(k) && typeof v === "string") localStorage.setItem(k, v);
     }
     if (typeof notifyStateChanged === "function") notifyStateChanged();
-    return { langChanged: localStorage.getItem("martinium:lang") !== langBefore };
+    return { langChanged: localStorage.getItem("1991_academy:lang") !== langBefore };
   }
 
   function xpTotalOf(blob) {
     try {
-      return JSON.parse(blob["martinium:xp:v1"]).total || 0;
+      return JSON.parse(blob["1991_academy:xp:v1"] ?? blob["martinium:xp:v1"]).total || 0;
     } catch {
       return 0;
     }

@@ -1,7 +1,7 @@
 /* 1991 Academy track: Web Development */
-window.MARTINIUM = window.MARTINIUM || { tracks: {}, order: [] };
+window.ACADEMY_1991 = window.ACADEMY_1991 || { tracks: {}, order: [] };
 
-window.MARTINIUM.tracks.web = {
+window.ACADEMY_1991.tracks.web = {
   id: "web",
   title: "Web Development",
   tagline: "From your first HTML tag to interactive apps — understand the platform, don't just copy snippets.",
@@ -672,4 +672,4 @@ INP  Interaction to Next Paint &lt; 200ms  "does it respond when I click?"</code
   ],
 };
 
-window.MARTINIUM.order.push("web");
+window.ACADEMY_1991.order.push("web");

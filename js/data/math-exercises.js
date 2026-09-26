@@ -5,7 +5,7 @@
    → self-check. LaTeX via String.raw so backslashes survive. */
 (function () {
   const r = String.raw;
-  const track = window.MARTINIUM.tracks.math;
+  const track = window.ACADEMY_1991.tracks.math;
   const byId = {};
   for (const m of track.modules) for (const l of m.lessons) byId[l.id] = l;
 

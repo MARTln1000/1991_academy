@@ -7,7 +7,7 @@
    is byte-identical. LaTeX via String.raw. Load AFTER math-exercises.js. */
 (function () {
   const r = String.raw;
-  const track = window.MARTINIUM && window.MARTINIUM.tracks && window.MARTINIUM.tracks.math;
+  const track = window.ACADEMY_1991 && window.ACADEMY_1991.tracks && window.ACADEMY_1991.tracks.math;
   if (!track) return;
   const byId = {};
   for (const m of track.modules) for (const l of m.lessons) byId[l.id] = l;

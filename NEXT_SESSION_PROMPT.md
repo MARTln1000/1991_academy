@@ -22,10 +22,10 @@ standards exactly. They are non-negotiable:
    graded exercises, screenshot both success and failure paths. The dev
    server sends `Cache-Control: no-store`; if you still see stale JS,
    re-fetch the scripts with `cache: 'reload'` and reload. Clean up any test
-   XP/progress you create (localStorage keys prefixed `martinium:`) before
+   XP/progress you create (localStorage keys prefixed `1991_academy:`) before
    ending your turn.
-3. **Never break user data.** Keep working: the `window.MARTINIUM` JS
-   namespace, `martinium:*` localStorage keys, XP award-ledger keys, the
+3. **Never break user data.** Keep working: the `window.ACADEMY_1991` JS
+   namespace, `1991_academy:*` localStorage keys, XP award-ledger keys, the
    SQLite file `1991_academy.db` (real accounts), and these
    mission-prerequisite lesson ids — `web-2-1`, `web-2-2`, `dsa-1-2`,
    `dsa-1-3`, `dsa-2-1`, `dsa-2-2`, `ml-1-2`, `ml-2-1`, `agents-2-1`.

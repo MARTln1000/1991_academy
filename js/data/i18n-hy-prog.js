@@ -3,7 +3,7 @@
    titles/prompts already come from the core i18n-hy.js pack; code
    starter/tests stay English. Load AFTER js/data/prog.js (and i18n-hy.js). */
 (function () {
-  const M = window.MARTINIUM;
+  const M = window.ACADEMY_1991;
   if (!M || !M.tracks || !M.tracks.prog) return;
 
   const byId = {};

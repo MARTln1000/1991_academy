@@ -6,7 +6,7 @@
    Load AFTER js/data/math.js AND js/data/math-exercises.js. */
 (function () {
   const r = String.raw;
-  const M = window.MARTINIUM;
+  const M = window.ACADEMY_1991;
   if (!M || !M.tracks || !M.tracks.math) return;
 
   const byId = {};

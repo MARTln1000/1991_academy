@@ -3,7 +3,7 @@
    track's lessons. Code blocks and <pre> stay English by design.
    Load AFTER js/data/web.js (and i18n-hy.js). */
 (function () {
-  const M = window.MARTINIUM;
+  const M = window.ACADEMY_1991;
   if (!M || !M.tracks || !M.tracks.web) return;
 
   const byId = {};

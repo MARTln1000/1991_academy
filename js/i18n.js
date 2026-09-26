@@ -9,7 +9,7 @@
    ============================================ */
 
 const I18N = (() => {
-  const KEY = "martinium:lang";
+  const KEY = "1991_academy:lang";
   let lang = localStorage.getItem(KEY) === "hy" ? "hy" : "en";
 
   /* ---------- UI dictionary: English key → Armenian ---------- */

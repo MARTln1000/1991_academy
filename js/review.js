@@ -6,7 +6,7 @@
    ============================================ */
 
 const Review = (() => {
-  const KEY = "martinium:review:v1";
+  const KEY = "1991_academy:review:v1";
   const DAY = 24 * 60 * 60 * 1000;
 
   let cache = null;
@@ -29,7 +29,7 @@ const Review = (() => {
     if (window.Sync) Sync.schedule();
   }
 
-  document.addEventListener("martinium:store-invalidate", () => {
+  document.addEventListener("1991_academy:store-invalidate", () => {
     cache = null;
   });
 

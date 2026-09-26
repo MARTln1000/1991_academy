@@ -1,5 +1,5 @@
 /* 1991 Academy — Python variants for Lab problems.
-   Augments window.MARTINIUM.lab entries with .py = { fnName, starter,
+   Augments window.ACADEMY_1991.lab entries with .py = { fnName, starter,
    tests, vizScript? }. Tests use the same __check(name, actual, expected)
    protocol, executed in Pyodide. vizScript(viz) returns Python code that
    sets __out to JSON-serializable data for the visualizer. */
@@ -327,7 +327,7 @@ __check("loss went DOWN during training", net["loss_history"][0] > net["loss_his
     },
   };
 
-  for (const p of window.MARTINIUM.lab) {
+  for (const p of window.ACADEMY_1991.lab) {
     if (PY[p.id]) p.py = PY[p.id];
   }
 })();

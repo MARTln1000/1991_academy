@@ -4,7 +4,7 @@
    translated material labels. Code/<pre> stay English. Load AFTER
    js/data/dl.js AND js/data/dl-course.js (and i18n-hy.js). */
 (function () {
-  const M = window.MARTINIUM;
+  const M = window.ACADEMY_1991;
   if (!M || !M.tracks || !M.tracks.dl) return;
 
   const byId = {};

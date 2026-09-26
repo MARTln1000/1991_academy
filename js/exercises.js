@@ -289,7 +289,7 @@ const Exercises = (() => {
         const box = document.createElement("div");
         box.className = "exercise";
         const icon = ex.type === "problem" ? "📝" : ex.type === "code" ? "🐍" : "🛠️";
-        ex.__draftKey = "martinium:draft:ex:" + lesson.id + ":" + i;
+        ex.__draftKey = "1991_academy:draft:ex:" + lesson.id + ":" + i;
         box.innerHTML =
           "<h3>" + icon + " " + esc(L(ex, "title")) +
           (ex.source ? ' <span class="ex-source">' + esc(ex.source) + "</span>" : "") +

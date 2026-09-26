@@ -1,7 +1,7 @@
 /* 1991 Academy track: Deep Learning */
-window.MARTINIUM = window.MARTINIUM || { tracks: {}, order: [] };
+window.ACADEMY_1991 = window.ACADEMY_1991 || { tracks: {}, order: [] };
 
-window.MARTINIUM.tracks.dl = {
+window.ACADEMY_1991.tracks.dl = {
   id: "dl",
   title: "Deep Learning",
   tagline: "Neural networks from first principles — up to the transformer that powers modern AI.",
@@ -509,4 +509,4 @@ embed the query        → find nearest neighbors (cosine similarity)
   ],
 };
 
-window.MARTINIUM.order.push("dl");
+window.ACADEMY_1991.order.push("dl");

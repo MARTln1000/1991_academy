@@ -1,7 +1,7 @@
 /* 1991 Academy track: Agentic AI */
-window.MARTINIUM = window.MARTINIUM || { tracks: {}, order: [] };
+window.ACADEMY_1991 = window.ACADEMY_1991 || { tracks: {}, order: [] };
 
-window.MARTINIUM.tracks.agents = {
+window.ACADEMY_1991.tracks.agents = {
   id: "agents",
   title: "Agentic AI",
   tagline: "From chatbots to agents that plan, use tools and act — the engineering behind autonomous AI.",
@@ -541,4 +541,4 @@ plan multi-step work, hard bugs → frontier model
   ],
 };
 
-window.MARTINIUM.order.push("agents");
+window.ACADEMY_1991.order.push("agents");

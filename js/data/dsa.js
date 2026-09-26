@@ -1,7 +1,7 @@
 /* 1991 Academy track: Algorithms & Data Structures */
-window.MARTINIUM = window.MARTINIUM || { tracks: {}, order: [] };
+window.ACADEMY_1991 = window.ACADEMY_1991 || { tracks: {}, order: [] };
 
-window.MARTINIUM.tracks.dsa = {
+window.ACADEMY_1991.tracks.dsa = {
   id: "dsa",
   title: "Algorithms & Data Structures",
   tagline: "Big-O thinking, the classic structures, and the patterns behind every interview and every fast program.",
@@ -586,4 +586,4 @@ sum of a[i..j] = prefix[j+1] - prefix[i]  ← O(1) per query!</code></pre>
   ],
 };
 
-window.MARTINIUM.order.push("dsa");
+window.ACADEMY_1991.order.push("dsa");

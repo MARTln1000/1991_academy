@@ -116,6 +116,15 @@ SWEEP_INTERVAL = 3600             # expired sessions / reset tokens, hourly
 # not be.
 MAX_XP = 10_000_000
 
+# The browser keeps a learner's progress in localStorage under this prefix, and
+# the synced state blob mirrors those keys. Until the project was renamed the
+# prefix was "martinium:". Old keys are renamed wherever they turn up: stored
+# blobs once at startup (init_db), and blobs sent by a page that was loaded
+# before the rename.
+STORE_PREFIX = "1991_academy:"
+LEGACY_STORE_PREFIX = "martinium:"
+XP_KEY = STORE_PREFIX + "xp:v1"
+
 # Outbound email (password reset). Unset SMTP → links are logged, never sent
 # (fine for local dev; on a public host set these or reset emails won't arrive).
 SMTP_HOST = os.environ.get("ACADEMY_SMTP_HOST")
@@ -294,7 +303,41 @@ def init_db():
                 ON password_resets(expires);
             """
         )
+
+        # Blobs stored before the "martinium:" → "1991_academy:" rename. Values
+        # are untouched (a code draft may contain the old word); only keys move.
+        legacy = conn.execute(
+            "SELECT user_id, data FROM state WHERE data LIKE ?", (f'%"{LEGACY_STORE_PREFIX}%',)
+        ).fetchall()
+        renamed = 0
+        for row in legacy:
+            try:
+                blob = json.loads(row["data"])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(blob, dict) and current_keys(blob) is not blob:
+                conn.execute(
+                    "UPDATE state SET data = ? WHERE user_id = ?",
+                    (json.dumps(current_keys(blob)), row["user_id"]),
+                )
+                renamed += 1
+        if renamed:
+            log.info("migration: renamed %s* keys to %s* in %d stored state blob(s)",
+                     LEGACY_STORE_PREFIX, STORE_PREFIX, renamed)
         conn.commit()
+
+
+def current_keys(data: dict) -> dict:
+    """The state blob with legacy "martinium:" keys renamed to STORE_PREFIX.
+    Returns the same dict when there is nothing to rename. If both spellings of
+    a key are present, the current one wins."""
+    if not any(k.startswith(LEGACY_STORE_PREFIX) for k in data):
+        return data
+    out = {k: v for k, v in data.items() if not k.startswith(LEGACY_STORE_PREFIX)}
+    for k, v in data.items():
+        if k.startswith(LEGACY_STORE_PREFIX):
+            out.setdefault(STORE_PREFIX + k[len(LEGACY_STORE_PREFIX):], v)
+    return out
 
 
 def sweep_expired():
@@ -706,7 +749,10 @@ def _get_state(token):
         ).fetchone()
     if row is None:
         return {"data": None, "updated": None}
-    return {"data": json.loads(row["data"]), "updated": row["updated"]}
+    data = json.loads(row["data"])
+    if isinstance(data, dict):
+        data = current_keys(data)
+    return {"data": data, "updated": row["updated"]}
 
 
 @app.get("/api/state")
@@ -726,7 +772,7 @@ def xp_snapshot(data: dict):
     the write and hand the learner a 500 — their progress silently stopped
     syncing. A bad XP value must cost the leaderboard entry, nothing more."""
     try:
-        raw = json.loads(data.get("martinium:xp:v1") or "{}")
+        raw = json.loads(data.get(XP_KEY) or "{}")
     except (json.JSONDecodeError, TypeError, ValueError):
         return None
     if not isinstance(raw, dict):
@@ -783,6 +829,7 @@ async def api_put_state(request: Request):
     # permanently breaking that account's sync.
     if not all(isinstance(k, str) and isinstance(v, str) for k, v in data.items()):
         return err("invalid request body")
+    data = current_keys(data)  # from a page loaded before the storage-prefix rename
     ok = await run_in_threadpool(_put_state, session_token(request), data)
     if not ok:
         return err("not signed in", 401)

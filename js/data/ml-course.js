@@ -6,7 +6,7 @@
    Slides are ground truth for numbering; the video playlist numbering
    differs (e.g. video L5 covers slide L3's decision trees) — mapped by topic. */
 (function () {
-  const track = window.MARTINIUM.tracks.ml;
+  const track = window.ACADEMY_1991.tracks.ml;
   if (!track) return;
   const byId = {};
   for (const m of track.modules) for (const l of m.lessons) byId[l.id] = l;

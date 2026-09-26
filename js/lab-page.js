@@ -8,8 +8,8 @@
 (function () {
   const root = document.getElementById("lab-root");
   const problems = M.lab;
-  const DRAFT_PREFIX = "martinium:draft:lab:";
-  const LANG_PREFIX = "martinium:lablang:";
+  const DRAFT_PREFIX = "1991_academy:draft:lab:";
+  const LANG_PREFIX = "1991_academy:lablang:";
 
   const DIFF = {
     easy: { label: "Easy", cls: "d-easy" },

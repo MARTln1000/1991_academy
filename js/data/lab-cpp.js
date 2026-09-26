@@ -61,7 +61,7 @@ int maxSubarraySum(vector<int> nums) {
     },
   };
 
-  for (const p of window.MARTINIUM.lab) {
+  for (const p of window.ACADEMY_1991.lab) {
     if (CPP[p.id]) p.cpp = CPP[p.id];
   }
 })();

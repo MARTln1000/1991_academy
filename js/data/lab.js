@@ -3,9 +3,9 @@
    models from scratch, and neural networks you build and SEE work.
    Each problem: sandboxed tests + (often) a visualization driven by
    the learner's own code. */
-window.MARTINIUM = window.MARTINIUM || { tracks: {}, order: [] };
+window.ACADEMY_1991 = window.ACADEMY_1991 || { tracks: {}, order: [] };
 
-window.MARTINIUM.lab = [
+window.ACADEMY_1991.lab = [
   /* ============ DSA — the arena ============ */
   {
     id: "lab-two-sum",

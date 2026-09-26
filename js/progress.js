@@ -5,7 +5,7 @@
    ============================================ */
 
 const Progress = (() => {
-  const KEY = "martinium:progress:v1";
+  const KEY = "1991_academy:progress:v1";
 
   function blank() {
     return { done: {}, quiz: {}, streak: { count: 0, last: null } };
@@ -38,7 +38,7 @@ const Progress = (() => {
     if (window.Sync) Sync.schedule();
   }
 
-  document.addEventListener("martinium:store-invalidate", () => {
+  document.addEventListener("1991_academy:store-invalidate", () => {
     cache = null;
   });
 

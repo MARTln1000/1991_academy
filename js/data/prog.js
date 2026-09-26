@@ -4,11 +4,11 @@
    own HW notebooks (with their original assert tests where provided).
    Code exercises run in the in-browser Python runtime and are auto-graded.
    Every published test was verified against a reference solution. */
-window.MARTINIUM = window.MARTINIUM || { tracks: {}, order: [] };
+window.ACADEMY_1991 = window.ACADEMY_1991 || { tracks: {}, order: [] };
 
 var PROG_A = "../assets/courses/prog/";
 
-window.MARTINIUM.tracks.prog = {
+window.ACADEMY_1991.tracks.prog = {
   id: "prog",
   title: "Programming for ML",
   tagline: "Python from zero to the data stack — auto-graded homework from a real university course, solved right in the browser.",
@@ -776,7 +776,7 @@ df.plot(x="month", y="total_profit")                # pandas shortcut</code></pr
 };
 
 (function () {
-  const o = window.MARTINIUM.order;
+  const o = window.ACADEMY_1991.order;
   const at = o.indexOf("math");
   o.splice(at >= 0 ? at + 1 : 0, 0, "prog");
 })();

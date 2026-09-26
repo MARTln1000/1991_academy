@@ -1,9 +1,9 @@
 /* 1991 Academy — Cross-track missions.
    Real coding challenges that combine ideas from several tracks.
    Locked until their prerequisite lessons are completed. */
-window.MARTINIUM = window.MARTINIUM || { tracks: {}, order: [] };
+window.ACADEMY_1991 = window.ACADEMY_1991 || { tracks: {}, order: [] };
 
-window.MARTINIUM.missions = [
+window.ACADEMY_1991.missions = [
   {
     id: "mission-autocomplete",
     title: "Instant Search Box",

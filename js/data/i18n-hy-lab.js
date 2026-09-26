@@ -3,7 +3,7 @@
    from the core i18n-hy.js pack; code (starter/tests) stays English.
    Load AFTER js/data/lab.js (and i18n-hy.js). */
 (function () {
-  const M = window.MARTINIUM;
+  const M = window.ACADEMY_1991;
   if (!M || !M.lab) return;
 
   const HY = {
