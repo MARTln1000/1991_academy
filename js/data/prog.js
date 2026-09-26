@@ -8,6 +8,14 @@ window.ACADEMY_1991 = window.ACADEMY_1991 || { tracks: {}, order: [] };
 
 var PROG_A = "../assets/courses/prog/";
 
+/* FAST "Python Programming" lab recordings, from the official playlist
+   PLg1DqfAVb6DSdl7AkeSFgPspZwB8gtp42 (every id checked against YouTube's
+   oEmbed). Each lesson opens with the labs it covers. Labs 17 (OOP), 19 (SQL),
+   20 (Big Data) and 21 (Neo4J) have no lesson in this track yet. */
+var PROG_LAB = function (id, title) {
+  return { id: id, title: title, channel: "FAST Foundation", length: "full lab" };
+};
+
 window.ACADEMY_1991.tracks.prog = {
   id: "prog",
   title: "Programming for ML",
@@ -24,7 +32,13 @@ window.ACADEMY_1991.tracks.prog = {
           id: "prog-1-1",
           title: "Conditionals & Loops",
           minutes: 14,
+          videos: [
+            PROG_LAB("w_nnk9qBz4k", "Lab 1 | Introduction to Python"),
+            PROG_LAB("fyTtev6CN_k", "Lab 2 | Conditionals"),
+            PROG_LAB("5QsIZ8gmDI4", "Lab 3 | Loops"),
+          ],
           materials: [
+            { label: "Slides: Introduction to Python", href: PROG_A + "Slides/1.Introduction_to_Python.ipynb" },
             { label: "Slides: Conditionals", href: PROG_A + "Slides/2.Conditionals.ipynb" },
             { label: "Slides: Loops", href: PROG_A + "Slides/3.Loops.ipynb" },
             { label: "Full HW1 notebook", href: PROG_A + "Homeworks/HW1_Loops.ipynb" },
@@ -149,6 +163,9 @@ __check("n=4: 1-2+3-4", alternating_sum(4), -2)
           id: "prog-1-2",
           title: "Strings & Lists",
           minutes: 14,
+          videos: [
+            PROG_LAB("dSv2jqGvaWM", "Lab 4 | Strings & Lists"),
+          ],
           materials: [
             { label: "Slides: Strings & Lists", href: PROG_A + "Slides/4.Strings_Lists.ipynb" },
             { label: "Full HW2 notebook", href: PROG_A + "Homeworks/HW2_Data_Structures.ipynb" },
@@ -264,6 +281,10 @@ __check("single zero at end", longest_zero_run([1, 0]), 1)
           id: "prog-1-3",
           title: "Dictionaries, Tuples & Sets",
           minutes: 13,
+          videos: [
+            PROG_LAB("uUYUaheysQA", "Lab 5 | Dictionaries"),
+            PROG_LAB("Ho9hiuKw_nA", "Lab 6 | Tuples, Sets, Files"),
+          ],
           materials: [
             { label: "Slides: Dictionaries", href: PROG_A + "Slides/5. Dictionaries.ipynb" },
             { label: "Slides: Tuples, Sets, Files", href: PROG_A + "Slides/6.Tuples,Sets,Files.ipynb" },
@@ -381,9 +402,15 @@ __check("all missing", users_without_email([{"name": "X", "email": ""}, {"name":
           id: "prog-2-1",
           title: "Functions & Error Handling",
           minutes: 15,
+          videos: [
+            PROG_LAB("Z0qOjlEV00I", "Lab 7 | Functions"),
+            PROG_LAB("Lib5cSTLldE", "Lab 8 | Functions & Error Handling"),
+            PROG_LAB("ah8-15PqcFc", "Lab 9 | Modules & Packages"),
+          ],
           materials: [
             { label: "Slides: Intro to Functions", href: PROG_A + "Slides/7.Intro_to_Functions.ipynb" },
             { label: "Slides: Functions & Errors", href: PROG_A + "Slides/8.Functions_and_ErrorHandling.ipynb" },
+            { label: "Slides: Modules & Packages", href: PROG_A + "Slides/9.Modules_and_Packages.ipynb" },
             { label: "Full HW3 notebook", href: PROG_A + "Homeworks/HW3_Functions.ipynb" },
           ],
           content: `
@@ -523,6 +550,10 @@ __check("one empty", merge([], [1, 2]), [1, 2])
           id: "prog-2-2",
           title: "NumPy: Arrays & Vectorization",
           minutes: 15,
+          videos: [
+            PROG_LAB("_BsiZjkMBz0", "Lab 10 | Introduction to NumPy"),
+            PROG_LAB("5oYqg3H4Bcs", "Lab 11 | NumPy (part 2)"),
+          ],
           materials: [
             { label: "Slides: Intro to NumPy", href: PROG_A + "Slides/10.Intro_to_Numpy.ipynb" },
             { label: "Slides: NumPy 2", href: PROG_A + "Slides/11.Numpy2.ipynb" },
@@ -671,6 +702,11 @@ __check("identity activation", dense_layer(w, a, b, lambda x: x).tolist(), [11, 
           id: "prog-2-3",
           title: "Pandas: DataFrames",
           minutes: 14,
+          videos: [
+            PROG_LAB("Kj_7ZdGDjCE", "Lab 12 | Introduction to Pandas"),
+            PROG_LAB("hSNAZ8VLls4", "Lab 13 | Pandas (part 2)"),
+            PROG_LAB("8rd8kbRrYDo", "Lab 14 | Pandas (part 3)"),
+          ],
           materials: [
             { label: "Slides: Intro to Pandas", href: PROG_A + "Slides/12.Intro_to_Pandas.ipynb" },
             { label: "Slides: Pandas 2", href: PROG_A + "Slides/13.Pandas2.ipynb" },
@@ -724,6 +760,11 @@ df.isna().sum()                 # where is data missing?</code></pre>
           id: "prog-2-4",
           title: "Visualization & EDA",
           minutes: 13,
+          videos: [
+            PROG_LAB("wQT8uBi8qNU", "Lab 15 | Data Visualization"),
+            PROG_LAB("xS0vidV0Xj8", "Lab 16 | Data Visualization (part 2)"),
+            PROG_LAB("MWFbO1XPlG8", "Lab 18 | Exploratory Data Analysis"),
+          ],
           materials: [
             { label: "Slides: Intro to Matplotlib", href: PROG_A + "Slides/15.Intro_to_Matplotlib.ipynb" },
             { label: "Slides: Data Visualization 2", href: PROG_A + "Slides/16.Data_Visualization2.ipynb" },

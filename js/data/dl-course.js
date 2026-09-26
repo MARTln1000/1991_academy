@@ -3,7 +3,8 @@
    its slide deck and, where the course assigned one, its homework PDF, driver
    notebook, dataset and solution notebook (assets/courses/dl). Existing
    proven lessons slot in where they match a lecture; "Beyond the Course"
-   keeps the rest. No lecture videos yet — Martin will provide the playlist. */
+   keeps the rest. Each lesson opens with its FAST lecture video(s): see the
+   end of this file. */
 (function () {
   const track = window.ACADEMY_1991.tracks.dl;
   if (!track) return;
@@ -646,4 +647,68 @@ min_G max_D  E[log D(x)] + E[log(1 − D(G(z)))]</code></pre>
       lessons: [byId["dl-3-2"]].filter(Boolean),
     },
   ];
+
+  /* ---------- FAST lecture videos ----------
+     The official FAST "Deep Learning | Lectures" playlist
+     (PLg1DqfAVb6DTW0q2Nl8CB5B2cGFqCCsGQ), every id checked against YouTube's
+     oEmbed. The playlist has 23 videos for 18 slide decks, so they are mapped
+     by topic, not by number (like ml-course.js), and a video that spans two
+     decks appears in both lessons. They go before any videos a lesson already
+     had: they ARE the course. */
+
+  function fastVideo(id, title) {
+    return { id, title, channel: "FAST Foundation", length: "full lecture" };
+  }
+  const V = {
+    1: fastVideo("UPxfpDPo-t0", "Lecture 1 | Introduction to Neural Networks"),
+    2: fastVideo("DzsvqHPZP74", "Lecture 2 | Gradient Descent, Linear Regression"),
+    3: fastVideo("Kl0oKJXyoBI", "Lecture 3 | Logistic Regression, Regularization, Softmax Classifier"),
+    4: fastVideo("96xnkQWT9DU", "Lecture 4 | Stochastic Gradient Descent, Back Propagation"),
+    5: fastVideo("-F3dVzcfizs", "Lecture 5 | Tensorflow (part 1)"),
+    6: fastVideo("O_mMCNNzYcg", "Lecture 6 | Normalization, Initialization"),
+    7: fastVideo("rExmy6lG8QA", "Lecture 7 | Dropout, Batch Normalization"),
+    8: fastVideo("UHmy-aft6bk", "Lecture 8 | Adaptive Momentum (ADAM), Tensorflow Keras"),
+    9: fastVideo("6YDcKNUlKqc", "Lecture 9 | Convolution"),
+    10: fastVideo("LamrwlJUkUE", "Lecture 10 | Famous Convolutional Neural Networks"),
+    11: fastVideo("DFCGiF_cDXY", "Lecture 11 | Receptive Field, Transfer Learning"),
+    12: fastVideo("q_Uif-hR75I", "Lecture 12 | Multitask Learning, Metrics"),
+    13: fastVideo("WaFxvPMzuTA", "Lecture 13 | Recurrent Neural Networks"),
+    14: fastVideo("_rBypZejXNg", "Lecture 14 | Long Short-Term Memory (LSTM)"),
+    15: fastVideo("oaLNWx8TLiQ", "Lecture 15 | Attention, Transformers"),
+    16: fastVideo("dC03SIwaAo0", "Lecture 16 | Dilated & Transposed Convolutions"),
+    17: fastVideo("uQfeqoo4p_8", "Lecture 17 | Kullback–Leibler Divergence, Autoencoders"),
+    18: fastVideo("6_sS1taQkXE", "Lecture 18 | Variational Autoencoders, GANs"),
+    19: fastVideo("29v8ji8Yi34", "Lecture 19 | Generative Adversarial Networks"),
+    20: fastVideo("r54LmHoH6ZU", "Lecture 20 | Wasserstein GANs"),
+    21: fastVideo("BXC--tY0Seg", "Lecture 21 | Bayesian & Siamese Neural Networks"),
+    22: fastVideo("EmfcPyQoHyg", "Lecture 22 | word2vec"),
+    23: fastVideo("7nxOXs-lHE8", "Lecture 23 | Tensorflow (part 2)"),
+  };
+  const VIDEOS = {
+    "dl-lec1": [1],       // slides L1: course intro + what a neural network is
+    "dl-1-1": [2],        // L2: intro to NNs, linear regression
+    "dl-lec3": [3],       // L3: logistic regression, softmax
+    "dl-1-2": [4, 5],     // L4: SGD, backprop (+ TensorFlow part 1 to try it)
+    "dl-lec5": [6, 7],    // L5: initialization, dropout
+    "dl-1-3": [7, 8, 23], // L6: batch norm, ADAM (+ Keras, TensorFlow part 2)
+    "dl-2-1": [9],        // L7: intro to CNNs
+    "dl-lec8": [10],      // L8: LeNet, AlexNet, VGG
+    "dl-lec9": [10],      // L9: ResNet, Inception
+    "dl-3-1": [11],       // L10: transfer learning
+    "dl-lec11": [12],     // L11: multitask learning, metrics
+    "dl-lec12": [13],     // L12: RNNs
+    "dl-lec13": [14],     // L13: GRU, LSTM, attention
+    "dl-2-2": [15],       // L14: transformer
+    "dl-lec15": [15, 16], // L15: transformer II, dilated & transposed convs
+    "dl-lec16": [17],     // L16: KL divergence, intro to autoencoders
+    "dl-lec17": [18],     // L17: autoencoders (VAEs)
+    "dl-lec18": [18, 19, 20], // L18: GANs
+    "dl-3-2": [22, 21],   // embeddings: word2vec, Siamese networks
+  };
+  for (const m of track.modules) {
+    for (const l of m.lessons) {
+      const nums = VIDEOS[l.id];
+      if (nums) l.videos = nums.map((n) => V[n]).concat(l.videos || []);
+    }
+  }
 })();
