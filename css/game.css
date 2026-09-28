@@ -457,6 +457,39 @@
   display: block;
   margin-top: 3px;
 }
+/* An error: compiler messages and tracebacks keep their line breaks. */
+.test-row.run-error { align-items: flex-start; }
+.test-row.run-error pre,
+.run-output pre {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* What the learner's code printed (print, console.log, cout). */
+.run-output {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+.run-output-label {
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.run-output pre {
+  padding: 11px 16px;
+  max-height: 320px;
+  overflow: auto;
+}
 
 .hint-box { margin-top: 18px; }
 .hint-box details {

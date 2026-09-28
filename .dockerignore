@@ -28,6 +28,9 @@ Makefile
 *.md
 requirements-dev.txt
 
+# The C++ runner is an image of its own (runner/Dockerfile)
+runner/
+
 # The image needs only the backup script from deploy/ (Caddy reads the
 # Caddyfile from the host)
 deploy/

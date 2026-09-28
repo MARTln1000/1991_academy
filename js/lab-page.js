@@ -1,8 +1,8 @@
 /* ============================================
    1991 Academy — The Lab
    LeetCode-style problems + from-scratch ML/DL
-   builds. JavaScript or Python, real editor,
-   sandboxed tests, code-driven visuals.
+   builds. JavaScript, Python or C++, real
+   editor, sandboxed tests, code-driven visuals.
    ============================================ */
 
 (function () {
@@ -36,7 +36,7 @@
       '<span class="track-chip" style="--chip-bg:' + bg + ";--chip-fg:" + fg + '">' +
       esc(t(TRACK_LABEL[p.track] || p.track)) + "</span>" +
       (d.label ? '<span class="diff-chip ' + d.cls + '">' + esc(t(d.label)) + "</span>" : "") +
-      (p.py ? '<span class="diff-chip d-py">JS · PY</span>' : "") +
+      '<span class="diff-chip d-py">' + ["JS", p.py && "PY", p.cpp && "C++"].filter(Boolean).join(" · ") + "</span>" +
       (p.viz ? '<span class="diff-chip d-viz">' + t("📊 visual") + "</span>" : "")
     );
   }
@@ -51,7 +51,7 @@
     root.innerHTML =
       '<div class="section">' +
       '<h1 class="section-title" style="font-size:2rem">' + t("🧪 The Lab") + "</h1>" +
-      '<p class="section-sub">' + t("Don't just read about algorithms and models — write them in <strong>JavaScript or Python</strong>, test them, and <strong>watch your own code run</strong>. ") +
+      '<p class="section-sub">' + t("Don't just read about algorithms and models — write them in <strong>JavaScript, Python or C++</strong>, test them, and <strong>watch your own code run</strong>. ") +
       t("{0} of {1} solved.", done, problems.length) + "</p>" +
       '<div class="lab-filters">' +
       ["all", "dsa", "ml", "dl"]
@@ -89,6 +89,16 @@
   /* ---------- Detail ---------- */
 
   const SUFFIX = { python: ":py", cpp: ":cpp", javascript: "" };
+  const LANG_LABEL = { javascript: "JavaScript", python: "Python", cpp: "C++" };
+
+  function hintsHtml(p, lang) {
+    const hints = L(p, "hints").map((h, i) => "<details><summary>" + t("Hint {0}", i + 1) + "</summary><p>" + esc(h) + "</p></details>");
+    const variant = lang === "python" ? p.py : lang === "cpp" ? p.cpp : null;
+    if (variant && variant.hint) {
+      hints.push("<details><summary>" + t("Hint for {0}", LANG_LABEL[lang]) + "</summary><p>" + esc(L(variant, "hint")) + "</p></details>");
+    }
+    return hints.join("");
+  }
 
   function draftKey(p, lang) {
     return DRAFT_PREFIX + p.id + (SUFFIX[lang] || "");
@@ -122,15 +132,14 @@
       '<span class="ex-status"></span></div>' +
       '<div class="test-results"></div>' +
       (p.viz ? '<div class="viz-panel" hidden><canvas class="viz-canvas"></canvas><p class="viz-note"></p></div>' : "") +
-      '<div class="hint-box">' +
-      L(p, "hints").map((h, i) => "<details><summary>" + t("Hint {0}", i + 1) + "</summary><p>" + esc(h) + "</p></details>").join("") +
-      "</div></div>";
+      '<div class="hint-box">' + hintsHtml(p, lang) + "</div></div>";
 
     const resultsEl = root.querySelector(".test-results");
     const status = root.querySelector(".ex-status");
     const vizBtn = root.querySelector("[data-viz]");
     const vizPanel = root.querySelector(".viz-panel");
     const runBtn = root.querySelector("[data-run]");
+    const hintBox = root.querySelector(".hint-box");
 
     const languages = [{ id: "javascript", label: "JavaScript" }];
     if (p.py) languages.push({ id: "python", label: "Python" });
@@ -158,6 +167,7 @@
         editor.setValue(localStorage.getItem(draftKey(p, lang)) ?? starterFor(p, lang));
         resultsEl.innerHTML = "";
         status.textContent = "";
+        hintBox.innerHTML = hintsHtml(p, lang);
         if (vizBtn) vizBtn.hidden = lang === "cpp"; /* C++ runs on the server, no canvas hook */
         if (lang === "python") Runner.warmPython(); /* start the download early */
       },
@@ -193,7 +203,7 @@
     function runTests() {
       const code = editor.getValue();
       if (lang === "python") return Runner.python(code, p.py.tests, (msg) => { status.textContent = msg; });
-      if (lang === "cpp") return Runner.cpp(code, p.cpp.tests);
+      if (lang === "cpp") return Runner.cpp(code, p.cpp.tests, p.cpp.prelude);
       return Runner.javascript(code, p.tests);
     }
 
@@ -236,7 +246,7 @@
             : await Runner.computeJavascript(editor.getValue(), p.fnName, computeSrc, p.viz);
 
           if (out.error) {
-            note.textContent = "💥 " + out.error;
+            note.textContent = "💥 " + Runner.formatError(out.error);
           } else {
             renderer(out.data, p.viz, canvas, (msg) => { note.textContent = msg; });
           }

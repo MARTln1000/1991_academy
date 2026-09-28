@@ -10,8 +10,8 @@ Serves the static site and the JSON API.
 Design notes that matter if you touch this file:
 
 * **Nothing blocking runs on the event loop.** SQLite calls, scrypt hashing and
-  the C++ subprocess all go through `run_in_threadpool`. A single 25-second C++
-  compile used to stall every other request, including static files.
+  C++ runs all go through `run_in_threadpool`. A single 25-second C++ compile
+  used to stall every other request, including static files.
 * **Static serving is an allowlist, not a blocklist.** Only `/`, the five page
   files, and the css/js/tracks/assets trees are reachable. An extension
   blocklist could be walked around by case (`/APP.PY` on macOS) and wrongly
@@ -25,8 +25,11 @@ Environment:
                    your LAN; in Docker, compose publishes it on 127.0.0.1 only)
     ACADEMY_DB     SQLite path                      (default ./1991_academy.db)
     ACADEMY_DEBUG  1 = dev mode: no-store caching   (default 1)
-    ACADEMY_CPP    1 = enable the C++ runner        (default 1; it executes
-                   learner code on THIS machine — keep it off on public hosts)
+    ACADEMY_CPP_RUNNER  socket of the C++ runner container; Docker sets it
+                   (docker-compose.yml), and C++ then runs there, sandboxed
+    ACADEMY_CPP    1 = without a runner, compile learner C++ in-process
+                   (default 1, for development on your own computer; the
+                   Docker image sets 0. Never 1 on a public server)
     ACADEMY_SECURE_COOKIES  1 = Secure (HTTPS-only) session cookie
                    (default: on unless ACADEMY_DEBUG=1)
     ACADEMY_TRUST_PROXY     1 = read client IP from X-Forwarded-For
@@ -45,7 +48,7 @@ API:
     POST /api/forgot-password     {email}            (always 200; emails a reset link)
     POST /api/reset-password      {token, password}
     POST /api/delete-account      {password}
-    POST /api/run-cpp             {source, harness}
+    POST /api/run-cpp             {source, harness, prelude?}
     GET  /api/health
 
 Email (password reset) env, all optional — unset ⇒ links are logged not sent:
@@ -55,6 +58,7 @@ Email (password reset) env, all optional — unset ⇒ links are logged not sent
 import asyncio
 import hashlib
 import hmac
+import importlib.util
 import json
 import logging
 import math
@@ -63,9 +67,8 @@ import re
 import secrets
 import shutil
 import smtplib
+import socket
 import sqlite3
-import subprocess
-import tempfile
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager, contextmanager
@@ -1071,91 +1074,183 @@ async def api_delete_account(request: Request):
     return response
 
 # ---------------------------------------------------------------- C++ runner
+#
+# C++ is the one language that can't run in the learner's browser, so it's
+# compiled and run on the server. Never by this process: in Docker, by the
+# `runner` container (runner/cpp_runner.py), which has no network, holds
+# nothing, and runs each program as a throwaway user with hard limits; this app
+# only hands it the program over a Unix socket (ACADEMY_CPP_RUNNER). Without
+# Docker, ACADEMY_CPP=1 runs the same code in-process on a developer's own
+# computer. Neither set: C++ is off.
 
-CPP_PREAMBLE = r"""
-#include <iostream>
-#include <vector>
-#include <string>
+CPP_RUNNER_SOCKET = os.environ.get("ACADEMY_CPP_RUNNER", "")
+CPP_MODE = "runner" if CPP_RUNNER_SOCKET else ("local" if ENABLE_CPP and CPP_COMPILER else "off")
+CPP_OUTPUT_KEEP = 20_000
+
+# Compiled ahead of every submission. `#line` directives name each part, so a
+# compile error says `solution.cpp:3:12`, the learner's own line 3, not a line
+# number shifted by everything above it. __check reports each test as one JSON
+# array per line on file descriptor 3, apart from anything the learner prints.
+CPP_PREAMBLE = r"""#line 1 "academy.h"
 #include <algorithm>
+#include <array>
+#include <climits>
+#include <cmath>
+#include <cstdio>
+#include <deque>
+#include <functional>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <numeric>
+#include <queue>
+#include <set>
+#include <sstream>
+#include <stack>
+#include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
-#include <map>
-#include <set>
-#include <queue>
-#include <stack>
-#include <cmath>
+#include <utility>
+#include <vector>
 using namespace std;
-static string __ts(long long v){ return to_string(v); }
-static string __ts(int v){ return to_string(v); }
-static string __ts(double v){ char b[32]; snprintf(b,32,"%g",v); return string(b); }
-static string __ts(bool v){ return v ? "true" : "false"; }
-static string __ts(const string& v){ return v; }
-static string __ts(const vector<int>& v){ string r="["; for(size_t i=0;i<v.size();++i){ if(i) r+=","; r+=to_string(v[i]); } return r+"]"; }
-template<class A, class B>
-void __check(const string& name, const A& actual, const B& expected){
-  string a=__ts(actual), e=__ts(expected);
-  cout << "CHECK|" << (a==e ? "1" : "0") << "|" << name << "|" << e << "|" << a << "\n";
+// Printed lines reach the output panel even if the program crashes later.
+static int __academy_line_buffered = (setvbuf(stdout, nullptr, _IOLBF, 0), 0);
+static string __json(const string& s) {
+  string r = "\"";
+  for (unsigned char c : s) {
+    if (c == '"' || c == '\\') { r += '\\'; r += (char)c; }
+    else if (c < 0x20) { char b[8]; snprintf(b, sizeof b, "\\u%04x", c); r += b; }
+    else r += (char)c;
+  }
+  return r + "\"";
+}
+static string __ts(bool v) { return v ? "true" : "false"; }
+static string __ts(char v) { return __json(string(1, v)); }
+static string __ts(int v) { return to_string(v); }
+static string __ts(long v) { return to_string(v); }
+static string __ts(long long v) { return to_string(v); }
+static string __ts(unsigned v) { return to_string(v); }
+static string __ts(unsigned long v) { return to_string(v); }
+static string __ts(unsigned long long v) { return to_string(v); }
+static string __ts(double v) { char b[40]; snprintf(b, sizeof b, "%.10g", v); return b; }
+static string __ts(float v) { return __ts((double)v); }
+static string __ts(const string& v) { return __json(v); }
+static string __ts(const char* v) { return __json(v); }
+template <class T> string __ts(const vector<T>& v);
+template <class A, class B> string __ts(const pair<A, B>& p);
+template <class T, size_t N> string __ts(const array<T, N>& v);
+template <class T> string __seq(const T& v) {
+  string r = "[";
+  bool first = true;
+  for (const auto& x : v) { if (!first) r += ","; r += __ts(x); first = false; }
+  return r + "]";
+}
+template <class T> string __ts(const vector<T>& v) { return __seq(v); }
+template <class T, size_t N> string __ts(const array<T, N>& v) { return __seq(v); }
+template <class A, class B> string __ts(const pair<A, B>& p) { return "[" + __ts(p.first) + "," + __ts(p.second) + "]"; }
+template <class A, class B>
+void __check(const string& name, const A& actual, const B& expected) {
+  static FILE* results = fdopen(3, "w");
+  string a = __ts(actual), e = __ts(expected);
+  if (!results) return;
+  fprintf(results, "[%s,%s,%s,%s]\n", __json(name).c_str(), a == e ? "true" : "false",
+          __json(e).c_str(), __json(a).c_str());
+  fflush(results);
 }
 """
 
 
-def _compile_and_run_cpp(source: str, harness: str) -> dict:
-    """Blocking: compile + execute. Called via run_in_threadpool — a 25-second
-    compile on the event loop used to stall every other request on the server."""
-    program = CPP_PREAMBLE + "\n" + source + "\n" + harness + "\n"
+def build_cpp_program(source: str, harness: str, prelude: str = "") -> str:
+    """The preamble, the problem's given types (prelude), the learner's code
+    and the tests, each under its own name for compiler messages."""
+    return "\n".join([CPP_PREAMBLE, '#line 1 "given.cpp"', prelude,
+                      '#line 1 "solution.cpp"', source, '#line 1 "tests.cpp"', harness, ""])
+
+
+_local_cpp = None
+
+
+def _run_cpp_program(program: str) -> dict:
+    """Blocking (called via run_in_threadpool): the runner's raw reply."""
+    global _local_cpp
     try:
-        with tempfile.TemporaryDirectory() as d:
-            src = os.path.join(d, "main.cpp")
-            exe = os.path.join(d, "prog")
-            with open(src, "w") as f:
-                f.write(program)
-            comp = subprocess.run(
-                [CPP_COMPILER, "-std=c++17", "-O1", "-w", src, "-o", exe],
-                capture_output=True, text=True, timeout=25,
-            )
-            if comp.returncode != 0:
-                return {"error": "Compilation error:\n" + comp.stderr[-1600:], "results": []}
-            run = subprocess.run([exe], capture_output=True, text=True, timeout=8)
-            results = []
-            for line in run.stdout.splitlines():
-                if line.startswith("CHECK|"):
-                    parts = line.split("|", 4)
-                    if len(parts) == 5:
-                        results.append(
-                            {"name": parts[2], "pass": parts[1] == "1", "expected": parts[3], "actual": parts[4]}
-                        )
-            if not results and run.returncode != 0:
-                return {
-                    "error": "Runtime error (exit " + str(run.returncode) + "). " + (run.stderr[-800:] or "crash before any test ran."),
-                    "results": [],
-                }
-            return {"results": results}
-    except subprocess.TimeoutExpired:
-        return {"error": "Timed out — infinite loop, or compilation took too long.", "results": []}
-    except Exception as exc:  # noqa: BLE001 — surface anything to the learner
-        log.exception("cpp runner failed")
-        return {"error": "Runner error: " + str(exc), "results": []}
+        if CPP_MODE == "runner":
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(75)   # queue wait + compile + run, with room to spare
+                s.connect(CPP_RUNNER_SOCKET)
+                s.sendall(json.dumps({"source": program}).encode() + b"\n")
+                return json.loads(s.makefile("rb").readline(16 * 1024 * 1024))
+        if _local_cpp is None:
+            spec = importlib.util.spec_from_file_location("cpp_runner", ROOT / "runner" / "cpp_runner.py")
+            _local_cpp = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(_local_cpp)
+        return _local_cpp.run_local(program)
+    except (OSError, ValueError) as exc:
+        log.warning("C++ runner unreachable: %r", exc)
+        return {"error": "unavailable"}
+    except Exception:  # noqa: BLE001 — the learner gets a message, the log gets the rest
+        log.exception("C++ runner failed")
+        return {"error": "internal"}
+
+
+def _cpp_results(text: str) -> list:
+    results = []
+    for line in text.splitlines():
+        try:
+            name, passed, expected, actual = json.loads(line)
+        except (ValueError, TypeError):
+            continue
+        results.append({"name": str(name), "pass": passed is True, "expected": str(expected), "actual": str(actual)})
+        if len(results) >= 200:
+            break
+    return results
+
+
+def cpp_response(raw: dict) -> dict:
+    """The runner's reply → what the page shows: test results, the program's
+    own output, and at most one error, as a kind the page words for itself (in
+    English or Armenian)."""
+    if "error" in raw:
+        return {"results": [], "output": "", "error": {"kind": "busy" if raw["error"] == "busy" else "unavailable"}}
+    if not raw.get("compiled"):
+        if raw.get("timed_out"):
+            return {"results": [], "output": "", "error": {"kind": "compile_timeout"}}
+        return {"results": [], "output": "", "error": {"kind": "compile", "detail": raw.get("compile_output", "")[:4000]}}
+    stdout, stderr = raw.get("stdout", ""), raw.get("stderr", "")
+    if stdout and stderr and not stdout.endswith("\n"):
+        stdout += "\n"
+    out = {"results": _cpp_results(raw.get("results", "")), "output": (stdout + stderr)[:CPP_OUTPUT_KEEP]}
+    if raw.get("output_limit"):
+        out["error"] = {"kind": "output_limit"}
+    elif raw.get("timed_out"):
+        out["error"] = {"kind": "timeout"}
+    elif raw.get("signal"):
+        out["error"] = {"kind": "crash", "signal": raw["signal"]}
+    elif raw.get("exit_code") not in (0, None):
+        out["error"] = {"kind": "exit", "code": raw["exit_code"]}
+    return out
 
 
 @app.post("/api/run-cpp")
 async def api_run_cpp(request: Request):
-    """Compile learner C++ + harness and run it. Executes code on THIS host —
-    local-dev convenience, gated by ACADEMY_CPP."""
-    if not ENABLE_CPP:
-        return JSONResponse({"error": "The C++ runner is disabled on this server.", "results": []})
-    if CPP_COMPILER is None:
-        return JSONResponse({"error": "No C++ compiler found on this machine.", "results": []})
+    """Compile and run learner C++ against a problem's tests: in the runner
+    container, or (ACADEMY_CPP=1, no Docker) on this machine."""
+    if CPP_MODE == "off":
+        return JSONResponse({"results": [], "output": "", "error": {"kind": "disabled"}})
     if rate_limited(request, "cpp", 12, 60):
         return err("Too many compile requests — wait a minute.", 429)
 
     body = await json_body(request)
-    if body is None or not isinstance(body.get("source"), str) or not isinstance(body.get("harness"), str):
+    if body is None or not isinstance(body.get("source"), str) or not isinstance(body.get("harness"), str) \
+            or not isinstance(body.get("prelude", ""), str):
         return err("invalid request body")
-    source, harness = body["source"], body["harness"]
-    if len(source) > MAX_CODE_BYTES or len(harness) > MAX_CODE_BYTES:
-        return JSONResponse({"error": "Source too large.", "results": []})
+    source, harness, prelude = body["source"], body["harness"], body.get("prelude", "")
+    if max(len(source), len(harness), len(prelude)) > MAX_CODE_BYTES:
+        return JSONResponse({"results": [], "output": "", "error": {"kind": "too_large"}})
 
-    return JSONResponse(await run_in_threadpool(_compile_and_run_cpp, source, harness))
+    raw = await run_in_threadpool(_run_cpp_program, build_cpp_program(source, harness, prelude))
+    return JSONResponse(cpp_response(raw))
 
 # ---------------------------------------------------------------- health
 
@@ -1166,7 +1261,8 @@ async def api_health():
         "ok": True,
         "uptime_s": int(time.time() - STARTED_AT),
         "debug": DEBUG,
-        "cpp": ENABLE_CPP and CPP_COMPILER is not None,
+        "cpp": CPP_MODE != "off",
+        "cpp_mode": CPP_MODE,
         "email": bool(SMTP_HOST and SMTP_USER and SMTP_PASS),
         "secure_cookies": SECURE_COOKIES,
         "trust_proxy": TRUST_PROXY,
@@ -1181,11 +1277,10 @@ app.mount("/", StaticFiles(directory=str(ROOT), html=True), name="site")
 
 
 if __name__ == "__main__":
-    cpp = "C++ ✓" if (ENABLE_CPP and CPP_COMPILER) else "C++ ✗"
-    log.info("1991 Academy backend on http://localhost:%d  [%s, debug=%s, secure_cookies=%s, trust_proxy=%s, rev=%s]",
-             PORT, cpp, DEBUG, SECURE_COOKIES, TRUST_PROXY, (REVISION or "dev")[:7])
-    # Loud warning if a public-looking config still has the RCE runner on.
-    if not DEBUG and ENABLE_CPP:
-        log.warning("SECURITY: ACADEMY_CPP is ON in a non-debug run — the C++ runner "
-                    "executes arbitrary code on this host. Set ACADEMY_CPP=0 on public servers.")
+    log.info("1991 Academy backend on http://localhost:%d  [C++ %s, debug=%s, secure_cookies=%s, trust_proxy=%s, rev=%s]",
+             PORT, CPP_MODE, DEBUG, SECURE_COOKIES, TRUST_PROXY, (REVISION or "dev")[:7])
+    # Loud warning if a public-looking config compiles learner code in-process.
+    if not DEBUG and CPP_MODE == "local":
+        log.warning("SECURITY: ACADEMY_CPP=1 in a non-debug run: learner C++ runs on this host, "
+                    "unsandboxed. On a public server use Docker, where the runner container does it.")
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning")

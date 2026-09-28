@@ -16,7 +16,8 @@ development: `make dev` (or `.venv/bin/python app.py`).
 | `ACADEMY_HOST` | `0.0.0.0` | `0.0.0.0` inside the container, published on the host's `127.0.0.1` only | Bind address. Nothing but the proxy may reach the app; see §3 |
 | `ACADEMY_DB` | `./1991_academy.db` | `/data/academy.db`, in the `academy_data` volume | SQLite path |
 | `ACADEMY_DEBUG` | `1` | `0` | `0` enables asset caching and hides the API docs |
-| `ACADEMY_CPP` | `1` | `0` | **Must be `0` on any public server.** The C++ runner compiles and executes learner code on the host. It is a local-development convenience, not a sandbox. (The image has no compiler, so it couldn't run anyway) |
+| `ACADEMY_CPP_RUNNER` | unset | `/run/cpp/runner.sock` | The C++ runner container's socket. When set, learners' C++ is compiled and run there, never in the app (§2) |
+| `ACADEMY_CPP` | `1` | `0` | Without a runner, `1` compiles learner C++ inside the app process: a convenience for development on your own computer, not a sandbox. **Never `1` on a public server.** (The app image has no compiler, so it couldn't anyway) |
 | `ACADEMY_SECURE_COOKIES` | on unless `ACADEMY_DEBUG=1` | on | Marks the session cookie `Secure` (HTTPS only) and sends HSTS |
 | `ACADEMY_TRUST_PROXY` | `0` | `1` | **`1` when, and only when, a trusted reverse proxy sets `X-Forwarded-For`.** See §3 |
 | `ACADEMY_BASE_URL` | `http://localhost:8735` | `https://$DOMAIN` | Public origin used to build password-reset links |
@@ -24,7 +25,7 @@ development: `make dev` (or `.venv/bin/python app.py`).
 Where each one is set:
 
 - **`Dockerfile`**: `ACADEMY_HOST`, `PORT`, `ACADEMY_DB`, `ACADEMY_DEBUG`, `ACADEMY_CPP`.
-- **`docker-compose.yml`**: `ACADEMY_TRUST_PROXY`, `ACADEMY_BASE_URL`.
+- **`docker-compose.yml`**: `ACADEMY_TRUST_PROXY`, `ACADEMY_BASE_URL`, `ACADEMY_CPP_RUNNER`.
 - **`docker-compose.local.yml`**: used instead when `DOMAIN` is empty (your own
   computer, plain http). It turns `ACADEMY_SECURE_COOKIES` and
   `ACADEMY_TRUST_PROXY` off, and sets `ACADEMY_BASE_URL=http://localhost:8735`.
@@ -42,10 +43,12 @@ log (`make logs`) instead of emailed:
 ## 2. What runs where
 
 ```
-container academy-app-1    image 1991-academy, built from this folder   127.0.0.1:8735
-container academy-caddy-1  caddy:2-alpine                               :80, :443 (tcp + udp)
+container academy-app-1     image 1991-academy, built from this folder   127.0.0.1:8735
+container academy-runner-1  image 1991-academy-runner, from runner/      no network at all
+container academy-caddy-1   caddy:2-alpine                               :80, :443 (tcp + udp)
 
 volume academy_data           /data in the app: academy.db (+ -wal, -shm) and backups/
+volume academy_cpp-socket     the socket the app reaches the runner through; nothing else
 volume academy_caddy-data     the HTTPS certificates and Caddy's ACME account
 volume academy_caddy-config   Caddy's saved config
 
@@ -62,14 +65,42 @@ dependencies pinned by `requirements.lock`, and the site's files.
 `.dockerignore` keeps out the local database, `.env`, `.venv`, tests and docs.
 A `REVISION` file records the commit it was built from (with `-dirty` if there
 were uncommitted changes), and `/api/health` reports it. The app runs as the
-unprivileged user `academy` (uid 10001).
+unprivileged user `academy` (uid and gid 10001; the runner lets group 10001,
+and only it, open its socket).
 
 **The app container** has a read-only filesystem. Its only writable places
 are the `academy_data` volume and a `/tmp` in memory. It holds no Linux
 capabilities and can't gain privileges. A compromised app therefore can't
 modify its own code. Logs are capped at 5 × 10 MB per container.
-`restart: unless-stopped` means Docker starts both containers again after a
+`restart: unless-stopped` means Docker starts the containers again after a
 reboot.
+
+**The C++ runner container** (`runner/`) exists because C++, unlike
+JavaScript and Python, can't run in the learner's browser: it has to be
+compiled, so it runs on the server. It is built so that even a hostile
+program reaches nothing worth reaching:
+
+- **No network at all** (`network_mode: none`): it can't attack other
+  machines, download anything, or send requests to the app. The app hands it
+  each program through a socket file in the `academy_cpp-socket` volume.
+- **Nothing inside**: no database, no `.env`, no site files, a read-only
+  filesystem. Programs are compiled and run in a 256 MB in-memory folder,
+  and each run's files are deleted after it.
+- **A throwaway user per run**, never root: two slots, uid 20000 and 20001
+  (`CPP_SLOTS` sets how many programs run at once). Each run is limited to
+  5 s of CPU (8 s wall clock), 512 MB of memory, 16 processes and 1 MB of
+  output; the compiler gets 20 s and 2 GB. After every run, every process
+  that user still has is killed, however it detached.
+- **The container itself** is capped at 1 GB of memory and 128 processes. It
+  keeps only the capabilities needed to switch to those users and clean up
+  after them (`CHOWN`, `SETUID`, `SETGID`, `KILL`), with `no-new-privileges`.
+
+CI checks all of this on every push by running a set of hostile programs
+through it (`tests/check_runner_sandbox.py`): network access, reading the
+database, becoming root, a fork bomb, memory and disk hogs, endless output,
+and a process left running in the background must all fail or be stopped.
+The one thing a container can't rule out is a bug in the Linux kernel
+itself, so keep the server's kernel updated (`apt upgrade`).
 
 **Updating** (`make update`) runs `git pull`, rebuilds the image and recreates
 the app container. The site is unavailable for a few seconds while the app
@@ -155,7 +186,7 @@ Course assets and code are static and can always be rebuilt from git.
 
 In `app.py`:
 
-- Rate limits: login 10/min·IP, register 5/10min·IP, reset 5/10min·IP, C++ runner 12/min·IP.
+- Rate limits: login 10/min·IP, register 5/10min·IP, reset 5/10min·IP, C++ runs 12/min·IP.
 - 300 KB request-body cap; 60 KB code-size cap.
 - scrypt password hashing, HttpOnly SameSite=Lax session cookies (30 days),
   `Secure` + HSTS whenever `ACADEMY_SECURE_COOKIES` is on.
@@ -172,6 +203,7 @@ In the Docker setup:
 
 - The app's port is published on `127.0.0.1` only; the proxy is the only way in (§3).
 - The container sandbox (§2): read-only code, no capabilities, non-root.
+- Learners' C++ runs only in the locked-down runner container (§2).
 - Secrets live in `.env` on the server. They are never in git and never in
   the image.
 

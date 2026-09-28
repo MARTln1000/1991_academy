@@ -394,6 +394,11 @@ def test_rate_limit_per_proxy_ip(client, monkeypatch):
     "/.env",
     "/deploy/Caddyfile",
     "/.github/workflows/ci.yml",
+    # the C++ runner, and the reference solutions
+    "/runner/cpp_runner.py",
+    "/runner/Dockerfile",
+    "/tests/content/solutions/lab-two-sum.js",
+    "/tests/check_runner_sandbox.py",
 ])
 def test_non_web_files_are_not_served(client, path):
     assert client.get(path).status_code == 404
@@ -479,3 +484,81 @@ def test_schema_is_ready_without_calling_init_db(tmp_path, monkeypatch):
         assert c.post("/api/register", json={
             "username": "bob", "email": "bob@example.com", "password": "hunter2pw"
         }).status_code == 201
+
+
+# ------------------------------------------------------------- C++
+
+def test_cpp_is_off_without_a_runner(client):
+    # conftest.py sets ACADEMY_CPP=0 and no ACADEMY_CPP_RUNNER
+    assert app.CPP_MODE == "off"
+    r = client.post("/api/run-cpp", json={"source": "int f() { return 1; }", "harness": "int main() {}"})
+    assert r.json() == {"results": [], "output": "", "error": {"kind": "disabled"}}
+    assert client.get("/api/health").json()["cpp"] is False
+
+
+def test_cpp_program_names_each_part_for_compiler_messages():
+    program = app.build_cpp_program("int f() {\n  return x;\n}", "int main() {}", "struct P { int a; };")
+    lines = program.splitlines()
+    solution = lines.index('#line 1 "solution.cpp"')
+    assert lines[solution + 2] == "  return x;"   # reported as solution.cpp:2
+    assert lines.index('#line 1 "given.cpp"') < solution < lines.index('#line 1 "tests.cpp"')
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ({"error": "busy"}, {"kind": "busy"}),
+    ({"error": "internal"}, {"kind": "unavailable"}),
+    ({"compiled": False, "timed_out": False, "compile_output": "solution.cpp:2:10: error: x"},
+     {"kind": "compile", "detail": "solution.cpp:2:10: error: x"}),
+    ({"compiled": False, "timed_out": True}, {"kind": "compile_timeout"}),
+    ({"compiled": True, "timed_out": True, "signal": "SIGXCPU"}, {"kind": "timeout"}),
+    ({"compiled": True, "output_limit": True, "signal": "SIGXFSZ"}, {"kind": "output_limit"}),
+    ({"compiled": True, "signal": "SIGSEGV", "exit_code": None}, {"kind": "crash", "signal": "SIGSEGV"}),
+    ({"compiled": True, "exit_code": 3}, {"kind": "exit", "code": 3}),
+    ({"compiled": True, "exit_code": 0}, None),
+])
+def test_cpp_runner_replies_become_one_error_kind(raw, expected):
+    assert app.cpp_response(raw).get("error") == expected
+
+
+def test_cpp_results_come_from_the_harness_channel_not_stdout():
+    raw = {"compiled": True, "exit_code": 0, "stdout": '["fake",true,"1","1"]\n', "stderr": "",
+           "results": '["adds",true,"5","5"]\n["vec",false,"[2,4]","[1,2]"]\nnot json\n'}
+    out = app.cpp_response(raw)
+    assert out["results"] == [
+        {"name": "adds", "pass": True, "expected": "5", "actual": "5"},
+        {"name": "vec", "pass": False, "expected": "[2,4]", "actual": "[1,2]"},
+    ]
+    assert out["output"] == '["fake",true,"1","1"]\n'   # the learner's print, shown, never counted
+
+
+def test_cpp_unreachable_runner_is_reported(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(app, "CPP_MODE", "runner")
+    monkeypatch.setattr(app, "CPP_RUNNER_SOCKET", str(tmp_path / "missing.sock"))
+    r = client.post("/api/run-cpp", json={"source": "", "harness": "int main() {}"})
+    assert r.json()["error"] == {"kind": "unavailable"}
+
+
+def test_cpp_rejects_bad_and_oversized_bodies(client, monkeypatch):
+    monkeypatch.setattr(app, "CPP_MODE", "local")
+    assert client.post("/api/run-cpp", json={"source": 1, "harness": ""}).status_code == 400
+    assert client.post("/api/run-cpp", json={"source": "", "harness": "", "prelude": 5}).status_code == 400
+    big = "x" * (app.MAX_CODE_BYTES + 1)
+    assert client.post("/api/run-cpp", json={"source": big, "harness": ""}).json()["error"] == {"kind": "too_large"}
+
+
+@pytest.mark.skipif(app.CPP_COMPILER is None, reason="no C++ compiler")
+def test_cpp_runs_locally_with_output_and_line_numbers(client, monkeypatch):
+    monkeypatch.setattr(app, "CPP_MODE", "local")
+    harness = 'int main() { __check("adds", add(2, 3), 5); __check("str", greet("A"), string("hi A")); }'
+    good = 'int add(int a, int b) { cout << "adding" << endl; return a + b; }\nstring greet(string s) { return "hi " + s; }'
+    out = client.post("/api/run-cpp", json={"source": good, "harness": harness}).json()
+    assert [r["pass"] for r in out["results"]] == [True, True] and "error" not in out
+    assert out["output"] == "adding\n"
+    broken = 'int add(int a, int b) { return a + b; }\nstring greet(string s) { return nope; }'
+    out = client.post("/api/run-cpp", json={"source": broken, "harness": harness}).json()
+    assert out["error"]["kind"] == "compile" and "solution.cpp:2:" in out["error"]["detail"]
+    prelude = "struct P { int a; };"
+    out = client.post("/api/run-cpp", json={"source": "int get(P p) { return p.a; }", "prelude": prelude,
+                                            "harness": 'int main() { __check("given type", get({7}), 7); }'}).json()
+    assert out["results"] == [{"name": "given type", "pass": True, "expected": "7", "actual": "7"}]
+

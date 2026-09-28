@@ -1,13 +1,18 @@
 /* ============================================
    1991 Academy — Missions page
    Card list with prerequisite locks + a detail
-   view with editor, sandboxed tests and XP.
+   view with editor (JavaScript, Python or
+   C++), sandboxed tests and XP.
    ============================================ */
 
 (function () {
   const root = document.getElementById("missions-root");
   const missions = M.missions;
   const DRAFT_PREFIX = "1991_academy:draft:";
+  const LANG_PREFIX = "1991_academy:missionlang:";
+  const LANG_LABEL = { javascript: "JavaScript", python: "Python", cpp: "C++" };
+  /* JavaScript drafts keep their original key, so nobody's saved work moves. */
+  const SUFFIX = { python: ":py", cpp: ":cpp", javascript: "" };
 
   const TRACK_CHIP_COLORS = {
     web: ["rgba(245,158,11,0.14)", "#f59e0b"],
@@ -97,9 +102,23 @@
 
   /* ---------- Detail view ---------- */
 
+  const variantFor = (m, lang) => (lang === "python" ? m.py : lang === "cpp" ? m.cpp : m);
+  const draftKey = (m, lang) => DRAFT_PREFIX + m.id + (SUFFIX[lang] || "");
+
+  function hintsHtml(m, lang) {
+    const hints = L(m, "hints").map((h, i) => "<details><summary>" + t("Hint {0}", i + 1) + "</summary><p>" + esc(h) + "</p></details>");
+    const variant = lang === "javascript" ? null : variantFor(m, lang);
+    if (variant && variant.hint) {
+      hints.push("<details><summary>" + t("Hint for {0}", LANG_LABEL[lang]) + "</summary><p>" + esc(L(variant, "hint")) + "</p></details>");
+    }
+    return hints.join("");
+  }
+
   function renderDetail(m) {
     const doneBefore = XP.has("mission:" + m.id);
-    const draft = localStorage.getItem(DRAFT_PREFIX + m.id);
+    let lang = localStorage.getItem(LANG_PREFIX + m.id) || "javascript";
+    if (!variantFor(m, lang)) lang = "javascript";
+
     root.innerHTML =
       '<div class="mission-detail">' +
       '<a class="back-link" href="missions.html" style="margin-bottom:20px; display:inline-flex">' + t("← All missions") + "</a>" +
@@ -112,31 +131,56 @@
       '<button class="btn" data-reset-code>' + t("Reset code") + "</button>" +
       '<span class="ex-status"></span></div>' +
       '<div class="test-results"></div>' +
-      '<div class="hint-box">' +
-      L(m, "hints")
-        .map((h, i) => "<details><summary>" + t("Hint {0}", i + 1) + "</summary><p>" + esc(h) + "</p></details>")
-        .join("") +
-      "</div></div>";
+      '<div class="hint-box">' + hintsHtml(m, lang) + "</div></div>";
 
     const resultsEl = root.querySelector(".test-results");
     const status = root.querySelector(".ex-status");
+    const hintBox = root.querySelector(".hint-box");
+
+    const languages = ["javascript", "python", "cpp"]
+      .filter((l) => variantFor(m, l))
+      .map((l) => ({ id: l, label: LANG_LABEL[l] }));
+    const filenameFor = (l) => (l === "javascript" ? m.id.replace("mission-", "") : variantFor(m, l).fnName);
+    const starterFor = (l) => variantFor(m, l).starter;
 
     const editor = CodeEditor.create(root.querySelector(".editor-host"), {
-      value: draft !== null ? draft : m.starter,
-      language: "javascript",
-      filename: m.id.replace("mission-", ""),
+      value: localStorage.getItem(draftKey(m, lang)) ?? starterFor(lang),
+      language: lang,
+      languages,
+      filename: filenameFor(lang),
       onChange(v) {
-        localStorage.setItem(DRAFT_PREFIX + m.id, v);
+        localStorage.setItem(draftKey(m, lang), v);
         if (window.Sync) Sync.schedule();
       },
+      onLanguageChange(next) {
+        if (next === lang || !variantFor(m, next)) return;
+        localStorage.setItem(draftKey(m, lang), editor.getValue());
+        lang = next;
+        localStorage.setItem(LANG_PREFIX + m.id, lang);
+        editor.setLanguage(lang);
+        editor.setFilename(filenameFor(lang));
+        editor.setValue(localStorage.getItem(draftKey(m, lang)) ?? starterFor(lang));
+        resultsEl.innerHTML = "";
+        status.textContent = "";
+        hintBox.innerHTML = hintsHtml(m, lang);
+        if (lang === "python") Runner.warmPython(); /* start the download early */
+      },
     });
+    if (lang === "python") Runner.warmPython();
 
     root.querySelector("[data-reset-code]").addEventListener("click", () => {
-      editor.setValue(m.starter);
-      localStorage.removeItem(DRAFT_PREFIX + m.id);
+      editor.setValue(starterFor(lang));
+      localStorage.removeItem(draftKey(m, lang));
       resultsEl.innerHTML = "";
       status.textContent = "";
     });
+
+    function runTests() {
+      const code = editor.getValue();
+      if (lang === "python") return Runner.python(code, m.py.tests, (msg) => { status.textContent = msg; });
+      if (lang === "cpp") return Runner.cpp(code, m.cpp.tests, m.cpp.prelude);
+      return Runner.javascript(code, m.tests);
+    }
 
     const runBtn = root.querySelector("[data-run]");
     runBtn.addEventListener("click", async () => {
@@ -146,7 +190,7 @@
       try {
         let out;
         try {
-          out = await Runner.javascript(editor.getValue(), m.tests);
+          out = await runTests();
         } catch (err) {
           out = { error: (err && err.message) || String(err), results: [] };
         }

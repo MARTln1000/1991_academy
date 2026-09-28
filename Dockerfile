@@ -33,8 +33,10 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_ROOT_USER_ACTION=ignore
 
-# The app runs as `academy`, which owns /data and can't write the code.
-RUN useradd --system --uid 10001 --user-group --home-dir /data --shell /usr/sbin/nologin academy \
+# The app runs as `academy`, which owns /data and can't write the code. Its
+# group id is fixed too: the C++ runner lets group 10001 open its socket.
+RUN groupadd --system --gid 10001 academy \
+ && useradd --system --uid 10001 --gid 10001 --home-dir /data --shell /usr/sbin/nologin academy \
  && install -d -o academy -g academy -m 700 /data
 
 WORKDIR /app

@@ -31,7 +31,8 @@ standards exactly. They are non-negotiable:
    `dsa-1-3`, `dsa-2-1`, `dsa-2-2`, `ml-1-2`, `ml-2-1`, `agents-2-1`.
    Guest mode (static serving, no account) must keep working after every
    change. Track data files use augmentation modules (`ml-course.js`,
-   `dl-course.js`, `math-exercises.js`, `lab-py.js`, `lab-cpp.js`) — follow
+   `dl-course.js`, `math-exercises.js`, `lab-py.js`, `lab-cpp.js`,
+   `missions-py.js`, `missions-cpp.js`) — follow
    that pattern rather than rewriting base data files.
 4. **Report honestly.** Failed test → say so, with output. Lead summaries
    with what happened, in plain sentences, not hype.
@@ -78,7 +79,8 @@ pure translation — add `_hy` fields, no code changes:
 ### B. Backend hardening (the FastAPI backend EXISTS — app.py; polish it)
 The backend was rewritten as FastAPI (2026-07-08): same /api/* contracts,
 in-place DB migration, rate limiting, body caps, structured logging,
-/api/health, env config (PORT, ACADEMY_DB, ACADEMY_DEBUG, ACADEMY_CPP) and
+/api/health, env config (PORT, ACADEMY_DB, ACADEMY_DEBUG, ACADEMY_CPP,
+ACADEMY_CPP_RUNNER) and
 an opt-in XP leaderboard (server snapshots XP from the state blob on every
 sync; landing panel + account checkbox are live). See DEPLOYMENT.md.
 Remaining backend work, in order:

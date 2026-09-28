@@ -5,9 +5,9 @@ A personal learning platform: seven structured tracks — **Mathematics for ML, 
 - **XP everywhere** — lessons (+20), quiz answers (+5), exercises (+15), missions (+60), lab problems (+30–80), reviews (+5). One currency feeds the daily goal, levels (Spark → Sage), streak and achievements. First-try perfect quizzes pay a random bonus (variable reward).
 - **Video lectures** embedded per-lesson — hand-picked free courses (3Blue1Brown, Karpathy, freeCodeCamp, Traversy) plus the full FAST "Mathematics for ML" lecture series — click-to-play YouTube no-cookie embeds, no API keys.
 - **Interactive exercises** inside lessons — Parsons problems (reorder code), faded blanks, matching pairs.
-- **Missions** — real coding challenges (in-browser editor + sandboxed tests in a Web Worker) that need ideas from *two tracks at once*, unlocked by completing their prerequisite lessons.
+- **Missions** — real coding challenges in **JavaScript, Python or C++** (editor + sandboxed tests) that need ideas from *two tracks at once*, unlocked by completing their prerequisite lessons.
 - **The Lab** — implement-it-yourself practice in **JavaScript, Python, or C++**: LeetCode-style DSA problems, classical ML models (k-NN, linear regression, k-means) and neural networks (perceptron, XOR MLP with backprop) written from scratch — then **visualized live by your own code**: your sort animating as bars, your BFS snaking through a maze, your k-means centroids marching, your network's decision boundary solving XOR.
-  - **JavaScript** runs in-page; **Python** runs in-browser via Pyodide (WebAssembly CPython, loaded from a CDN on first use); **C++** compiles and runs on the server via the system `c++`/`g++`. The editor has syntax highlighting, line numbers, and LeetCode-style auto-closing brackets/smart indent.
+  - **JavaScript** runs in-page; **Python** runs in-browser via Pyodide (WebAssembly CPython, loaded from a CDN on first use: the standard library plus numpy, pandas, scipy, scikit-learn, sympy and networkx); **C++** compiles and runs on the server, in a locked-down container of its own (no network, a throwaway user per run, strict limits). Whatever the code prints shows in an **Output** panel, and errors point at the learner's own line. The editor has syntax highlighting, line numbers, and LeetCode-style auto-closing brackets/smart indent.
 - **Practice** — spaced repetition: quiz questions from completed lessons become review cards, due just before you'd forget them.
 - **Achievements, streak, daily goal ring** — loss-aversion mechanics that make skipping a day feel expensive.
 
@@ -203,7 +203,7 @@ This part is for whoever puts the site on the internet.
    reachable from outside either way.
 
 **Checking it works:** `make status` should show the app `Up (healthy)` (and
-`caddy` `Up`, unless `PROXY=external`), and `"debug":false,"cpp":false,"secure_cookies":true,"trust_proxy":true`.
+`caddy` `Up`, unless `PROXY=external`) and `runner` `Up (healthy)`, and `"debug":false,"cpp":true,"cpp_mode":"runner","secure_cookies":true,"trust_proxy":true`.
 Then create an account on the site and sign in.
 
 ### Day to day
@@ -228,10 +228,13 @@ built on an M1 Mac to a server: it is ARM (`linux/arm64`), most servers are
 Intel/AMD (`amd64`), and it would fail there with `exec format error`.
 
 On a server the app runs with production settings (`DEPLOYMENT.md` explains
-each one): no debug mode, C++ runner off, secure cookies, trusting Caddy's
+each one): no debug mode, secure cookies, trusting Caddy's
 `X-Forwarded-For`. It runs as a non-root user on a read-only
-filesystem, where the database volume is the only writable path. CI builds the
-image on every push and smoke-tests it, including a backup.
+filesystem, where the database volume is the only writable path. Learners'
+C++ runs in a separate `runner` container with no network and nothing inside
+worth taking (DEPLOYMENT.md §2). CI builds both images on every push and
+smoke-tests them, including a backup and a set of hostile C++ programs that
+must all be contained.
 
 | Symptom | Cause, and fix |
 |---------|----------------|
@@ -249,12 +252,15 @@ image on every push and smoke-tests it, including a backup.
 ├── requirements.txt      Runtime dependencies; requirements.lock pins their exact versions
 ├── Makefile              Every common command: `make` lists them
 ├── Dockerfile            The app image (API + frontend in one)
-├── docker-compose.yml    app + Caddy (HTTPS); settings from .env (template: .env.example)
+├── docker-compose.yml    app + C++ runner + Caddy (HTTPS); settings from .env (template: .env.example)
 ├── docker-compose.local.yml  Mac/local overrides, used when DOMAIN in .env is empty
 ├── DEPLOYMENT.md         Production reference: every setting, the server layout, why
 ├── .github/workflows/
 │   └── ci.yml            CI: API tests + Docker image smoke test on every push
 ├── deploy/               Caddyfile (HTTPS proxy) and backup.sh (run by make backup)
+├── runner/               The C++ runner container: cpp_runner.py + its Dockerfile
+├── tests/                API tests; test_content.py runs every Lab problem and mission
+│                         in all three languages against content/solutions/
 ├── index.html            Dashboard: goal ring, level, tracks, missions, badges
 ├── missions.html         Cross-track coding challenges (editor + tests)
 ├── lab.html              The Lab: implement + visualize problems
@@ -288,10 +294,11 @@ image on every push and smoke-tests it, including a backup.
         ├── math.js  web.js  ml.js  dl.js  agents.js  dsa.js   (tracks)
         ├── ml-course.js  dl-course.js                         (FAST course rebuilds of the ml/dl tracks)
         ├── math-exercises.js  math-exercises-2.js             (math homework problems + course materials)
-        ├── missions.js                                        (cross-track missions)
+        ├── missions.js                                        (cross-track missions, JavaScript)
+        ├── missions-py.js  missions-cpp.js                    (their Python and C++ variants)
         ├── lab.js                                             (Lab problems + JS + viz configs)
         ├── lab-py.js                                          (Python variants of Lab problems)
-        ├── lab-cpp.js                                         (C++ variants of the pure-algorithm problems)
+        ├── lab-cpp.js                                         (C++ variants of every Lab problem)
         ├── i18n-hy.js                                         (Armenian: UI chrome + all titles + Lab cards)
         └── i18n-hy-{web,dsa,agents,math,ml,dl,prog,missions,lab}.js  (Armenian per-track/section content packs)
 ```
@@ -303,20 +310,20 @@ image on every push and smoke-tests it, including a backup.
 - **State changes are announced, not reloaded.** `Progress`/`XP`/`Review` cache their parsed blob, so a render pass parses it once instead of forty times. Anything that rewrites those keys from outside — a sync pull, or another tab — calls `notifyStateChanged()` (`js/common.js`), which drops the caches and fires `1991_academy:state-changed`; page controllers subscribe with `onStateChanged(render)` and redraw in place. Open editors and in-progress practice sessions are deliberately left alone. Only a language change still forces a reload, because the language is baked into every rendered string.
 - **If a sync fails, you are told once.** Oversized payloads shed the largest code drafts first so progress always gets through; a 401 signs you out cleanly; repeated failures toast once, not every 1.5 seconds.
 - **Auth is boring on purpose.** Passwords are scrypt-hashed with per-user salts; sessions are random tokens in an HttpOnly cookie (30 days); users, sessions and state blobs live in `1991_academy.db` (SQLite). The FastAPI backend adds rate limiting (login/register/reset/C++ runner), request-size caps, structured logging, `/api/health` and env-based config — see `DEPLOYMENT.md` before exposing it to the open internet (HTTPS required; set `ACADEMY_CPP=0` publicly). Change-password and password-reset rotate the hash and invalidate sessions; reset tokens are SHA-256-hashed, single-use and expire in 1 hour; `forgot-password` always returns the same response (no email enumeration). Expired sessions and reset tokens are swept at startup and hourly.
-- **Nothing blocking runs on the event loop.** SQLite, scrypt and the C++ subprocess all go through `run_in_threadpool`. This matters: a single 25-second C++ compile used to stall every other request on the server, including static files.
+- **Nothing blocking runs on the event loop.** SQLite, scrypt and C++ runs all go through `run_in_threadpool`. This matters: a single 25-second C++ compile used to stall every other request on the server, including static files.
 - **The web root is an allowlist, not a blocklist.** Only `/`, the five page files and the `css/ js/ tracks/ assets/` trees are reachable. The previous extension blocklist could be walked around by case (`/APP.PY` resolves to `app.py` on macOS and Windows volumes, which served the backend source and the credentials database) and simultaneously 404'd the legitimate `.py` starter files under `assets/courses/`.
 - **The database is indexed.** `init_db()` creates `CREATE INDEX IF NOT EXISTS` entries on every start (idempotent, data-safe, and applied to existing DBs too): case-insensitive `username`/`email` for login-by-either, a composite `(leaderboard_opt_in, xp_total DESC)` so the leaderboard is an indexed search rather than a full scan, and `sessions(user_id)` for per-user session cleanup. Session-token, `state.user_id` and the UNIQUE columns are already covered by their PRIMARY KEY / UNIQUE constraints.
 - **Images are lean by design.** The logo and every favicon are inline SVG; the only raster images the UI renders are YouTube thumbnails, served `loading="lazy" decoding="async"` with intrinsic dimensions inside an `aspect-ratio` box (no layout shift), and the players are click-to-play `youtube-nocookie` iframes injected only on click. The 200-odd raster files under `assets/courses/**` are FAST homework **datasets** (downloaded, not displayed) and are deliberately left byte-for-byte intact. Any future in-UI image should be WebP/AVIF, lazy-loaded, with width/height set.
 - **XP is ledgered.** Every award has a key (`lesson:web-1-1`, `ex:dsa-2-1:0`, `mission:mission-maze`) paid out once — nothing can be farmed by re-doing.
-- **Learner code never touches the main thread.** `js/runner.js` is the single entry point for every execution path — `Runner.javascript` / `Runner.python` / `Runner.cpp` for tests, `Runner.computeJavascript` / `Runner.computePython` for visualizations — and they all return the same `{error?, results[]}` / `{error?, data}` shape and share one results renderer. JS runs in a Web Worker (3 s for tests, 15 s for a visualization) that is terminated on timeout; Python runs in a long-lived Pyodide worker with runs serialized, so a second click can never land mid-run on the shared interpreter; C++ posts to `POST /api/run-cpp`. An accidental `while (true)` anywhere — tests *or* visualize — times out instead of freezing the tab.
-- **Lab languages.** Same `__check(name, actual, expected)` protocol in all three. C++ is a **local dev convenience** (it compiles and runs on the machine hosting `app.py`) — keep it on localhost/trusted LAN, and set `ACADEMY_CPP=0` in production. Visualizations run from JS or Python only; each `LabViz.computeJS[kind]` is self-contained so its source can be shipped into the worker verbatim.
+- **Learner code never touches the main thread.** `js/runner.js` is the single entry point for every execution path — `Runner.javascript` / `Runner.python` / `Runner.cpp` for tests, `Runner.computeJavascript` / `Runner.computePython` for visualizations — and they all return the same `{results[], output, error?}` / `{data, output, error?}` shape and share one results renderer, which shows what the code printed and words every error the same way in English and Armenian. JS runs in a Web Worker (3 s for tests, 15 s for a visualization) that is terminated on timeout; Python runs in a long-lived Pyodide worker with runs serialized, so a second click can never land mid-run on the shared interpreter, and every run gets a fresh namespace, so a function deleted from the editor can't keep passing the tests; C++ posts to `POST /api/run-cpp`. An accidental `while (true)` anywhere — tests *or* visualize — times out instead of freezing the tab.
+- **Lab and mission languages.** Every Lab problem and mission comes in JavaScript, Python and C++, all with the same `__check(name, actual, expected)` protocol. C++ is compiled by the `runner` container (`runner/cpp_runner.py`): the app hands it the program over a Unix socket, and it compiles and runs it as a throwaway user with no network and hard limits. Without Docker, `ACADEMY_CPP=1` (the dev default) compiles in-process on your own computer; never set it on a public server. Visualizations run from JS or Python only; each `LabViz.computeJS[kind]` is self-contained so its source can be shipped into the worker verbatim.
 - **Dev server sends `Cache-Control: no-store`** so edits to JS/CSS show up on reload instead of a stale cached bundle.
 - **Routing is the URL hash.** `tracks/dl.html#dl-2-2` deep-links to a lesson, `missions.html#mission-maze` to a mission.
 - **Theming is one attribute.** `data-theme="dark|light"` on `<html>` swaps CSS custom properties; each track sets its accent via `data-track` on `<body>`.
 
 ## Add a mission
 
-Append an object to `js/data/missions.js`: `id`, `title`, `icon`, `tracks`, `prereqs` (lesson ids that unlock it), `xp`, `blurb`, `brief` (HTML), `starter` code, `tests` (a script calling `__check(name, actual, expected)`), and `hints`. Lock logic, editor and scoring are automatic.
+Append an object to `js/data/missions.js`: `id`, `title`, `icon`, `tracks`, `prereqs` (lesson ids that unlock it), `xp`, `blurb`, `brief` (HTML), `starter` code, `tests` (a script calling `__check(name, actual, expected)`), and `hints`. Add its Python and C++ versions to `missions-py.js` and `missions-cpp.js` (`fnName`, `starter`, `tests`, and for C++ a `prelude` with any structs it gives the learner), and a reference solution per language to `tests/content/solutions/`: `make test` then checks that each one passes and each starter doesn't. Lock logic, editor and scoring are automatic.
 
 ## Add a video to a lesson
 
