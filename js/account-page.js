@@ -124,6 +124,31 @@
       "</div><p class=\"form-error\" data-del-msg></p></form></div>";
 
     const msg = root.querySelector("[data-msg]");
+    if (Auth.hasConflict()) {
+      const panel = document.createElement("div");
+      panel.className = "form-card";
+      const text = document.createElement("p");
+      text.textContent = t("This device and your account have different progress. Choose which copy to keep. This replaces the other copy, including code drafts.");
+      panel.append(text);
+      for (const [choice, label] of [["local", "Keep this device's progress"], ["server", "Use account progress"]]) {
+        const button = document.createElement("button");
+        button.className = "btn";
+        button.textContent = t(label);
+        button.addEventListener("click", async () => {
+          panel.querySelectorAll("button").forEach(b => { b.disabled = true; });
+          try { await Auth.resolveConflict(choice); render(); }
+          catch (err) {
+            msg.textContent = err.message;
+            panel.querySelectorAll("button").forEach(b => { b.disabled = false; });
+          }
+        });
+        panel.append(button);
+      }
+      root.prepend(panel);
+    }
+
+
+
 
     root.querySelector("[data-sync]").addEventListener("click", async (e) => {
       e.target.disabled = true;
@@ -139,8 +164,8 @@
     });
 
     root.querySelector("[data-signout]").addEventListener("click", async () => {
-      await Auth.logout();
-      render();
+      try { await Auth.logout(); render(); }
+      catch (err) { msg.textContent = err.message; }
     });
 
     root.querySelector("[data-lb-opt]").addEventListener("change", async (e) => {

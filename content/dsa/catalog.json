@@ -1,0 +1,1513 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "id": "foundations",
+      "title": "Foundations"
+    },
+    {
+      "id": "structures",
+      "title": "Data Structures"
+    },
+    {
+      "id": "search-sort",
+      "title": "Searching and Sorting"
+    },
+    {
+      "id": "trees",
+      "title": "Trees and Range Queries"
+    },
+    {
+      "id": "graphs",
+      "title": "Graphs"
+    },
+    {
+      "id": "design",
+      "title": "Algorithm Design"
+    },
+    {
+      "id": "strings",
+      "title": "String Algorithms"
+    },
+    {
+      "id": "advanced",
+      "title": "Advanced Mathematics and Systems"
+    }
+  ],
+  "topics": [
+    {
+      "id": "algorithmic-thinking",
+      "title": "Algorithmic Thinking",
+      "category": "foundations",
+      "difficulty": "Foundation",
+      "minutes": null,
+      "prerequisites": [],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "complexity",
+      "title": "Complexity and Cost Models",
+      "category": "foundations",
+      "difficulty": "Foundation",
+      "minutes": 30,
+      "prerequisites": [],
+      "related": [],
+      "status": "legacy",
+      "legacyId": "dsa-1-1"
+    },
+    {
+      "id": "mathematical-tools",
+      "title": "Mathematical Tools for Algorithms",
+      "category": "foundations",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "complexity"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "arrays",
+      "title": "Arrays and Hashing Foundations",
+      "category": "structures",
+      "difficulty": "Beginner",
+      "minutes": 30,
+      "prerequisites": [
+        "complexity"
+      ],
+      "related": [],
+      "status": "legacy",
+      "legacyId": "dsa-1-2"
+    },
+    {
+      "id": "linear-structures",
+      "title": "Linked Lists, Stacks and Queues",
+      "category": "structures",
+      "difficulty": "Beginner",
+      "minutes": 30,
+      "prerequisites": [
+        "arrays"
+      ],
+      "related": [],
+      "status": "legacy",
+      "legacyId": "dsa-1-3"
+    },
+    {
+      "id": "sorting-searching",
+      "title": "Sorting and Searching Foundations",
+      "category": "search-sort",
+      "difficulty": "Beginner",
+      "minutes": 30,
+      "prerequisites": [
+        "arrays",
+        "complexity"
+      ],
+      "related": [],
+      "status": "legacy",
+      "legacyId": "dsa-2-1"
+    },
+    {
+      "id": "trees-graphs",
+      "title": "Trees and Graphs Foundations",
+      "category": "trees",
+      "difficulty": "Intermediate",
+      "minutes": 30,
+      "prerequisites": [
+        "linear-structures"
+      ],
+      "related": [],
+      "status": "legacy",
+      "legacyId": "dsa-2-2"
+    },
+    {
+      "id": "dynamic-programming",
+      "title": "Dynamic Programming Foundations",
+      "category": "design",
+      "difficulty": "Intermediate",
+      "minutes": 30,
+      "prerequisites": [
+        "arrays",
+        "complexity"
+      ],
+      "related": [],
+      "status": "legacy",
+      "legacyId": "dsa-3-1"
+    },
+    {
+      "id": "heaps",
+      "title": "Heaps and Priority Queues",
+      "category": "trees",
+      "difficulty": "Intermediate",
+      "minutes": 30,
+      "prerequisites": [
+        "trees-graphs"
+      ],
+      "related": [],
+      "status": "legacy",
+      "legacyId": "dsa-3-2"
+    },
+    {
+      "id": "two-pointers",
+      "title": "Two Pointers and Sliding Windows",
+      "category": "design",
+      "difficulty": "Intermediate",
+      "minutes": 30,
+      "prerequisites": [
+        "arrays"
+      ],
+      "related": [],
+      "status": "legacy",
+      "legacyId": "dsa-3-3"
+    },
+    {
+      "id": "binary-search",
+      "title": "Binary Search: Boundaries and Monotone Decisions",
+      "category": "search-sort",
+      "difficulty": "Beginner",
+      "minutes": 90,
+      "prerequisites": [
+        "arrays",
+        "complexity"
+      ],
+      "related": [],
+      "status": "published"
+    },
+    {
+      "id": "avl-tree",
+      "title": "AVL Trees: Maintain Order and Balance",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": 90,
+      "prerequisites": [
+        "trees-graphs",
+        "complexity"
+      ],
+      "related": [],
+      "status": "published"
+    },
+    {
+      "id": "dijkstra",
+      "title": "Dijkstra: Settle the Nearest Frontier",
+      "category": "graphs",
+      "difficulty": "Intermediate",
+      "minutes": 90,
+      "prerequisites": [
+        "trees-graphs",
+        "heaps",
+        "complexity"
+      ],
+      "related": [],
+      "status": "published"
+    },
+    {
+      "id": "knapsack",
+      "title": "0/1 Knapsack: Decisions into States",
+      "category": "design",
+      "difficulty": "Intermediate",
+      "minutes": 90,
+      "prerequisites": [
+        "dynamic-programming",
+        "arrays"
+      ],
+      "related": [],
+      "status": "published"
+    },
+    {
+      "id": "strings",
+      "title": "Strings, Encoding and Representation",
+      "category": "structures",
+      "difficulty": "Beginner",
+      "minutes": null,
+      "prerequisites": [
+        "arrays"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "hash-tables",
+      "title": "Hash Tables",
+      "category": "structures",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "arrays",
+        "complexity"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "recursion",
+      "title": "Recursion and Call Frames",
+      "category": "design",
+      "difficulty": "Beginner",
+      "minutes": null,
+      "prerequisites": [
+        "linear-structures"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "divide-conquer",
+      "title": "Divide and Conquer",
+      "category": "design",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "recursion",
+        "complexity"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "bst",
+      "title": "Binary Search Trees",
+      "category": "trees",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "trees-graphs"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "greedy",
+      "title": "Greedy Algorithms and Exchange Arguments",
+      "category": "design",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "complexity"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "backtracking",
+      "title": "Backtracking and Pruning",
+      "category": "design",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "recursion"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "amortized-analysis",
+      "title": "Amortized Analysis",
+      "category": "foundations",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "complexity",
+        "mathematical-tools"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "bfs",
+      "title": "Breadth-First Search",
+      "category": "graphs",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "trees-graphs",
+        "linear-structures"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "dfs",
+      "title": "Depth-First Search",
+      "category": "graphs",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "trees-graphs",
+        "recursion"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "topological-sort",
+      "title": "Topological Sorting",
+      "category": "graphs",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "dfs"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "bellman-ford",
+      "title": "Bellman–Ford",
+      "category": "graphs",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "dijkstra"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "mst",
+      "title": "Minimum Spanning Trees",
+      "category": "graphs",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "dsu",
+        "greedy"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "scc",
+      "title": "Strongly Connected Components",
+      "category": "graphs",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "dfs"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "network-flow",
+      "title": "Network Flow and Minimum Cuts",
+      "category": "graphs",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "bfs",
+        "dfs"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "bit-manipulation",
+      "title": "Bit Manipulation and Bitsets",
+      "category": "foundations",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "arrays"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "number-theory",
+      "title": "Algorithmic Number Theory",
+      "category": "advanced",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "mathematical-tools"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "geometry",
+      "title": "Computational Geometry",
+      "category": "advanced",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "mathematical-tools",
+        "sorting-searching"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "randomized-algorithms",
+      "title": "Randomized Algorithms",
+      "category": "advanced",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "mathematical-tools",
+        "complexity"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "dp-optimization",
+      "title": "Dynamic Programming Optimization",
+      "category": "design",
+      "difficulty": "Expert",
+      "minutes": null,
+      "prerequisites": [
+        "knapsack",
+        "segment-tree"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "xor-linked-list",
+      "title": "XOR Linked List",
+      "category": "structures",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "linear-structures",
+        "bit-manipulation"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "skip-list",
+      "title": "Skip List",
+      "category": "structures",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "linear-structures",
+        "randomized-algorithms"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "self-organizing-list",
+      "title": "Self-Organizing List",
+      "category": "structures",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "linear-structures",
+        "amortized-analysis"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "unrolled-linked-list",
+      "title": "Unrolled Linked List",
+      "category": "structures",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "linear-structures",
+        "arrays"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "n-ary-tree",
+      "title": "N-ary Tree",
+      "category": "trees",
+      "difficulty": "Beginner",
+      "minutes": null,
+      "prerequisites": [
+        "trees-graphs"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "red-black-tree",
+      "title": "Red-Black Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "bst",
+        "avl-tree"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "splay-tree",
+      "title": "Splay Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "bst",
+        "amortized-analysis"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "scapegoat-tree",
+      "title": "Scapegoat Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "bst",
+        "amortized-analysis"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "treap",
+      "title": "Treap",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "bst",
+        "randomized-algorithms"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "2-3-4-tree",
+      "title": "2–3–4 Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "bst"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "b-tree",
+      "title": "B-Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "2-3-4-tree"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "b-plus-tree",
+      "title": "B+ Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "b-tree"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "b-star-tree",
+      "title": "B* Tree",
+      "category": "trees",
+      "difficulty": "Expert",
+      "minutes": null,
+      "prerequisites": [
+        "b-tree"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "trie",
+      "title": "Trie",
+      "category": "trees",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "strings",
+        "trees-graphs"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "ternary-search-tree",
+      "title": "Ternary Search Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "trie",
+        "bst"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "suffix-tree",
+      "title": "Suffix Tree",
+      "category": "trees",
+      "difficulty": "Expert",
+      "minutes": null,
+      "prerequisites": [
+        "trie",
+        "strings"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "suffix-array",
+      "title": "Suffix Array",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "strings",
+        "sorting-searching"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "eertree",
+      "title": "Palindromic Tree (Eertree)",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "strings",
+        "trees-graphs"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "segment-tree",
+      "title": "Segment Tree",
+      "category": "trees",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "arrays",
+        "recursion"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "fenwick-tree",
+      "title": "Fenwick Tree",
+      "category": "trees",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "arrays",
+        "bit-manipulation"
+      ],
+      "related": [],
+      "status": "planned",
+      "aliases": [
+        "Binary Indexed Tree"
+      ],
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "interval-tree",
+      "title": "Interval Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "bst",
+        "avl-tree"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "kd-tree",
+      "title": "KD Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "trees-graphs",
+        "geometry"
+      ],
+      "related": [],
+      "status": "planned",
+      "aliases": [
+        "K-Dimensional Tree"
+      ],
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "cartesian-tree",
+      "title": "Cartesian Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "bst",
+        "heaps"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "dsu",
+      "title": "Disjoint Set Union",
+      "category": "trees",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "trees-graphs",
+        "amortized-analysis"
+      ],
+      "related": [],
+      "status": "planned",
+      "aliases": [
+        "Union-Find"
+      ],
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "sparse-set",
+      "title": "Sparse Set",
+      "category": "structures",
+      "difficulty": "Intermediate",
+      "minutes": null,
+      "prerequisites": [
+        "arrays"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "bk-tree",
+      "title": "BK-Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "strings",
+        "trees-graphs",
+        "mathematical-tools"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "gomory-hu-tree",
+      "title": "Gomory–Hu Tree",
+      "category": "graphs",
+      "difficulty": "Expert",
+      "minutes": null,
+      "prerequisites": [
+        "network-flow",
+        "trees-graphs"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure",
+        "advanced-graph"
+      ]
+    },
+    {
+      "id": "van-emde-boas-tree",
+      "title": "van Emde Boas Tree",
+      "category": "trees",
+      "difficulty": "Expert",
+      "minutes": null,
+      "prerequisites": [
+        "bst",
+        "bit-manipulation"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "lazy-segment-tree",
+      "title": "Lazy Segment Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "segment-tree"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "persistent-segment-tree",
+      "title": "Persistent Segment Tree",
+      "category": "trees",
+      "difficulty": "Expert",
+      "minutes": null,
+      "prerequisites": [
+        "segment-tree"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "li-chao-tree",
+      "title": "Li Chao Tree",
+      "category": "trees",
+      "difficulty": "Expert",
+      "minutes": null,
+      "prerequisites": [
+        "segment-tree",
+        "geometry"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "wavelet-tree",
+      "title": "Wavelet Tree",
+      "category": "trees",
+      "difficulty": "Expert",
+      "minutes": null,
+      "prerequisites": [
+        "segment-tree",
+        "bit-manipulation"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "order-statistic-tree",
+      "title": "Order Statistic Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "avl-tree"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "quad-tree",
+      "title": "Quad Tree",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "geometry",
+        "trees-graphs"
+      ],
+      "related": [],
+      "status": "planned",
+      "tags": [
+        "data-structure"
+      ]
+    },
+    {
+      "id": "fibonacci-tree",
+      "title": "Fibonacci Tree — definition awaiting curation",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "trees-graphs",
+        "recursion"
+      ],
+      "related": [],
+      "status": "unresolved"
+    },
+    {
+      "id": "kmp",
+      "title": "KMP and the Prefix Function",
+      "category": "strings",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "strings"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "aho-corasick",
+      "title": "Aho–Corasick",
+      "category": "strings",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "trie",
+        "bfs"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "suffix-automaton",
+      "title": "Suffix Automaton",
+      "category": "strings",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "strings",
+        "dfs"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "manacher",
+      "title": "Manacher’s Algorithm",
+      "category": "strings",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "strings"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "lca",
+      "title": "Lowest Common Ancestor and Binary Lifting",
+      "category": "graphs",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "dfs",
+        "bit-manipulation"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "heavy-light",
+      "title": "Heavy-Light Decomposition",
+      "category": "graphs",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "lca",
+        "segment-tree"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "centroid-decomposition",
+      "title": "Centroid Decomposition",
+      "category": "graphs",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "dfs"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "min-cost-flow",
+      "title": "Minimum-Cost Flow",
+      "category": "graphs",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "network-flow",
+        "bellman-ford"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "matching",
+      "title": "Matching and Assignment",
+      "category": "graphs",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "network-flow"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "bitmask-dp",
+      "title": "Bitmask DP",
+      "category": "design",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "knapsack",
+        "bit-manipulation"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "digit-dp",
+      "title": "Digit DP",
+      "category": "design",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "dynamic-programming"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "interval-dp",
+      "title": "Interval DP",
+      "category": "design",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "dynamic-programming"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "tree-dp",
+      "title": "Tree DP and Rerooting",
+      "category": "design",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "dfs",
+        "dynamic-programming"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "sparse-table",
+      "title": "Sparse Table",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "arrays",
+        "bit-manipulation"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "mo-algorithm",
+      "title": "Mo’s Algorithm",
+      "category": "trees",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "arrays",
+        "sorting-searching"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "monotonic-structures",
+      "title": "Monotonic Stacks and Queues",
+      "category": "structures",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "linear-structures"
+      ],
+      "related": [],
+      "status": "planned"
+    },
+    {
+      "id": "prefix-sum",
+      "title": "Prefix Sums and Difference Arrays",
+      "category": "design",
+      "difficulty": "Advanced",
+      "minutes": null,
+      "prerequisites": [
+        "arrays"
+      ],
+      "related": [],
+      "status": "planned"
+    }
+  ],
+  "paths": [
+    {
+      "id": "foundations",
+      "title": "DSA Foundations",
+      "description": "Existing introductory lessons followed by a rigorous boundary-search reference.",
+      "topics": [
+        "complexity",
+        "arrays",
+        "linear-structures",
+        "sorting-searching",
+        "binary-search",
+        "trees-graphs",
+        "heaps"
+      ]
+    },
+    {
+      "id": "interview",
+      "title": "Interview DSA",
+      "description": "Build recognition, tracing and implementation evidence before advancing.",
+      "topics": [
+        "arrays",
+        "two-pointers",
+        "linear-structures",
+        "binary-search",
+        "trees-graphs",
+        "heaps",
+        "dynamic-programming",
+        "knapsack"
+      ]
+    },
+    {
+      "id": "advanced",
+      "title": "Advanced Algorithms",
+      "description": "Published reference lessons connect to a clearly marked advanced roadmap.",
+      "topics": [
+        "complexity",
+        "trees-graphs",
+        "avl-tree",
+        "heaps",
+        "dijkstra",
+        "dynamic-programming",
+        "knapsack",
+        "network-flow",
+        "segment-tree",
+        "geometry"
+      ]
+    },
+    {
+      "id": "competitive",
+      "title": "Competitive Programming",
+      "description": "Boundaries, graph search and DP first; advanced modules remain a roadmap.",
+      "topics": [
+        "complexity",
+        "arrays",
+        "binary-search",
+        "two-pointers",
+        "trees-graphs",
+        "heaps",
+        "dijkstra",
+        "dynamic-programming",
+        "knapsack",
+        "dsu",
+        "fenwick-tree",
+        "segment-tree",
+        "number-theory"
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "id": "cp-binary",
+      "title": "Binary Search",
+      "type": "Tutorial",
+      "url": "https://cp-algorithms.com/num_methods/binary_search.html",
+      "author": "CP-Algorithms contributors",
+      "publisher": "CP-Algorithms contributors",
+      "description": "A second treatment of boundary search and monotone feasibility, useful after tracing lower bound.",
+      "topics": [
+        "binary-search"
+      ],
+      "prerequisites": [
+        "arrays",
+        "complexity"
+      ],
+      "difficulty": "Intermediate",
+      "minutes": 45,
+      "language": "English",
+      "cost": "free",
+      "classification": "practical",
+      "quality": "curated",
+      "notes": "Study after the internal explanation; implement the ideas independently. Link verified 2026-09-28.",
+      "sections": [
+        "Lower bound and upper bound",
+        "Search on arbitrary predicate",
+        "Binary search on the answer"
+      ],
+      "objectives": [
+        "Translate a problem into a monotone predicate",
+        "Choose a boundary invariant"
+      ],
+      "verified": true
+    },
+    {
+      "id": "mit-avl",
+      "title": "Lecture 6: AVL Trees, AVL Sort",
+      "type": "University Lecture",
+      "url": "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-fall-2011/resources/lecture-6-avl-trees-avl-sort/",
+      "author": "Erik Demaine / MIT OpenCourseWare",
+      "publisher": "Erik Demaine / MIT OpenCourseWare",
+      "description": "Study insertion and rebalancing with the lecture notes after reviewing BST order.",
+      "topics": [
+        "avl-tree"
+      ],
+      "prerequisites": [
+        "trees-graphs",
+        "complexity"
+      ],
+      "difficulty": "Intermediate",
+      "minutes": 45,
+      "language": "English",
+      "cost": "free",
+      "classification": "academic",
+      "quality": "curated",
+      "notes": "Study after the internal explanation; implement the ideas independently. Link verified 2026-09-28.",
+      "sections": [
+        "AVL insertion and rebalancing",
+        "Typed lecture notes"
+      ],
+      "objectives": [
+        "Explain why balanced height supports fast ordered operations"
+      ],
+      "verified": true
+    },
+    {
+      "id": "princeton-paths",
+      "title": "Algorithms: Shortest Paths",
+      "type": "Book Chapter",
+      "url": "https://algs4.cs.princeton.edu/44sp/",
+      "author": "Robert Sedgewick and Kevin Wayne / Princeton University",
+      "publisher": "Robert Sedgewick and Kevin Wayne / Princeton University",
+      "description": "Compare shortest-path models and implementations after working through relaxation.",
+      "topics": [
+        "dijkstra"
+      ],
+      "prerequisites": [
+        "trees-graphs",
+        "heaps",
+        "complexity"
+      ],
+      "difficulty": "Intermediate",
+      "minutes": 45,
+      "language": "English",
+      "cost": "free",
+      "classification": "academic",
+      "quality": "curated",
+      "notes": "Study after the internal explanation; implement the ideas independently. Link verified 2026-09-28.",
+      "sections": [
+        "Dijkstra’s algorithm",
+        "Negative edge weights"
+      ],
+      "objectives": [
+        "Select a shortest-path algorithm using its preconditions"
+      ],
+      "verified": true
+    },
+    {
+      "id": "cp-knapsack",
+      "title": "Knapsack Problem",
+      "type": "Tutorial",
+      "url": "https://cp-algorithms.com/dynamic_programming/knapsack.html",
+      "author": "CP-Algorithms contributors",
+      "publisher": "CP-Algorithms contributors",
+      "description": "Compare update order across 0/1, complete and bounded knapsack after deriving the two-dimensional recurrence.",
+      "topics": [
+        "knapsack"
+      ],
+      "prerequisites": [
+        "dynamic-programming",
+        "arrays"
+      ],
+      "difficulty": "Intermediate",
+      "minutes": 45,
+      "language": "English",
+      "cost": "free",
+      "classification": "practical",
+      "quality": "curated",
+      "notes": "Study after the internal explanation; implement the ideas independently. Link verified 2026-09-28.",
+      "sections": [
+        "0-1 Knapsack",
+        "Complete Knapsack"
+      ],
+      "objectives": [
+        "Explain why changing loop direction changes the problem"
+      ],
+      "verified": true
+    }
+  ],
+  "patterns": [
+    {
+      "id": "boundary",
+      "title": "Binary Search on a Boundary",
+      "clues": [
+        "Sorted data",
+        "False then true feasibility",
+        "Smallest feasible answer"
+      ],
+      "model": "Maintain a known-false prefix and known-true suffix.",
+      "template": "lo=0; hi=n; while lo<hi: mid=lo+(hi-lo)//2; if P(mid): hi=mid; else: lo=mid+1",
+      "example": "Find the first timestamp at or after a request.",
+      "mistakes": [
+        "Assuming monotonicity without proving it",
+        "Mixing inclusive and exclusive endpoints"
+      ],
+      "topics": [
+        "binary-search"
+      ]
+    },
+    {
+      "id": "relaxation",
+      "title": "Shortest-Path Relaxation",
+      "clues": [
+        "Nonnegative transition costs",
+        "Best cost to each state"
+      ],
+      "model": "Tentative distances are costs of discovered paths; settle the smallest.",
+      "template": "pop minimum; skip stale; for each edge: improve and push",
+      "example": "Find cheapest transit through a weighted directed network.",
+      "mistakes": [
+        "Using a FIFO queue for arbitrary weights",
+        "Marking a node final on discovery"
+      ],
+      "topics": [
+        "dijkstra"
+      ]
+    },
+    {
+      "id": "knapsack-state",
+      "title": "0/1 Choice DP",
+      "clues": [
+        "Each item used once",
+        "Integral resource budget",
+        "Maximize additive value"
+      ],
+      "model": "Separate decisions by item prefix so each item can contribute once.",
+      "template": "for each item: for capacity descending: dp[c]=max(dp[c],value+dp[c-weight])",
+      "example": "Select jobs under a fixed memory budget.",
+      "mistakes": [
+        "Ascending capacity accidentally permits reuse",
+        "Treating capacity magnitude as input bit length"
+      ],
+      "topics": [
+        "knapsack"
+      ]
+    },
+    {
+      "id": "restore-invariant",
+      "title": "Restore a Structural Invariant",
+      "clues": [
+        "Ordered updates",
+        "Unbounded height without repair"
+      ],
+      "model": "First perform a local update, then repair metadata and balance on the ancestor path.",
+      "template": "update child; recompute height; inspect balance; rotate; return new subtree root",
+      "example": "Maintain a dynamic ordered set with predictable lookup latency.",
+      "mistakes": [
+        "Dropping the returned root",
+        "Updating parent height before child height"
+      ],
+      "topics": [
+        "avl-tree"
+      ]
+    }
+  ]
+}

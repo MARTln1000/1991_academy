@@ -1,0 +1,248 @@
+{
+  "id": "knapsack",
+  "title": "0/1 Knapsack: Decisions into States",
+  "summary": "Derive recursion, memoization and tabulation; compress memory without accidentally changing the problem.",
+  "objectives": [
+    "Define a DP state unambiguously",
+    "Derive and prove the include/exclude recurrence",
+    "Trace table dependencies",
+    "Explain descending capacity order",
+    "Reconstruct an optimum and analyze numeric capacity cost"
+  ],
+  "sections": [
+    {
+      "id": "why",
+      "title": "Why local choices fail",
+      "body": "Choose a subset of items to maximize total value without exceeding a weight budget; each item is available once. Sorting by value-to-weight ratio is not generally correct because items are indivisible. With capacity 4, an item of weight 3 and value 5 has a better ratio than an item of weight 4 and value 6, yet choosing the first prevents the optimum. Fractional knapsack permits splitting and is a different problem. Dynamic programming preserves alternatives that a premature greedy choice would discard."
+    },
+    {
+      "id": "decisions",
+      "title": "Start with a decision tree",
+      "body": "At each item decide skip or take, where take is allowed only if its weight fits. A recursive solver returns the better of those branches. There are up to 2^n subsets, but many branches arrive at the same remaining item suffix and remaining capacity. Once those two quantities are fixed, the future no longer depends on the history of previous choices. That observation is the state-design step, not a magic table trick."
+    },
+    {
+      "id": "state",
+      "title": "Define exactly what one cell means",
+      "body": "Let dp[i][c] be the maximum value achievable using only the first i items with total weight at most c. The words first i prevent reuse; at most allows unused capacity. Use nonnegative integer capacities and positive integer weights in this lesson. An empty selection has value zero. The answer is dp[n][W], not necessarily the value of a subset filling W exactly. For exact-weight requirements, unreachable states need a negative-infinity sentinel instead of zero."
+    },
+    {
+      "id": "recurrence",
+      "title": "Derive the transition",
+      "body": "For item i with weight w and value v, every valid subset either excludes it or includes it once. Exclusion gives dp[i-1][c]. Inclusion is possible only when w<=c and gives v+dp[i-1][c-w]. Thus dp[i][c]=max(dp[i-1][c],v+dp[i-1][c-w]) when it fits, otherwise dp[i-1][c]. Both branches read the previous item row. Base row dp[0][c]=0 for all c; with positive weights, dp[i][0]=0. A recurrence is meaningful only together with these base cases and its state definition."
+    },
+    {
+      "id": "memo",
+      "title": "Memoization: preserve the recursion",
+      "body": "A top-down function solve(i,c) can return 0 when i==0, otherwise evaluate skipping item i-1 and, when it fits, taking it plus solve(i-1,c-w). Cache results by the pair (i,c), not by capacity alone. Each reached state is solved once and does constant transition work. At most (n+1)(W+1) states are reachable; recursion depth is O(n). A cache may avoid unreachable states, but per-entry overhead can exceed the compact storage of a bottom-up table."
+    },
+    {
+      "id": "tabulation",
+      "title": "Tabulation: order dependencies explicitly",
+      "body": "Fill rows from i=1 through n and columns from c=0 through W. Every dependency lies in row i-1, so either column direction is valid while storing the full two-dimensional table. For items (2,3),(3,4),(4,5),(5,8) and W=7, the best value is 11 from item indices 0 and 3. At row 4, capacity 7, compare skipping value 9 against taking value 8 plus row 3 at capacity 2, which is 3. The visualization should highlight these two dependencies before assigning 11."
+    },
+    {
+      "id": "proof",
+      "title": "Correctness by induction on the item prefix",
+      "body": "Base: with no items the empty selection is optimal for every capacity. Assume row i-1 correctly represents all smaller prefixes. Any optimal subset for row i either excludes item i or includes it. In the first case its value is bounded by dp[i-1][c]. In the second, removing item i leaves a feasible subset of the previous prefix at capacity c-w, bounded by dp[i-1][c-w]. Both candidates are themselves attainable by the induction hypothesis, so taking their maximum is both feasible and optimal. This proves the recurrence and the final answer."
+    },
+    {
+      "id": "space",
+      "title": "One-dimensional memory optimization",
+      "body": "Only the preceding row is needed for the value, so compress to dp[c]. For each item iterate c from W down to w. At the moment dp[c] is updated, dp[c-w] has not yet been overwritten for the current item, so it still represents the previous prefix. Ascending capacities can read a value that already includes the current item, turning the recurrence into unbounded knapsack. With one item (weight 2,value 3), capacity 4 must return 3; an ascending loop incorrectly returns 6. Loop order is part of correctness."
+    },
+    {
+      "id": "reconstruct",
+      "title": "Reconstructing an actual chosen subset",
+      "body": "With the full table, start at (n,W). If dp[i][c]==dp[i-1][c], choose to skip item i-1; otherwise take it and subtract its weight. Decrease i in both cases. Reverse the collected indices at the end. Ties may be resolved by skipping and still yield an optimum. The compressed value array alone does not preserve all historical row decisions; a naive mutable parent pointer per capacity can accidentally reconstruct an item more than once. Keep a decision table, immutable provenance or use a deliberate recomputation strategy when reconstruction matters."
+    },
+    {
+      "id": "complexity",
+      "title": "Why O(nW) is pseudo-polynomial",
+      "body": "The table has (n+1)(W+1) cells with constant transition work, giving Θ(nW) time and Θ(nW) storage; rolling storage reduces auxiliary memory to Θ(W). W is a numeric magnitude, not its binary encoding length. Encoding W requires only O(log W) bits, so this runtime is not polynomial in total input bit length. If W is enormous, a capacity table may be impossible even for moderate n. Value-based DP, meet-in-the-middle, sparse nondominated states or approximation may fit different constraints."
+    },
+    {
+      "id": "memory",
+      "title": "Memory layout and systems limits",
+      "body": "A table with one million capacities and a thousand items needs roughly a billion numeric cells, before container overhead. Python lists also store references and integer objects, so multiplying cell count by a C integer size underestimates memory. Rolling arrays improve capacity, locality and allocation cost but lose direct reconstruction history. A contiguous numeric buffer can improve predictable storage. Bound value sums to fit the chosen numeric type; JavaScript integer exactness ends at 2^53-1, and fixed-width C++ addition must not overflow."
+    },
+    {
+      "id": "edge",
+      "title": "Edge cases and mistakes",
+      "body": "Test zero capacity, no items, every item too heavy, duplicate items that remain distinct choices, exact-fit items and multiple optimal subsets. This reference requires strictly positive weights; zero-weight items need a deliberately reviewed contract, especially if an unbounded variant is added. Common mistakes are caching only by capacity, forgetting the skip branch, reading the current row for a 0/1 take, and assuming larger value-to-weight ratio always gives the best subset. Initialize exact-weight DP differently from at-most-capacity DP."
+    },
+    {
+      "id": "variants",
+      "title": "Recognize the family resemblance",
+      "body": "Subset sum replaces maximum value with reachability. Partition asks whether a subset reaches half the total sum. Unbounded knapsack permits repeated use and uses ascending capacity updates. Bounded knapsack limits multiplicities and can use binary splitting or monotonic queues. Multi-constraint knapsack adds state dimensions and often makes a direct table impractical. Value-indexed DP minimizes weight for each achievable value. None of these variants should be substituted without redefining state, transition and base cases."
+    },
+    {
+      "id": "practice",
+      "title": "Build the DP rather than memorizing it",
+      "body": "Write the meaning of a cell in one sentence. Enumerate all subsets for a tiny input as an independent oracle. Derive the two branches, establish base states and topological dependency order, then compare recursive, memoized and tabulated answers. Only after the full table is correct should you compress memory. Explain the descending-loop invariant aloud and reconstruct one optimal subset. These steps transfer to sequence, interval and tree DP even when their states look different."
+    }
+  ],
+  "pseudocode": "dp[0][c] ← 0 for every capacity c\nfor i from 1 to n:\n  for c from 0 to W:\n    dp[i][c] ← dp[i-1][c]\n    if weight[i] ≤ c:\n      dp[i][c] ← max(dp[i][c], value[i]+dp[i-1][c-weight[i]])\nreturn dp[n][W]",
+  "implementations": {
+    "python": "def knapsack(items, capacity):\n    # Positive integer weights; nonnegative integer values.\n    if capacity < 0 or any(w <= 0 or v < 0 for w,v in items):\n        raise ValueError(\"Invalid knapsack input\")\n    n = len(items)\n    dp = [[0]*(capacity+1) for _ in range(n+1)]\n    for i, (weight,value) in enumerate(items, 1):\n        for c in range(capacity+1):\n            dp[i][c] = dp[i-1][c]\n            if weight <= c:\n                dp[i][c] = max(dp[i][c], value+dp[i-1][c-weight])\n    chosen, c = [], capacity\n    for i in range(n,0,-1):\n        if dp[i][c] != dp[i-1][c]:\n            chosen.append(i-1)\n            c -= items[i-1][0]\n    return dp[n][capacity], list(reversed(chosen))\n\ndef knapsack_value(items, capacity):\n    dp = [0]*(capacity+1)\n    for weight,value in items:\n        for c in range(capacity,weight-1,-1):\n            dp[c] = max(dp[c],value+dp[c-weight])\n    return dp[capacity]\n\nprint(knapsack([(2,3),(3,4),(4,5),(5,8)], 7))\n",
+    "javascript": "function knapsack(items, capacity) {\n  if(!Number.isInteger(capacity)||capacity<0||items.some(([w,v])=>!Number.isInteger(w)||w<=0||!Number.isFinite(v)||v<0))throw Error('Invalid input');\n  const n=items.length, dp=Array.from({length:n+1},()=>Array(capacity+1).fill(0));\n  for(let i=1;i<=n;i++) {\n    const [weight,value]=items[i-1];\n    for(let c=0;c<=capacity;c++) {\n      dp[i][c]=dp[i-1][c];\n      if(weight<=c)dp[i][c]=Math.max(dp[i][c],value+dp[i-1][c-weight]);\n    }\n  }\n  const chosen=[];let c=capacity;\n  for(let i=n;i>0;i--)if(dp[i][c]!==dp[i-1][c]){chosen.push(i-1);c-=items[i-1][0];}\n  return {value:dp[n][capacity],chosen:chosen.reverse()};\n}\nfunction knapsackValue(items, capacity) {\n  const dp=Array(capacity+1).fill(0);\n  for(const [weight,value] of items)\n    for(let c=capacity;c>=weight;c--)dp[c]=Math.max(dp[c],value+dp[c-weight]);\n  return dp[capacity];\n}\nconsole.log(knapsack([[2,3],[3,4],[4,5],[5,8]],7));\n",
+    "typescript": "function knapsack(items: [number, number][], capacity: number) {\n  if(!Number.isInteger(capacity)||capacity<0||items.some(([w,v])=>!Number.isInteger(w)||w<=0||!Number.isFinite(v)||v<0))throw Error('Invalid input');\n  const n=items.length, dp=Array.from({length:n+1},()=>Array(capacity+1).fill(0));\n  for(let i=1;i<=n;i++) {\n    const [weight,value]=items[i-1];\n    for(let c=0;c<=capacity;c++) {\n      dp[i][c]=dp[i-1][c];\n      if(weight<=c)dp[i][c]=Math.max(dp[i][c],value+dp[i-1][c-weight]);\n    }\n  }\n  const chosen: number[]=[];let c=capacity;\n  for(let i=n;i>0;i--)if(dp[i][c]!==dp[i-1][c]){chosen.push(i-1);c-=items[i-1][0];}\n  return {value:dp[n][capacity],chosen:chosen.reverse()};\n}\nfunction knapsackValue(items: [number, number][], capacity: number) {\n  const dp=Array(capacity+1).fill(0);\n  for(const [weight,value] of items)\n    for(let c=capacity;c>=weight;c--)dp[c]=Math.max(dp[c],value+dp[c-weight]);\n  return dp[capacity];\n}\nconsole.log(knapsack([[2,3],[3,4],[4,5],[5,8]],7));\n",
+    "cpp": "#include <algorithm>\n#include <iostream>\n#include <vector>\n#include <stdexcept>\n#include <utility>\nstd::pair<long long,std::vector<int>> knapsack(const std::vector<std::pair<int,long long>>& items,int capacity){\n if(capacity<0)throw std::invalid_argument(\"capacity\");\n for(auto [w,v]:items)if(w<=0||v<0)throw std::invalid_argument(\"item\");\n int n=items.size();std::vector<std::vector<long long>>dp(n+1,std::vector<long long>(capacity+1));\n for(int i=1;i<=n;i++){auto [w,v]=items[i-1];for(int c=0;c<=capacity;c++){\n   dp[i][c]=dp[i-1][c];if(w<=c)dp[i][c]=std::max(dp[i][c],v+dp[i-1][c-w]);\n }}\n std::vector<int> chosen;int c=capacity;\n for(int i=n;i>0;i--)if(dp[i][c]!=dp[i-1][c]){chosen.push_back(i-1);c-=items[i-1].first;}\n std::reverse(chosen.begin(),chosen.end());return {dp[n][capacity],chosen};\n}\nint main(){auto [value,chosen]=knapsack({{2,3},{3,4},{4,5},{5,8}},7);std::cout<<value<<\"\\n\";for(int i:chosen)std::cout<<i<<\" \";}\n",
+    "java": "import java.util.*;\nclass Main {\n  static long[][] table(int[][] items,int capacity){\n    if(capacity<0)throw new IllegalArgumentException(\"capacity\");\n    for(int[] item:items)if(item[0]<=0||item[1]<0)throw new IllegalArgumentException(\"item\");\n    long[][] dp=new long[items.length+1][capacity+1];\n    for(int i=1;i<=items.length;i++)for(int c=0;c<=capacity;c++){\n      int w=items[i-1][0],v=items[i-1][1];dp[i][c]=dp[i-1][c];\n      if(w<=c)dp[i][c]=Math.max(dp[i][c],v+dp[i-1][c-w]);\n    }\n    return dp;\n  }\n  static List<Integer> reconstruct(int[][] items,int capacity,long[][] dp){\n    List<Integer> chosen=new ArrayList<>();int c=capacity;\n    for(int i=items.length;i>0;i--)if(dp[i][c]!=dp[i-1][c]){chosen.add(i-1);c-=items[i-1][0];}\n    Collections.reverse(chosen);return chosen;\n  }\n  public static void main(String[] args){int[][] items={{2,3},{3,4},{4,5},{5,8}};long[][] dp=table(items,7);System.out.println(dp[items.length][7]);System.out.println(reconstruct(items,7,dp));}\n}\n"
+  },
+  "complexity": [
+    {
+      "operation": "Full table",
+      "time": "Θ(nW)",
+      "space": "Θ(nW)",
+      "why": "Each item-prefix/capacity state evaluates at most two candidates."
+    },
+    {
+      "operation": "Rolling array",
+      "time": "Θ(nW)",
+      "space": "Θ(W)",
+      "why": "Descending updates preserve the preceding row in place."
+    },
+    {
+      "operation": "Subset enumeration",
+      "time": "O(n·2^n)",
+      "space": "O(n)",
+      "why": "Evaluate all subsets as a tiny-input oracle; useful for testing, not large inputs."
+    }
+  ],
+  "quiz": [
+    {
+      "id": "knap-state",
+      "type": "single",
+      "prompt": "What does dp[i][c] mean in this lesson?",
+      "options": [
+        "Exactly i items with exact weight c",
+        "Best value from first i items with weight at most c",
+        "Minimum capacity for value i",
+        "Number of subsets"
+      ],
+      "answer": 1,
+      "explanation": "The prefix enforces single use; at most permits unused capacity.",
+      "dimension": "Explain"
+    },
+    {
+      "id": "knap-order",
+      "type": "single",
+      "prompt": "Why must compressed 0/1 updates run downward?",
+      "options": [
+        "To make sorting faster",
+        "To keep dp[c-weight] from the previous item prefix",
+        "To avoid negative values",
+        "Because arrays cannot grow"
+      ],
+      "answer": 1,
+      "explanation": "Ascending updates can reuse the current item.",
+      "dimension": "Prove"
+    },
+    {
+      "id": "knap-trace",
+      "type": "single",
+      "prompt": "One item weighs 2 and is worth 3. At capacity 4, 0/1 optimum is:",
+      "options": [
+        "0",
+        "3",
+        "6",
+        "4"
+      ],
+      "answer": 1,
+      "explanation": "Only one copy exists even though another would fit.",
+      "dimension": "Trace"
+    },
+    {
+      "id": "knap-cost",
+      "type": "single",
+      "prompt": "Why is O(nW) called pseudo-polynomial?",
+      "options": [
+        "It is an approximation",
+        "W needs only O(log W) bits to encode",
+        "It uses floating point",
+        "It always beats greedy"
+      ],
+      "answer": 1,
+      "explanation": "Runtime depends on numeric magnitude rather than polynomially on its encoding length.",
+      "dimension": "Analyze"
+    },
+    {
+      "id": "knap-parent",
+      "type": "single",
+      "prompt": "Can the final rolling array alone always reconstruct the exact decisions?",
+      "options": [
+        "Yes, each value encodes its items",
+        "No, previous-prefix choices have been overwritten",
+        "Only if all weights differ",
+        "Only if capacity is even"
+      ],
+      "answer": 1,
+      "explanation": "Keep decisions/provenance or deliberately recompute history.",
+      "dimension": "Implement"
+    }
+  ],
+  "problems": [
+    {
+      "id": "knapsack-value",
+      "title": "Choose each item at most once",
+      "difficulty": "Medium",
+      "statement": "Implement knapsackValue(items,capacity) / knapsack_value(items,capacity). items contains [weight,value] pairs. Return the maximum total value under the capacity; each item can be selected at most once.",
+      "constraints": "0 ≤ n ≤ 100; 0 ≤ capacity ≤ 1000; positive integer weights; nonnegative integer values ≤ 1000. Aim for O(n·capacity) time and O(capacity) auxiliary space.",
+      "examples": [
+        "items=[[2,3]], capacity=4 → 3",
+        "items=[[2,3],[3,4],[4,5],[5,8]], capacity=7 → 11",
+        "items=[], capacity=5 → 0"
+      ],
+      "hints": [
+        "A state describes the best value under one capacity after an item prefix.",
+        "For each item compare skipping it and taking it.",
+        "A one-dimensional array needs an update order that prevents reuse.",
+        "Iterate capacity downward from the budget to the item weight."
+      ],
+      "solution": {
+        "naive": "Enumerate all 2^n subsets and choose the best feasible one.",
+        "insight": "Many subsets have the same remaining capacity and remaining item decisions.",
+        "algorithm": "Initialize a zero capacity array. For each item update capacities in descending order using max(dp[c],value+dp[c-weight]).",
+        "correctness": "Descending order preserves the previous-prefix value in dp[c-weight], so each item is used at most once.",
+        "complexity": "O(nW) time, O(W) auxiliary space; pseudo-polynomial in numeric capacity W."
+      },
+      "starter": {
+        "javascript": "function knapsackValue(items, capacity) {\n}\n",
+        "python": "def knapsack_value(items, capacity):\n    pass\n",
+        "cpp": "#include <vector>\n#include <utility>\nint knapsack_value(const std::vector<std::pair<int,int>>& items,int capacity){return 0;}\n"
+      },
+      "tests": {
+        "javascript": "for(const [items,c,want] of [[[],5,0],[[[2,3]],4,3],[[[2,3],[3,4],[4,5],[5,8]],7,11],[[[5,8]],0,0],[[[2,3],[2,3]],4,6]])__check('capacity '+c+' items '+JSON.stringify(items),knapsackValue(items,c),want);",
+        "python": "for items,c,want in [([],5,0),([(2,3)],4,3),([(2,3),(3,4),(4,5),(5,8)],7,11),([(5,8)],0,0),([(2,3),(2,3)],4,6)]:\n    __check('capacity '+str(c)+' items '+str(items),knapsack_value(items,c),want)",
+        "cpp": "int main(){__check(\"empty\",knapsack_value({},5),0);__check(\"single use\",knapsack_value({{2,3}},4),3);__check(\"optimum\",knapsack_value({{2,3},{3,4},{4,5},{5,8}},7),11);__check(\"zero capacity\",knapsack_value({{5,8}},0),0);__check(\"distinct equal items\",knapsack_value({{2,3},{2,3}},4),6);}"
+      }
+    }
+  ],
+  "resources": [
+    "cp-knapsack"
+  ],
+  "trace": {
+    "kind": "knapsack",
+    "input": {
+      "items": [
+        {
+          "weight": 2,
+          "value": 3
+        },
+        {
+          "weight": 3,
+          "value": 4
+        },
+        {
+          "weight": 4,
+          "value": 5
+        },
+        {
+          "weight": 5,
+          "value": 8
+        }
+      ],
+      "capacity": 7
+    }
+  }
+}

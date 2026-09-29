@@ -1,0 +1,226 @@
+{
+  "id": "avl-tree",
+  "title": "AVL Trees: Maintain Order and Balance",
+  "summary": "Follow pointer changes, maintain height metadata, and prove that local repair gives logarithmic ordered operations.",
+  "objectives": [
+    "Trace all four rotation cases",
+    "Implement insertion and deletion",
+    "Validate ordering, stored height and balance independently",
+    "Explain the minimum-node recurrence",
+    "Compare balancing with memory locality"
+  ],
+  "sections": [
+    {
+      "id": "why",
+      "title": "Why balanced order matters",
+      "body": "A BST keeps smaller keys on the left and larger keys on the right. This supports predecessor, successor and sorted traversal, unlike an unordered hash map. But inserting sorted keys into a plain BST makes a chain, so search and updates become linear. AVL trees impose a local height constraint that prevents this degeneration while retaining ordered operations."
+    },
+    {
+      "id": "terms",
+      "title": "Terminology and representation",
+      "body": "A root has no parent; leaves have no children. A subtree contains a node and all its descendants. Depth counts edges from the root; height describes the longest downward path. This lesson uses height(empty)=0 and height(leaf)=1, a node-count convention. Each node stores key, left child, right child and height. The implementation represents a set: duplicate inserts do nothing. A multiset needs an explicit count field or a consistent tie-breaking key."
+    },
+    {
+      "id": "invariants",
+      "title": "Three invariants, not one",
+      "body": "Every left-subtree key is smaller than the node key; every right-subtree key is larger. Stored height equals 1+max(height(left),height(right)). Balance factor is height(left)-height(right) and must be -1, 0 or 1 at every node after an operation. A visually symmetric tree can still have incorrect height metadata; check all three invariants independently."
+    },
+    {
+      "id": "rotations",
+      "title": "Rotations preserve the search order",
+      "body": "For a right rotation at y, let x=y.left and B=x.right. Promote x, attach y as x.right, and move B to y.left. Before and after, the inorder sequence is A,x,B,y,C. Therefore keys remain ordered. No keys are allocated or removed by a rotation; only links and heights change. Update the demoted node y before promoted node x, because the latter height depends on the former. Return the new subtree root so the caller can reconnect it."
+    },
+    {
+      "id": "cases",
+      "title": "LL, RR, LR and RL",
+      "body": "If a node has balance +2 and its left child has nonnegative balance, use one right rotation (LL repair). If the left child is right-heavy, first rotate that child left, then rotate the node right (LR repair). Mirror these for balance -2: RR uses a left rotation, RL rotates the right child right before rotating the node left. The labels describe heavy paths, not rotation direction. Sequences [30,20,10], [10,20,30], [30,10,20], [10,30,20] isolate the four insertion cases."
+    },
+    {
+      "id": "insert",
+      "title": "Insertion and return-path repair",
+      "body": "Descend by the BST comparison until an empty link, allocate a leaf, and return toward the root. At each ancestor first reconnect the returned child, recompute height, inspect balance and rotate if necessary. The insertion affects only one search path. Rebalancing the first unbalanced ancestor restores its previous subtree height, so insertion needs at most one single or double rotation, though metadata traversal still visits O(log n) ancestors. The generic recursive code safely checks all ancestors."
+    },
+    {
+      "id": "delete",
+      "title": "Deletion requires its own reasoning",
+      "body": "Delete a leaf by returning an empty link. Delete a node with one child by returning that child. With two children, copy the inorder successor key from the right subtree’s minimum and recursively delete that successor. Then recompute heights and rebalance while returning to the root. Deletion may shrink a repaired subtree and trigger imbalance higher up, so repairs can cascade through O(log n) ancestors. Determine repair cases from child balance, not the deleted key. In deletion the heavy child can have balance zero: a single rotation is still appropriate."
+    },
+    {
+      "id": "operations",
+      "title": "Search, extrema and neighbors",
+      "body": "Search follows comparisons from the root and stops at an equal key or empty link. Minimum follows left links; maximum follows right links. To find a successor, use the right subtree minimum when a right child exists; otherwise the successor is the lowest ancestor for which the searched key lies in its left subtree. Without parent pointers, keep that ancestor candidate during a root-to-key search. Predecessor is symmetric. Inorder traversal yields sorted keys in Θ(n) time, with O(log n) recursive stack in a valid AVL tree."
+    },
+    {
+      "id": "proof",
+      "title": "Why height stays logarithmic",
+      "body": "Let N(h) be the fewest nodes in an AVL tree of height h. N(0)=0, N(1)=1, and N(h)=1+N(h-1)+N(h-2): to minimize nodes, child heights differ by one. This Fibonacci-like recurrence grows exponentially with h, so h=O(log n). Separately, rotations preserve inorder order and fix local height imbalance. Structural induction along the update path shows repaired subtrees retain BST order, accurate heights and balance. The height argument then bounds future operations."
+    },
+    {
+      "id": "memory",
+      "title": "Memory view and ownership",
+      "body": "Nodes are usually separate heap allocations, with child references or pointers and height metadata. Searches chase dependent pointers and may miss cache lines, unlike contiguous array scans. Recursive updates occupy O(log n) call frames. The C++ sample owns nodes through the root, deletes removed nodes and destroys the remaining tree at the end; do not copy its raw owning root as though it were an independent container. Production C++ containers should make ownership and exception behavior explicit. Managed runtimes reclaim unreachable nodes, but that does not remove allocation or locality costs."
+    },
+    {
+      "id": "edge",
+      "title": "Edge cases and debugging",
+      "body": "Delete an absent key, delete the root repeatedly, insert duplicate keys, and exercise deletion when a heavy child has balance zero. A useful validator recursively returns actual height while checking ordering bounds and absolute child-height difference. Test the whole tree after every operation rather than only the root balance. The commonest pointer bug is failing to assign root=insert(root,key) or root=erase(root,key), which loses a rotation at the root."
+    },
+    {
+      "id": "compare",
+      "title": "AVL, ordinary BST and Red-Black Tree",
+      "body": "An ordinary BST may have linear height. AVL and Red-Black trees both offer logarithmic worst-case ordered operations, using different balance invariants. AVL constrains heights more tightly; Red-Black trees permit a looser shape and use color repair. Actual lookup/update tradeoffs depend on layout, allocation and workload, so compare measurements rather than promising one always wins. B-trees optimize branching and page locality; hash tables are attractive for unordered membership but do not provide sorted traversal or neighboring-key queries."
+    },
+    {
+      "id": "exercises",
+      "title": "Exercises that test understanding",
+      "body": "Predict the promoted root for all four three-key sequences before playing the trace. Draw the middle subtree that changes parent during a rotation. Insert 4,2,6,1,3,5,7, then delete keys in ascending order and check every ancestor. Extend the node with subtree size and update it during rotations to support rank and selection. Finally explain why deletion repair cannot be selected solely from the deleted key."
+    },
+    {
+      "id": "history",
+      "title": "Historical and advanced connections",
+      "body": "AVL is named for Adelson-Velsky and Landis. The essential idea is an ordered tree whose local metadata controls global height. That idea leads to augmented balanced trees, interval indexes and order-statistic sets. Persistent versions copy the modified search path instead of mutating shared nodes; concurrent versions must coordinate pointer publication and reclamation as well as ordering. Those are additional engineering problems, not consequences automatically solved by balancing."
+    }
+  ],
+  "pseudocode": "update subtree using BST rules\nreconnect changed child\nrecompute height\nif left-heavy: optionally rotate left child, then rotate right\nif right-heavy: optionally rotate right child, then rotate left\nreturn new subtree root",
+  "implementations": {
+    "python": "class Node:\n    def __init__(self, key):\n        self.key, self.left, self.right, self.height = key, None, None, 1\n\ndef height(n): return n.height if n else 0\ndef update(n): n.height = 1 + max(height(n.left), height(n.right))\ndef balance(n): return height(n.left) - height(n.right) if n else 0\n\ndef rotate_right(y):\n    x = y.left\n    y.left, x.right = x.right, y\n    update(y)\n    update(x)\n    return x\n\ndef rotate_left(x):\n    y = x.right\n    x.right, y.left = y.left, x\n    update(x)\n    update(y)\n    return y\n\ndef rebalance(n):\n    if not n: return None\n    update(n)\n    if balance(n) > 1:\n        if balance(n.left) < 0: n.left = rotate_left(n.left)\n        return rotate_right(n)\n    if balance(n) < -1:\n        if balance(n.right) > 0: n.right = rotate_right(n.right)\n        return rotate_left(n)\n    return n\n\ndef insert(n, key):\n    if not n: return Node(key)\n    if key < n.key: n.left = insert(n.left, key)\n    elif key > n.key: n.right = insert(n.right, key)\n    else: return n  # set semantics: duplicate keys are ignored\n    return rebalance(n)\n\ndef erase(n, key):\n    if not n: return None\n    if key < n.key: n.left = erase(n.left, key)\n    elif key > n.key: n.right = erase(n.right, key)\n    else:\n        if not n.left: return n.right\n        if not n.right: return n.left\n        successor = n.right\n        while successor.left: successor = successor.left\n        n.key = successor.key\n        n.right = erase(n.right, successor.key)\n    return rebalance(n)\n\nroot = None\nfor key in [30,20,10,25,28,40,50]: root = insert(root,key)\nroot = erase(root,20)\nprint(root.key, root.height)\n",
+    "javascript": "class Node {\n  constructor(key) { this.key=key; this.left=null; this.right=null; this.height=1; }\n}\nconst height = n => n ? n.height : 0;\nconst balance = n => n ? height(n.left)-height(n.right) : 0;\nfunction update(n) { n.height=1+Math.max(height(n.left),height(n.right)); }\nfunction rotateRight(y) {\n  const x=y.left; y.left=x.right; x.right=y;\n  update(y); update(x); return x;\n}\nfunction rotateLeft(x) {\n  const y=x.right; x.right=y.left; y.left=x;\n  update(x); update(y); return y;\n}\nfunction rebalance(n) {\n  if(!n) return null;\n  update(n);\n  if(balance(n)>1) {\n    if(balance(n.left)<0) n.left=rotateLeft(n.left);\n    return rotateRight(n);\n  }\n  if(balance(n)<-1) {\n    if(balance(n.right)>0) n.right=rotateRight(n.right);\n    return rotateLeft(n);\n  }\n  return n;\n}\nfunction insert(n,key) {\n  if(!n) return new Node(key);\n  if(key<n.key) n.left=insert(n.left,key);\n  else if(key>n.key) n.right=insert(n.right,key);\n  else return n;\n  return rebalance(n);\n}\nfunction erase(n,key) {\n  if(!n) return null;\n  if(key<n.key) n.left=erase(n.left,key);\n  else if(key>n.key) n.right=erase(n.right,key);\n  else {\n    if(!n.left) return n.right;\n    if(!n.right) return n.left;\n    let successor=n.right;\n    while(successor.left) successor=successor.left;\n    n.key=successor.key; n.right=erase(n.right,successor.key);\n  }\n  return rebalance(n);\n}\nlet root=null;\nfor(const key of [30,20,10,25,28,40,50]) root=insert(root,key);\nroot=erase(root,20);\nconsole.log(root.key, root.height);\n",
+    "typescript": "class AVLNode {\n  key: number; left: AVLNode | null; right: AVLNode | null; height: number;\n  constructor(key: number) { this.key=key; this.left=null; this.right=null; this.height=1; }\n}\nconst height = (n: AVLNode | null): number => n ? n.height : 0;\nconst balance = (n: AVLNode | null): number => n ? height(n.left)-height(n.right) : 0;\nfunction update(n: AVLNode) { n.height=1+Math.max(height(n.left),height(n.right)); }\nfunction rotateRight(y: AVLNode): AVLNode {\n  const x=y.left!; y.left=x.right; x.right=y;\n  update(y); update(x); return x;\n}\nfunction rotateLeft(x: AVLNode): AVLNode {\n  const y=x.right!; x.right=y.left; y.left=x;\n  update(x); update(y); return y;\n}\nfunction rebalance(n: AVLNode | null): AVLNode | null {\n  if(!n) return null;\n  update(n);\n  if(balance(n)>1) {\n    if(balance(n.left)<0) n.left=rotateLeft(n.left!);\n    return rotateRight(n);\n  }\n  if(balance(n)<-1) {\n    if(balance(n.right)>0) n.right=rotateRight(n.right!);\n    return rotateLeft(n);\n  }\n  return n;\n}\nfunction insert(n: AVLNode | null,key: number): AVLNode {\n  if(!n) return new AVLNode(key);\n  if(key<n.key) n.left=insert(n.left,key);\n  else if(key>n.key) n.right=insert(n.right,key);\n  else return n;\n  return rebalance(n)!;\n}\nfunction erase(n: AVLNode | null,key: number): AVLNode | null {\n  if(!n) return null;\n  if(key<n.key) n.left=erase(n.left,key);\n  else if(key>n.key) n.right=erase(n.right,key);\n  else {\n    if(!n.left) return n.right;\n    if(!n.right) return n.left;\n    let successor=n.right;\n    while(successor.left) successor=successor.left;\n    n.key=successor.key; n.right=erase(n.right,successor.key);\n  }\n  return rebalance(n)!;\n}\nlet root: AVLNode | null=null;\nfor(const key of [30,20,10,25,28,40,50]) root=insert(root,key);\nroot=erase(root,20);\nconsole.log(root?.key, root?.height);\n",
+    "cpp": "#include <algorithm>\n#include <iostream>\nstruct Node {\n    int key, height=1;\n    Node *left=nullptr,*right=nullptr;\n    explicit Node(int k):key(k){}\n};\nint height(Node* n){return n?n->height:0;}\nint balance(Node* n){return n?height(n->left)-height(n->right):0;}\nvoid update(Node* n){n->height=1+std::max(height(n->left),height(n->right));}\nNode* rotateRight(Node* y){Node* x=y->left;y->left=x->right;x->right=y;update(y);update(x);return x;}\nNode* rotateLeft(Node* x){Node* y=x->right;x->right=y->left;y->left=x;update(x);update(y);return y;}\nNode* rebalance(Node* n){\n    if(!n)return n;\n    update(n);\n    if(balance(n)>1){if(balance(n->left)<0)n->left=rotateLeft(n->left);return rotateRight(n);}\n    if(balance(n)<-1){if(balance(n->right)>0)n->right=rotateRight(n->right);return rotateLeft(n);}\n    return n;\n}\nNode* insert(Node* n,int key){\n    if(!n)return new Node(key);\n    if(key<n->key)n->left=insert(n->left,key);\n    else if(key>n->key)n->right=insert(n->right,key);\n    else return n;\n    return rebalance(n);\n}\nNode* erase(Node* n,int key){\n    if(!n)return n;\n    if(key<n->key)n->left=erase(n->left,key);\n    else if(key>n->key)n->right=erase(n->right,key);\n    else{\n        if(!n->left||!n->right){Node* child=n->left?n->left:n->right;delete n;return child;}\n        Node* s=n->right;while(s->left)s=s->left;\n        n->key=s->key;n->right=erase(n->right,s->key);\n    }\n    return rebalance(n);\n}\nvoid destroy(Node* n){if(n){destroy(n->left);destroy(n->right);delete n;}}\nint main(){Node* root=nullptr;for(int k:{30,20,10,25,28,40,50})root=insert(root,k);root=erase(root,20);std::cout<<root->key<<\" \"<<root->height;destroy(root);}\n",
+    "java": "class Main {\n  static class Node { int key,height=1; Node left,right; Node(int k){key=k;} }\n  static int height(Node n){return n==null?0:n.height;}\n  static int balance(Node n){return n==null?0:height(n.left)-height(n.right);}\n  static void update(Node n){n.height=1+Math.max(height(n.left),height(n.right));}\n  static Node rotateRight(Node y){Node x=y.left;y.left=x.right;x.right=y;update(y);update(x);return x;}\n  static Node rotateLeft(Node x){Node y=x.right;x.right=y.left;y.left=x;update(x);update(y);return y;}\n  static Node rebalance(Node n){\n    if(n==null)return n;update(n);\n    if(balance(n)>1){if(balance(n.left)<0)n.left=rotateLeft(n.left);return rotateRight(n);}\n    if(balance(n)<-1){if(balance(n.right)>0)n.right=rotateRight(n.right);return rotateLeft(n);}\n    return n;\n  }\n  static Node insert(Node n,int key){\n    if(n==null)return new Node(key);\n    if(key<n.key)n.left=insert(n.left,key);\n    else if(key>n.key)n.right=insert(n.right,key);else return n;\n    return rebalance(n);\n  }\n  static Node erase(Node n,int key){\n    if(n==null)return n;\n    if(key<n.key)n.left=erase(n.left,key);\n    else if(key>n.key)n.right=erase(n.right,key);\n    else {\n      if(n.left==null)return n.right;if(n.right==null)return n.left;\n      Node s=n.right;while(s.left!=null)s=s.left;\n      n.key=s.key;n.right=erase(n.right,s.key);\n    }\n    return rebalance(n);\n  }\n  public static void main(String[] args){Node root=null;for(int k:new int[]{30,20,10,25,28,40,50})root=insert(root,k);root=erase(root,20);System.out.println(root.key+\" \"+root.height);}\n}\n"
+  },
+  "complexity": [
+    {
+      "operation": "Search / insert / delete",
+      "time": "O(log n)",
+      "space": "O(log n) recursive update stack",
+      "why": "The AVL recurrence bounds height; repair uses constant work per ancestor."
+    },
+    {
+      "operation": "Single rotation",
+      "time": "Θ(1)",
+      "space": "Θ(1)",
+      "why": "A fixed number of links and height fields change."
+    },
+    {
+      "operation": "Sorted traversal",
+      "time": "Θ(n)",
+      "space": "O(log n)",
+      "why": "Each node is visited once; recursion follows balanced height."
+    }
+  ],
+  "quiz": [
+    {
+      "id": "avl-lr",
+      "type": "single",
+      "prompt": "Insert 30,10,20. Which repair restores balance?",
+      "options": [
+        "Right rotation only",
+        "Left rotation at 10 then right at 30",
+        "Left rotation only",
+        "No repair"
+      ],
+      "answer": 1,
+      "explanation": "The left child is right-heavy, so this is an LR case.",
+      "dimension": "Trace"
+    },
+    {
+      "id": "avl-meta",
+      "type": "single",
+      "prompt": "During a right rotation, whose height must be updated first?",
+      "options": [
+        "Promoted node",
+        "Demoted node",
+        "Either order",
+        "Only the root"
+      ],
+      "answer": 1,
+      "explanation": "The promoted node depends on the demoted node’s new height.",
+      "dimension": "Implement"
+    },
+    {
+      "id": "avl-delete",
+      "type": "single",
+      "prompt": "Why can deletion require repairs at several ancestors?",
+      "options": [
+        "Keys become unsorted",
+        "A repaired subtree can become shorter",
+        "Deletion allocates extra nodes",
+        "AVL height is linear"
+      ],
+      "answer": 1,
+      "explanation": "Height decreases can propagate upward.",
+      "dimension": "Explain"
+    },
+    {
+      "id": "avl-height",
+      "type": "single",
+      "prompt": "What recurrence bounds minimum nodes at height h?",
+      "options": [
+        "N(h)=N(h-1)+1",
+        "N(h)=2h",
+        "N(h)=1+N(h-1)+N(h-2)",
+        "N(h)=h²"
+      ],
+      "answer": 2,
+      "explanation": "The sparsest allowed children differ in height by one.",
+      "dimension": "Prove"
+    }
+  ],
+  "problems": [
+    {
+      "id": "avl-height-check",
+      "title": "Validate balance from actual structure",
+      "difficulty": "Medium",
+      "statement": "Implement isBalanced(root) / is_balanced(root). Nodes have left and right fields; do not trust a stored height. Return whether every node has child heights differing by at most one. An empty tree is balanced. This checks balance only, not BST ordering.",
+      "constraints": "Tree is acyclic; at most 1000 nodes; O(n) time required.",
+      "examples": [
+        "Empty tree → true",
+        "Three nodes chained through left links → false",
+        "Root with two leaf children → true"
+      ],
+      "hints": [
+        "A subtree result can report both its height and whether it is valid.",
+        "Use a negative sentinel for imbalance.",
+        "Compute each subtree once, then compare the returned heights."
+      ],
+      "solution": {
+        "naive": "Recompute subtree height independently at every node, costing O(n²) on a chain.",
+        "insight": "Return the height while validating the same subtree.",
+        "algorithm": "Postorder recursion returns -1 on imbalance, otherwise 1+max(left,right).",
+        "correctness": "By structural induction, each valid return is the actual height and each invalid return witnesses an unbalanced descendant.",
+        "complexity": "O(n) time and O(h) stack."
+      },
+      "starter": {
+        "javascript": "function isBalanced(root) {\n}\n",
+        "python": "def is_balanced(root):\n    pass\n",
+        "cpp": "struct Node { Node* left=nullptr; Node* right=nullptr; };\nbool is_balanced(Node* root) { return false; }\n"
+      },
+      "tests": {
+        "javascript": "const leaf=()=>({left:null,right:null}); __check('empty',isBalanced(null),true);__check('balanced',isBalanced({left:leaf(),right:leaf()}),true);__check('chain',isBalanced({left:{left:leaf(),right:null},right:null}),false);",
+        "python": "from types import SimpleNamespace as N\nleaf=lambda:N(left=None,right=None)\n__check('empty',is_balanced(None),True)\n__check('balanced',is_balanced(N(left=leaf(),right=leaf())),True)\n__check('chain',is_balanced(N(left=N(left=leaf(),right=None),right=None)),False)",
+        "cpp": "int main(){Node a,b,c;a.left=&b;b.left=&c;__check(\"empty\",is_balanced(nullptr),true);__check(\"chain\",is_balanced(&a),false);b.left=nullptr;a.right=&c;__check(\"balanced\",is_balanced(&a),true);}"
+      }
+    }
+  ],
+  "resources": [
+    "mit-avl"
+  ],
+  "trace": {
+    "kind": "avl-tree",
+    "input": {
+      "values": [
+        30,
+        20,
+        10,
+        25,
+        28,
+        40,
+        50
+      ],
+      "delete": [
+        20
+      ]
+    }
+  }
+}

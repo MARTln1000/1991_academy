@@ -380,6 +380,7 @@ const LabViz = (() => {
      Callers get the source text and pass it to Runner instead. */
   return {
     render,
+    primitives: { setup, theme, clear },
     computeSource: (kind) => (computeJS[kind] ? String(computeJS[kind]) : null),
     stop: () => { rafToken += 1; },
   };

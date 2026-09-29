@@ -13,10 +13,12 @@ const Auth = (() => {
     "martinium:progress:v1",
     "martinium:xp:v1",
     "martinium:review:v1",
+    "martinium:dsa:v1",
     "martinium:lang",
   ];
   const DRAFT_PREFIX = "martinium:draft:";
   const LAST_USER_KEY = "martinium:lastUser";
+  const BASE_KEY = "martinium:sync-base";
 
   /* The server caps a request body at 300 KB. Stay under it with room for
      JSON overhead; if we're over, code drafts are shed before progress. */
@@ -27,6 +29,10 @@ const Auth = (() => {
   let offline = false; // no server behind this page (e.g. opened via file://)
   let pushTimer = null;
   let lastSyncedAt = null;
+  let revision = null;
+  let conflict = null;
+  let pushQueue = Promise.resolve();
+  let reconciling = false;
   let warnedAbout = null; // so a persistent failure toasts once, not every 1.5 s
 
   /* ---------- HTTP ---------- */
@@ -70,8 +76,8 @@ const Auth = (() => {
      draft is an inconvenience, losing progress is not acceptable. */
   function serialize(data) {
     let payload = data;
-    let body = JSON.stringify({ data: payload });
-    if (body.length <= PAYLOAD_LIMIT) return { body, dropped: 0 };
+    let body = JSON.stringify({ data: payload, expectedUpdated: revision, owner: user && user.username });
+    if (new TextEncoder().encode(body).length <= PAYLOAD_LIMIT) return { body, dropped: 0 };
 
     payload = { ...data };
     const drafts = Object.keys(payload)
@@ -81,8 +87,8 @@ const Auth = (() => {
     for (const k of drafts) {
       delete payload[k];
       dropped += 1;
-      body = JSON.stringify({ data: payload });
-      if (body.length <= PAYLOAD_LIMIT) break;
+      body = JSON.stringify({ data: payload, expectedUpdated: revision, owner: user && user.username });
+      if (new TextEncoder().encode(body).length <= PAYLOAD_LIMIT) break;
     }
     return { body, dropped };
   }
@@ -102,20 +108,43 @@ const Auth = (() => {
      that IS baked into every rendered string and needs a reload. */
   function apply(data) {
     const langBefore = localStorage.getItem("martinium:lang");
-    clearLocal();
-    for (const [k, v] of Object.entries(data || {})) {
-      if (syncedKey(k) && typeof v === "string") localStorage.setItem(k, v);
+    const previous = collect();
+    try {
+      clearLocal();
+      for (const [key, v] of Object.entries(data || {})) {
+        const k = key; // a blob saved before the storage rename
+        if (syncedKey(k) && typeof v === "string") localStorage.setItem(k, v);
+      }
+    } catch (err) {
+      clearLocal();
+      for (const [key, value] of Object.entries(previous)) localStorage.setItem(key, value);
+      throw err;
     }
     if (typeof notifyStateChanged === "function") notifyStateChanged();
     return { langChanged: localStorage.getItem("martinium:lang") !== langBefore };
   }
 
-  function xpTotalOf(blob) {
+  function same(a, b) {
+    const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+    return [...keys].every(k => (a || {})[k] === (b || {})[k]);
+  }
+
+  function remember(data) {
+    try { localStorage.setItem(BASE_KEY, JSON.stringify({ owner: user.username, data })); }
+    catch { /* If storage is full, next reconciliation asks instead of guessing. */ }
+  }
+
+  function baseline() {
     try {
-      return JSON.parse(blob["martinium:xp:v1"]).total || 0;
-    } catch {
-      return 0;
-    }
+      const base = JSON.parse(localStorage.getItem(BASE_KEY));
+      return base && base.owner === user.username ? base.data : null;
+    } catch { return null; }
+  }
+
+  function reportConflict(server) {
+    conflict = { server };
+    warnOnce("conflict", t("Progress changed in another session. Open Account to choose which copy to keep."));
+    if (typeof notifyStateChanged === "function") notifyStateChanged();
   }
 
   /* ---------- Sync ---------- */
@@ -126,18 +155,41 @@ const Auth = (() => {
     if (typeof toast === "function") toast(message);
   }
 
-  async function push() {
+  function push() {
+    const owner = user;
+    const next = pushQueue.catch(() => {}).then(() => {
+      if (!owner || owner !== user) return;
+      return pushOnce();
+    });
+    pushQueue = next;
+    return next;
+  }
+
+  async function pushOnce() {
     if (!user) return;
+    const owner = user;
+    if (conflict) throw new Error("Resolve the progress conflict on the Account page first.");
+    if (localStorage.getItem(LAST_USER_KEY) !== owner.username) {
+      user = null;
+      updateNav();
+      throw new Error("Account changed in another tab. Reload before syncing.");
+    }
     const { body, dropped } = serialize(collect());
     try {
-      await api("/api/state", { method: "PUT", body });
+      const out = await api("/api/state", { method: "PUT", body, keepalive: new TextEncoder().encode(body).length < 60_000 });
+      if (user !== owner) return;
+      revision = out.updated;
+      remember(JSON.parse(body).data);
       lastSyncedAt = Date.now();
       warnedAbout = null;
       if (dropped) {
         warnOnce("dropped", t("Progress synced. {0} large code draft(s) stayed on this device.", dropped));
       }
     } catch (err) {
-      if (err.status === 401) {
+      if (user !== owner) throw err;
+      if (err.status === 409) {
+        reportConflict(null);
+      } else if (err.status === 401) {
         // Session expired or revoked elsewhere — stop pretending we're signed in.
         user = null;
         updateNav();
@@ -150,53 +202,53 @@ const Auth = (() => {
   }
 
   function schedule() {
-    if (!user) return;
+    if (!user || reconciling) return;
     clearTimeout(pushTimer);
-    pushTimer = setTimeout(() => push().catch(() => {}), PUSH_DEBOUNCE_MS);
+    pushTimer = setTimeout(() => { pushTimer = null; push().catch(() => {}); }, PUSH_DEBOUNCE_MS);
   }
 
   /* Best-effort flush of anything still sitting in the debounce window when
      the tab goes away — otherwise the last few seconds of work never leave.
      sendBeacon can't be used here: it only issues POST, and /api/state is PUT. */
   function flush() {
-    if (!user || pushTimer === null) return;
+    if (!user || pushTimer === null || reconciling) return;
     clearTimeout(pushTimer);
     pushTimer = null;
-    const { body } = serialize(collect());
-    try {
-      fetch("/api/state", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        keepalive: body.length < 60_000, // the keepalive body cap
-        body,
-      }).catch(() => {});
-    } catch {
-      /* on the way out — nothing useful left to do */
-    }
+    // Use the same queue and revision handling as normal sync. A background
+    // fetch racing an active write could overwrite it or leave us on an old revision.
+    push().catch(() => {});
   }
 
   /* Decide what wins when logging in on a device with existing data. */
   async function reconcile(newUser) {
     const previousOwner = localStorage.getItem(LAST_USER_KEY);
-    const server = (await api("/api/state")).data;
+    const snapshot = await api("/api/state");
+    if (snapshot.owner && snapshot.owner !== newUser.username) throw new Error("Account changed. Reload before syncing.");
+    const server = snapshot.data;
+    revision = snapshot.updated;
     const ownDevice = !previousOwner || previousOwner === newUser.username;
     let adoptedServer = false;
 
-    if (!ownDevice) {
-      // Local data belongs to a different account (already synced there).
+    conflict = null;
+    const local = collect();
+    const base = baseline();
+    if (!ownDevice || (!Object.keys(local).length && server)) {
       apply(server || {});
+      remember(server || {});
       adoptedServer = true;
-    } else if (server && xpTotalOf(server) > xpTotalOf(collect())) {
-      // The account knows more than this device — take the server copy.
+    } else if (server && same(server, local)) {
+      remember(server);
+    } else if (!server || (base && same(server, base))) {
+      localStorage.setItem(LAST_USER_KEY, newUser.username);
+      await push().catch(() => {});
+    } else if (base && same(local, base)) {
       apply(server);
+      remember(server);
       adoptedServer = true;
     } else {
-      // This device is the richest copy — upload it. Best-effort: the account
-      // already exists and the local copy is intact, so a failed first push
-      // must not make a successful sign-in look like a failure. push() has
-      // already warned the user, and schedule() retries on the next change.
-      await push().catch(() => {});
+      // XP does not order draft edits, reviews, deletions or language changes.
+      // Retain both copies until the learner chooses; never upload a guess.
+      reportConflict(server);
     }
     localStorage.setItem(LAST_USER_KEY, newUser.username);
     return adoptedServer;
@@ -216,27 +268,22 @@ const Auth = (() => {
   async function init() {
     try {
       user = (await api("/api/me")).user;
-      // Another device may have earned XP since this one last synced.
-      const server = (await api("/api/state")).data;
-      if (server && xpTotalOf(server) > xpTotalOf(collect())) {
-        // The page is already rendered, so only a language switch needs a reload.
-        if (apply(server).langChanged) {
-          location.reload();
-          return user;
-        }
-      }
+      reconciling = true;
+      const langBefore = localStorage.getItem("martinium:lang");
+      await reconcile(user);
+      if (localStorage.getItem("martinium:lang") !== langBefore) location.reload();
     } catch (e) {
       if (e.status === undefined) offline = true; // network error: no server here
       user = null;
     }
+    reconciling = false;
     updateNav();
     return user;
   }
 
   const ready = init();
 
-  /* PUT is not guaranteed on unload, so flush via sendBeacon instead.
-     pagehide covers the bfcache/mobile path that unload misses. */
+  /* Flush early on visibilitychange; pagehide is a best-effort fallback. */
   window.addEventListener("pagehide", flush);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flush();
@@ -247,8 +294,34 @@ const Auth = (() => {
     current: () => user,
     isOffline: () => offline,
     lastSyncedAt: () => lastSyncedAt,
+    hasConflict: () => !!conflict,
+
+    async resolveConflict(choice) {
+      if (!user || !conflict) return;
+      const snapshot = await api("/api/state");
+      if (localStorage.getItem(LAST_USER_KEY) !== user.username || (snapshot.owner && snapshot.owner !== user.username)) {
+        throw new Error("Account changed. Reload before syncing.");
+      }
+      revision = snapshot.updated;
+      if (choice === "server") {
+        const changed = apply(snapshot.data || {});
+        remember(snapshot.data || {});
+        conflict = null;
+        if (changed.langChanged) location.reload();
+      } else if (choice === "local") {
+        conflict = null;
+        try { await push(); }
+        catch (err) { reportConflict(snapshot.data); throw err; }
+      } else {
+        throw new Error("Choose local or server progress.");
+      }
+    },
 
     async register(username, email, password) {
+      await ready;
+      clearTimeout(pushTimer);
+      pushTimer = null;
+      await pushQueue.catch(() => {});
       const out = await api("/api/register", {
         method: "POST",
         body: JSON.stringify({ username, email, password }),
@@ -260,6 +333,10 @@ const Auth = (() => {
     },
 
     async login(identifier, password) {
+      await ready;
+      clearTimeout(pushTimer);
+      pushTimer = null;
+      await pushQueue.catch(() => {});
       const out = await api("/api/login", {
         method: "POST",
         body: JSON.stringify({ identifier, password }),
@@ -271,7 +348,10 @@ const Auth = (() => {
     },
 
     async logout() {
-      await api("/api/logout", { method: "POST" }).catch(() => {});
+      clearTimeout(pushTimer);
+      pushTimer = null;
+      if (!conflict) await push();
+      await api("/api/logout", { method: "POST" });
       // The local copy stays on this device; the account keeps its own.
       user = null;
       clearTimeout(pushTimer);

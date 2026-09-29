@@ -1,0 +1,248 @@
+{
+  "id": "dijkstra",
+  "title": "Dijkstra: Settle the Nearest Frontier",
+  "summary": "Derive nonnegative shortest paths from relaxation, heap state and a greedy correctness argument.",
+  "objectives": [
+    "Distinguish discovery from settlement",
+    "Track distances, predecessor links and stale heap entries",
+    "Explain exactly where the proof requires nonnegative weights",
+    "Analyze the actual heap implementation",
+    "Choose between BFS, Dijkstra and Bellman–Ford"
+  ],
+  "sections": [
+    {
+      "id": "why",
+      "title": "Why this matters",
+      "body": "A shortest route is not necessarily the route with the fewest transitions. In a weighted network one expensive edge can cost more than several cheap edges. Dijkstra organizes the frontier by discovered cost, enabling shortest paths from one source when all edge weights are nonnegative. Vertices may represent locations, program states or scheduling states, provided transition costs fit the model."
+    },
+    {
+      "id": "model",
+      "title": "Graph and weight contract",
+      "body": "Use a directed adjacency list: graph[u] contains destinations and weights for outgoing edges. Represent an undirected edge twice. Parallel edges and zero-weight edges are allowed; negative edges are not. All vertex IDs must be valid and numeric weights finite. Unreachable vertices retain infinity and have no predecessor. The algorithm solves additive path cost, not automatically bottleneck cost, path counting or a model with changing weights."
+    },
+    {
+      "id": "intuition",
+      "title": "An expanding cost frontier",
+      "body": "Think of a wave whose travel time along each edge is its weight. The next vertex reached is the one with the smallest tentative arrival time, not necessarily the earliest inserted into a queue. Nonnegative edges mean a route that first reaches a later frontier point cannot travel backward in cost and improve an already settled smaller distance. This is the greedy fact that permits finalization."
+    },
+    {
+      "id": "relax",
+      "title": "Relaxation is a local proof of improvement",
+      "body": "distance[v] stores the cost of some discovered source-to-v path, initially infinity except source=0. For edge u→v with weight w, candidate=distance[u]+w is the cost of extending a discovered path. If candidate<distance[v], replace the estimate and set parent[v]=u. Estimates are upper bounds on the true optimum, never unsupported guesses. Updating parent only on strict improvement also avoids creating predecessor cycles through zero-weight ties."
+    },
+    {
+      "id": "queue",
+      "title": "Priority queue, stale entries and settlement",
+      "body": "The sample uses a binary min-heap with lazy duplicate entries. Every improvement pushes a new (distance,vertex) pair. Old entries remain; skip a popped pair when its distance no longer equals distance[vertex]. Settle only when the minimum current pair is popped, never on first discovery. With strict improvements and nonnegative weights, each vertex has one effective pop. The queue display may legitimately contain multiple entries for the same vertex; that is an implementation choice, not a corrupted graph."
+    },
+    {
+      "id": "walkthrough",
+      "title": "A path that improves after discovery",
+      "body": "Use edges A→B:4, A→C:1, C→B:2, B→D:1 and C→D:5. Initially queue contains (0,A). Expanding A proposes B=4 and C=1. Pop C and improve B=3, D=6. Pop B at 3 and improve D=4. The old B=4 entry is stale; skip it. Pop D at 4. Final distances are A=0,C=1,B=3,D=4, with path A,C,B,D. Marking B visited when first proposed at 4 would lose this improvement."
+    },
+    {
+      "id": "proof",
+      "title": "Correctness: first crossing of the settled cut",
+      "body": "Assume all previously settled distances are optimal. Let u be the next vertex popped with minimum tentative distance. If a shorter path to u existed, follow that path until its first unsettled vertex y, with settled predecessor x. Relaxing x→y already gave y an estimate no larger than the prefix cost. Because all remaining edge weights are nonnegative, that prefix costs no more than the proposed shorter path to u. Thus y would have a tentative distance smaller than u’s popped value, contradicting the minimum choice. By induction, each settled distance is optimal. This proof explicitly uses nonnegativity."
+    },
+    {
+      "id": "negative",
+      "title": "Why negative edges break the proof",
+      "body": "Consider source→A:2, source→B:5, B→A:-10. Settling A at 2 is premature because the route through B has cost -5. With lazy reprocessing a particular implementation may revisit A, but then the ordinary settlement proof and runtime bound no longer apply; negative cycles can cause unbounded improvements. Reject negative inputs rather than hoping for a favorable graph. Bellman–Ford handles negative edges and detects reachable negative cycles; DAG shortest paths handle negative weights by topological order when no directed cycle exists."
+    },
+    {
+      "id": "complexity",
+      "title": "Count the work of the implementation you use",
+      "body": "For the lazy-duplicate heap implementation, each effective vertex expansion scans its outgoing edges, and every successful relaxation adds a heap item. There are O(E) such items, each heap operation costs O(log(E+1)), and initialization costs O(V). Total time is O(V+E log(E+1)); auxiliary distance, predecessor and queue storage is O(V+E), excluding the graph. For simple graphs log E=O(log V), giving the familiar O((V+E)log V) bound. An indexed heap with decrease-key keeps O(V) queue entries. Dense array-based selection instead costs O(V²+E) and can be competitive on dense graphs."
+    },
+    {
+      "id": "paths",
+      "title": "Reconstruct paths and handle early exit",
+      "body": "After confirming target is reachable, follow parent[target] repeatedly to source, collect vertices, then reverse. The parent pointers record one shortest path; equal-cost alternatives need separate treatment if all paths are required. For a single target, stop when the target is popped with a non-stale distance, not when an incoming relaxation first reaches it. Multi-source Dijkstra starts every source at distance zero; this is equivalent to adding a synthetic source with zero-weight edges."
+    },
+    {
+      "id": "memory",
+      "title": "Memory and numeric engineering",
+      "body": "Adjacency lists use O(V+E) storage and scan only actual outgoing edges. An adjacency matrix uses O(V²), which is wasteful for sparse graphs but provides direct edge lookup. Lazy heap duplicates trade a simpler implementation for additional allocations and queue space. C++ and Java examples reject sums reaching the infinity sentinel to avoid signed overflow and ambiguity. JavaScript Number exactly represents integers only through 2^53-1; keep integer path totals below that or use an appropriate wider representation. Floating weights introduce rounding, so define comparison and tolerance policy rather than silently mixing it into relaxation."
+    },
+    {
+      "id": "compare",
+      "title": "Choose the correct shortest-path tool",
+      "body": "BFS is enough when every edge has equal positive weight. A deque-based 0–1 BFS works for weights restricted to zero or one. Dijkstra applies to arbitrary nonnegative weights. Bellman–Ford permits negative edges and detects reachable negative cycles. A DAG allows a linear topological pass even with negative weights. Floyd–Warshall solves all-pairs shortest paths in O(V³). A* adds a heuristic; optimality and reopening behavior depend on admissibility and consistency, so it is not just Dijkstra with any guessed bonus."
+    },
+    {
+      "id": "edge",
+      "title": "Edge cases and implementation mistakes",
+      "body": "Test a disconnected vertex, a zero-weight cycle, a single source with no edges, parallel edges with different costs and several equal-cost paths. Common errors are using a max-heap, marking visited when pushing, ignoring stale pairs, relaxing from an unreachable infinity value, and confusing directed with undirected edges. The source has distance zero even when there are no outgoing edges. Negative weights should fail validation before execution rather than yielding a plausible-looking animation."
+    },
+    {
+      "id": "extensions",
+      "title": "Applications and advanced extensions",
+      "body": "Routing with nonnegative link costs is a direct fit. State-space search can encode a vertex as (location,remaining-resource) if all state transitions are explicit; complexity then depends on the expanded state graph. Johnson’s algorithm combines Bellman–Ford reweighting with repeated Dijkstra for sparse all-pairs problems. Contraction hierarchies and other routing indexes add preprocessing for repeated queries. Always distinguish faster query time from the memory and update cost of those indexes."
+    }
+  ],
+  "pseudocode": "distance[source] ← 0; all others ← infinity\npush (0,source) into min-heap\nwhile heap not empty:\n  pop (du,u); skip if stale\n  for edge (u,v,w):\n    if du+w < distance[v]:\n      distance[v] ← du+w; parent[v] ← u\n      push (distance[v],v)",
+  "implementations": {
+    "python": "import heapq\nimport math\n\ndef dijkstra(graph, source):\n    # graph[u] contains (destination, nonnegative weight)\n    if not 0 <= source < len(graph): raise ValueError(\"Invalid source\")\n    for edges in graph:\n        for v, w in edges:\n            if not 0 <= v < len(graph) or not math.isfinite(w) or w < 0:\n                raise ValueError(\"Invalid edge\")\n    distance = [math.inf] * len(graph)\n    parent = [None] * len(graph)\n    distance[source] = 0\n    queue = [(0, source)]\n    while queue:\n        du, u = heapq.heappop(queue)\n        if du != distance[u]: continue\n        for v, w in graph[u]:\n            candidate = du + w\n            if candidate < distance[v]:\n                distance[v] = candidate\n                parent[v] = u\n                heapq.heappush(queue, (candidate, v))\n    return distance, parent\n\nprint(dijkstra([[(1,4),(2,1)],[(3,1)],[(1,2),(3,5)],[]],0)[0])\n",
+    "javascript": "class MinHeap {\n  constructor() { this.data=[]; }\n  push(entry) {\n    const a=this.data; a.push(entry); let i=a.length-1;\n    while(i>0) { const p=Math.floor((i-1)/2); if(a[p][0]<=a[i][0])break;\n      [a[p],a[i]]=[a[i],a[p]]; i=p; }\n  }\n  pop() {\n    const a=this.data, first=a[0], last=a.pop();\n    if(a.length) { a[0]=last; let i=0;\n      while(true) { let c=2*i+1; if(c>=a.length)break;\n        if(c+1<a.length&&a[c+1][0]<a[c][0])c++;\n        if(a[i][0]<=a[c][0])break; [a[i],a[c]]=[a[c],a[i]]; i=c; }\n    }\n    return first;\n  }\n}\nfunction dijkstra(graph, source) {\n  if(!Number.isInteger(source)||source<0||source>=graph.length)throw Error('Invalid source');\n  for(const edges of graph)for(const [v,w] of edges)\n    if(!Number.isInteger(v)||v<0||v>=graph.length||!Number.isFinite(w)||w<0)throw Error('Invalid edge');\n  const distance=Array(graph.length).fill(Infinity), parent=Array(graph.length).fill(null);\n  distance[source]=0; const queue=new MinHeap(); queue.push([0,source]);\n  while(queue.data.length) {\n    const [du,u]=queue.pop(); if(du!==distance[u])continue;\n    for(const [v,w] of graph[u]) {\n      const candidate=du+w;\n      if(candidate<distance[v]) {distance[v]=candidate;parent[v]=u;queue.push([candidate,v]);}\n    }\n  }\n  return {distance,parent};\n}\nconsole.log(dijkstra([[[1,4],[2,1]],[[3,1]],[[1,2],[3,5]],[]],0).distance);\n",
+    "typescript": "class MinHeap {\n  data: [number, number][];\n  constructor() { this.data=[]; }\n  push(entry: [number, number]) {\n    const a=this.data; a.push(entry); let i=a.length-1;\n    while(i>0) { const p=Math.floor((i-1)/2); if(a[p][0]<=a[i][0])break;\n      [a[p],a[i]]=[a[i],a[p]]; i=p; }\n  }\n  pop(): [number, number] {\n    const a=this.data, first=a[0], last=a.pop()!;\n    if(a.length) { a[0]=last; let i=0;\n      while(true) { let c=2*i+1; if(c>=a.length)break;\n        if(c+1<a.length&&a[c+1][0]<a[c][0])c++;\n        if(a[i][0]<=a[c][0])break; [a[i],a[c]]=[a[c],a[i]]; i=c; }\n    }\n    return first;\n  }\n}\nfunction dijkstra(graph: [number, number][][], source: number) {\n  if(!Number.isInteger(source)||source<0||source>=graph.length)throw Error('Invalid source');\n  for(const edges of graph)for(const [v,w] of edges)\n    if(!Number.isInteger(v)||v<0||v>=graph.length||!Number.isFinite(w)||w<0)throw Error('Invalid edge');\n  const distance=Array(graph.length).fill(Infinity), parent=Array(graph.length).fill(null);\n  distance[source]=0; const queue=new MinHeap(); queue.push([0,source]);\n  while(queue.data.length) {\n    const [du,u]=queue.pop(); if(du!==distance[u])continue;\n    for(const [v,w] of graph[u]) {\n      const candidate=du+w;\n      if(candidate<distance[v]) {distance[v]=candidate;parent[v]=u;queue.push([candidate,v]);}\n    }\n  }\n  return {distance,parent};\n}\nconsole.log(dijkstra([[[1,4],[2,1]],[[3,1]],[[1,2],[3,5]],[]],0).distance);\n",
+    "cpp": "#include <iostream>\n#include <vector>\n#include <queue>\n#include <limits>\n#include <functional>\n#include <stdexcept>\nusing Edge=std::pair<int,long long>;\nstd::pair<std::vector<long long>,std::vector<int>> dijkstra(const std::vector<std::vector<Edge>>& g,int source){\n const long long INF=std::numeric_limits<long long>::max();\n if(source<0||source>=(int)g.size())throw std::invalid_argument(\"source\");\n for(const auto& es:g)for(auto [v,w]:es)if(v<0||v>=(int)g.size()||w<0)throw std::invalid_argument(\"edge\");\n std::vector<long long>d(g.size(),INF);std::vector<int>p(g.size(),-1);\n using State=std::pair<long long,int>;\n std::priority_queue<State,std::vector<State>,std::greater<State>>q;\n d[source]=0;q.push({0,source});\n while(!q.empty()){\n   auto [du,u]=q.top();q.pop();if(du!=d[u])continue;\n   for(auto [v,w]:g[u]){\n     if(w>=INF-du)throw std::overflow_error(\"path exceeds representable distance\");\n     long long candidate=du+w;\n     if(candidate<d[v]){d[v]=candidate;p[v]=u;q.push({candidate,v});}\n   }\n }\n return {d,p};\n}\nint main(){std::vector<std::vector<Edge>>g={{{1,4},{2,1}},{{3,1}},{{1,2},{3,5}},{}};for(auto d:dijkstra(g,0).first)std::cout<<d<<\" \";}\n",
+    "java": "import java.util.*;\nclass Main {\n  static long[] dijkstra(List<List<long[]>> graph,int source){\n    if(source<0||source>=graph.size())throw new IllegalArgumentException(\"source\");\n    for(var edges:graph)for(var e:edges)if(e[0]<0||e[0]>=graph.size()||e[1]<0)throw new IllegalArgumentException(\"edge\");\n    long[] distance=new long[graph.size()];Arrays.fill(distance,Long.MAX_VALUE);\n    PriorityQueue<long[]> queue=new PriorityQueue<>(Comparator.comparingLong(a->a[0]));\n    distance[source]=0;queue.add(new long[]{0,source});\n    while(!queue.isEmpty()){\n      long[] state=queue.remove();long du=state[0];int u=(int)state[1];\n      if(du!=distance[u])continue;\n      for(long[] edge:graph.get(u)){\n        int v=(int)edge[0];long w=edge[1];\n        if(w>=Long.MAX_VALUE-du)throw new ArithmeticException(\"path overflow\");\n        long candidate=du+w;\n        if(candidate<distance[v]){distance[v]=candidate;queue.add(new long[]{candidate,v});}\n      }\n    }\n    return distance;\n  }\n  public static void main(String[] args){\n    List<List<long[]>> g=new ArrayList<>();for(int i=0;i<4;i++)g.add(new ArrayList<>());\n    g.get(0).add(new long[]{1,4});g.get(0).add(new long[]{2,1});g.get(2).add(new long[]{1,2});g.get(1).add(new long[]{3,1});g.get(2).add(new long[]{3,5});\n    System.out.println(Arrays.toString(dijkstra(g,0)));\n  }\n}\n"
+  },
+  "complexity": [
+    {
+      "operation": "Lazy-heap shortest paths",
+      "time": "O(V + E log(E+1))",
+      "space": "O(V+E) auxiliary",
+      "why": "Each successful relaxation adds a heap entry; duplicates remain until popped."
+    },
+    {
+      "operation": "Dense array version",
+      "time": "O(V²+E)",
+      "space": "O(V) auxiliary",
+      "why": "Scan all unsettled vertices to choose the minimum each round."
+    },
+    {
+      "operation": "Path reconstruction",
+      "time": "O(V) worst case",
+      "space": "O(V)",
+      "why": "Follow at most one predecessor per path vertex."
+    }
+  ],
+  "quiz": [
+    {
+      "id": "dij-settle",
+      "type": "single",
+      "prompt": "When may a vertex be settled?",
+      "options": [
+        "When first discovered",
+        "When its smallest current distance is popped",
+        "After every neighbor is visited",
+        "Only after all paths are enumerated"
+      ],
+      "answer": 1,
+      "explanation": "Nonnegative weights justify finality at the minimum current pop.",
+      "dimension": "Explain"
+    },
+    {
+      "id": "dij-stale",
+      "type": "single",
+      "prompt": "A heap entry says B=7 but distance[B]=4. What happens?",
+      "options": [
+        "Reset B to 7",
+        "Skip the stale entry",
+        "Delete all edges to B",
+        "Report a negative cycle"
+      ],
+      "answer": 1,
+      "explanation": "A better route was already recorded.",
+      "dimension": "Trace"
+    },
+    {
+      "id": "dij-negative",
+      "type": "single",
+      "prompt": "Which condition supports the settled-cut proof?",
+      "options": [
+        "All edges have distinct weights",
+        "All weights are nonnegative",
+        "The graph is complete",
+        "Every vertex has two neighbors"
+      ],
+      "answer": 1,
+      "explanation": "An unsettled continuation cannot reduce a path cost below its settled prefix.",
+      "dimension": "Prove"
+    },
+    {
+      "id": "dij-space",
+      "type": "single",
+      "prompt": "Why can a lazy heap occupy O(E) space?",
+      "options": [
+        "It stores the adjacency matrix",
+        "It may retain several distance proposals for one vertex",
+        "Every vertex has E parents",
+        "Weights are strings"
+      ],
+      "answer": 1,
+      "explanation": "Every successful relaxation can add a new entry before old entries are removed.",
+      "dimension": "Analyze"
+    }
+  ],
+  "problems": [
+    {
+      "id": "relax-edge",
+      "title": "Implement one safe relaxation",
+      "difficulty": "Easy",
+      "statement": "Implement relax(distance,u,v,w) returning true exactly when edge u→v improves distance[v], updating the array in that case. Weights are nonnegative; distance[u] may be infinity. No predecessor array is required.",
+      "constraints": "Valid vertex indices; finite nonnegative weights; finite distances and candidate sums fit numeric precision. C++ uses 1e18 as the unreachable sentinel and candidate sums are below it.",
+      "examples": [
+        "distance=[0,9], u=0,v=1,w=4 → true, distance=[0,4]",
+        "distance=[0,4], u=0,v=1,w=7 → false"
+      ],
+      "hints": [
+        "Build the candidate path through u.",
+        "Update only on strict improvement.",
+        "An unreachable u cannot improve another distance."
+      ],
+      "solution": {
+        "naive": "Overwrite v with every candidate; this can replace a good route by a worse one.",
+        "insight": "Tentative distances are the minimum over discovered routes.",
+        "algorithm": "Compare distance[u]+w with distance[v]; assign and return true only if smaller.",
+        "correctness": "The assignment preserves the best discovered path and never increases any estimate.",
+        "complexity": "O(1) time and space per relaxation."
+      },
+      "starter": {
+        "javascript": "function relax(distance,u,v,w) {\n}\n",
+        "python": "def relax(distance,u,v,w):\n    pass\n",
+        "cpp": "#include <vector>\nbool relax(std::vector<long long>& distance,int u,int v,long long w){return false;}\n"
+      },
+      "tests": {
+        "javascript": "const d=[0,9,Infinity];__check('improving edge',relax(d,0,1,4),true);__check('new distance',d[1],4);__check('nonimproving edge',relax(d,0,1,7),false);__check('unreachable source',relax(d,2,1,0),false);",
+        "python": "d=[0,9,float('inf')]\n__check('improving edge',relax(d,0,1,4),True)\n__check('new distance',d[1],4)\n__check('nonimproving edge',relax(d,0,1,7),False)\n__check('unreachable source',relax(d,2,1,0),False)",
+        "cpp": "int main(){std::vector<long long>d={0,9,1000000000000000000LL};__check(\"improving edge\",relax(d,0,1,4),true);__check(\"new distance\",d[1],4LL);__check(\"nonimproving edge\",relax(d,0,1,7),false);__check(\"unreachable source\",relax(d,2,1,0),false);}"
+      }
+    }
+  ],
+  "resources": [
+    "princeton-paths"
+  ],
+  "trace": {
+    "kind": "dijkstra",
+    "input": {
+      "nodes": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "edges": [
+        {
+          "from": "A",
+          "to": "B",
+          "weight": 4
+        },
+        {
+          "from": "A",
+          "to": "C",
+          "weight": 1
+        },
+        {
+          "from": "C",
+          "to": "B",
+          "weight": 2
+        },
+        {
+          "from": "B",
+          "to": "D",
+          "weight": 1
+        },
+        {
+          "from": "C",
+          "to": "D",
+          "weight": 5
+        }
+      ],
+      "source": "A"
+    }
+  }
+}

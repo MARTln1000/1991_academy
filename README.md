@@ -220,3 +220,18 @@ Sidebar, progress, quiz and navigation pick it up automatically.
 ## Keyboard shortcuts
 
 - `[` / `]` — previous / next lesson on a track page.
+
+
+## DSA Studio
+
+Open `tracks/dsa.html` through `.venv/bin/python app.py` for the expanded learning workspace. The original lessons remain at `tracks/dsa-legacy.html`; old `#dsa-*` links redirect there without changing completion IDs.
+
+The first content milestone provides four deep reference lessons: Binary Search, AVL Tree, Dijkstra, and 0/1 Knapsack. They share reversible teaching timelines, conceptual memory/variables/counters, implementation references, runnable practice, quizzes, separate mastery evidence, notes and bookmarks. The catalog contains 86 prerequisite-linked topics, but most advanced entries are explicitly planned; catalog membership does not imply a finished lesson. Fibonacci Tree awaits a source definition.
+
+Resources/My Library, learning paths, pattern descriptions, the knowledge graph, and complexity/memory labs use the existing style and account system. The new `martinium:dsa:v1` key syncs alongside existing progress. Concurrent edits use revision checks; conflicting copies are resolved explicitly on the Account page.
+
+Content authoring and tutor setup: [DSA content contracts](docs/DSA_CONTENT.md). Architecture: [DSA implementation](docs/DSA_IMPLEMENTATION.md). New content uses editable JSON rather than per-lesson renderer changes. New material is currently English; legacy Armenian lessons remain available.
+
+Without a configured model, the tutor is labelled as a deterministic guide. An optional external tutor requires account login and sends bounded context only when Ask is pressed. Java/TypeScript are reference implementations; the editor executes JavaScript/Python and the existing optional C++ service. Visual traces follow reference algorithms, not arbitrary edited code.
+
+Run regression tests with `.venv/bin/pytest -q`. Optional browser checks require Playwright and Chromium, a temporary app server, and `PLAYWRIGHT_MODULE`, `CHROMIUM_PATH`, `DSA_TEST_URL` as needed; run `node tests/browser/dsa-smoke.cjs`. Compiler-specific checks skip when those compilers are not installed.

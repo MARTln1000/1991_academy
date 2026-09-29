@@ -1,0 +1,253 @@
+{
+  "id": "binary-search",
+  "title": "Binary Search: Boundaries and Monotone Decisions",
+  "summary": "Derive a reusable boundary search from an invariant, then extend it to occurrence ranges and optimization.",
+  "objectives": [
+    "State and preserve a half-open interval invariant",
+    "Implement lower and upper bounds in four languages",
+    "Prove termination and correctness",
+    "Recognize monotone feasibility and include its cost",
+    "Distinguish theoretical comparisons from memory performance"
+  ],
+  "sections": [
+    {
+      "id": "motivation",
+      "title": "Why this matters",
+      "body": "Ordered data can rule out whole regions after one comparison. A timestamp index, a version-history lookup and the minimum feasible machine capacity share the same structure: find the boundary where a condition changes. Binary search is useful because it turns global search into repeated decisions with a proof that discarded candidates cannot be answers."
+    },
+    {
+      "id": "intuition",
+      "title": "Intuition: eliminate, do not guess",
+      "body": "Imagine a sorted shelf. If its middle key is smaller than your target, every earlier key is also too small. That comparison eliminates a prefix. If the middle key is large enough, it might be the first acceptable key, so keep it while discarding the suffix beyond it. The core operation is elimination justified by order, not simply checking the middle repeatedly."
+    },
+    {
+      "id": "structure",
+      "title": "Representation and preconditions",
+      "body": "Use an array a of n values in nondecreasing order under the same comparison used by the search. Duplicates are allowed. Lower bound returns a position p in [0,n], never an invented element. The answer n means every value is smaller than the target. Random access matters: jumping to an array index is constant time; repeatedly walking a linked list to a midpoint can destroy the logarithmic time bound. NaN and inconsistent comparators can violate the ordering contract."
+    },
+    {
+      "id": "invariant",
+      "title": "A precise half-open invariant",
+      "body": "The unresolved interval is [lo,hi). Every index before lo contains a value less than target. Every index at or beyond hi contains a value at least target. Initially lo=0 and hi=n, so both established regions are empty. Choose mid=lo+floor((hi-lo)/2). If a[mid]<target, sorted order proves all positions through mid are too small; set lo=mid+1. Otherwise mid may be the first valid answer; set hi=mid. The index hi is a boundary and must never be read as a[hi] when hi=n."
+    },
+    {
+      "id": "walkthrough",
+      "title": "Trace duplicates and absence",
+      "body": "For [1,3,3,7,9] and target 3, start [0,5): mid=2 contains 3, so hi=2. Now [0,2): mid=1 contains 3, so hi=1. Now [0,1): mid=0 contains 1, so lo=1. Return 1, the first 3. For target 4 the boundary is 3, even though 4 is absent. For an empty array the loop executes zero times and returns 0."
+    },
+    {
+      "id": "closed",
+      "title": "Closed versus half-open intervals",
+      "body": "An exact-search loop can maintain an inclusive candidate interval [left,right], initialize right=n-1, run while left<=right, and discard mid using right=mid-1 or left=mid+1. A half-open lower-bound loop initializes hi=n, runs while lo<hi and uses hi=mid. Both are valid; their endpoint meaning and updates form a single contract. Copying the loop guard from one and the right update from the other commonly loses answers or loops forever. Unsigned indices make right=n-1 unsafe on empty arrays; the half-open formulation avoids that subtraction."
+    },
+    {
+      "id": "operations",
+      "title": "Exact search, occurrence ranges and counts",
+      "body": "Let L=lower_bound(a,x), the first position with a[L]>=x, or n. Let U=upper_bound(a,x), the first position with a[U]>x, or n. x exists exactly when L<n and a[L]==x. Its first occurrence is L and its last occurrence is U-1, but only after verifying existence. Its count is U-L. The insertion point preserving sorted order is L (before equals) or U (after equals). For a closed value interval [x,y], count elements with upper_bound(y)-lower_bound(x) when x<=y. Computing upper bound by searching for x+1 risks integer overflow; compare with <= directly."
+    },
+    {
+      "id": "predicate",
+      "title": "Binary search on monotone predicates",
+      "body": "Generalize the test to P(i). The sequence must be false,false,...,true,true. Maintain that all i<lo are false and all i>=hi are true; if P(mid) set hi=mid, else lo=mid+1. When all values are false the boundary is n; when all are true it is 0. Monotonicity is a precondition you must establish from the problem, not from sample inputs. If evaluations cost T, total search costs O(T log n), not merely O(log n). A changing database snapshot or stateful predicate can invalidate the invariant."
+    },
+    {
+      "id": "answer",
+      "title": "Search on the answer: minimum processing speed",
+      "body": "Given positive job sizes and a deadline H, a machine with integer speed s needs sum(ceil(job/s)) hours when jobs are processed separately. Increasing s never increases hours, so feasible(s) is monotone. If H is smaller than the number of jobs, no finite speed works under this model. Otherwise search s in [1,max(job)] for the first feasible speed. Evaluate each ceiling as job//s plus one when job%s is nonzero; this avoids job+s-1 overflow. The feasibility test is O(m), so the total is O(m log max(job)). This optimization-to-decision transformation is useful for capacities, scheduling and partition thresholds. First prove the feasibility solver itself is correct."
+    },
+    {
+      "id": "real",
+      "title": "Continuous and floating-point search",
+      "body": "For a continuous function with opposite signs at bracket endpoints, bisection can locate a root by preserving that sign bracket; it does not require the function to be globally monotone. For a first-feasible boundary on real values, monotonicity of the predicate is required. Use an iteration budget or an absolute/relative tolerance appropriate to the domain. After k ideal bisections bracket width is (R-L)/2^k. Floating-point midpoint may equal an endpoint, so stop if mid==lo or mid==hi. Distinguish approximation tolerance from exact equality; searching while f(mid)!=0 is generally wrong."
+    },
+    {
+      "id": "correctness",
+      "title": "Correctness and termination",
+      "body": "Initialization establishes the invariant because there are no known elements outside [0,n). Preservation follows from sorted order in each branch. The nonnegative integer hi-lo strictly decreases: mid lies within [lo,hi), and either lo becomes mid+1 or hi becomes mid. Therefore the loop terminates. At termination lo=hi; everything before lo is too small and everything from lo onward is large enough. Thus lo is precisely the first acceptable position. This proof handles duplicates, missing targets and empty input without special cases."
+    },
+    {
+      "id": "complexity",
+      "title": "Why the cost is logarithmic",
+      "body": "Each iteration leaves at most floor(m/2) unresolved elements when the previous length was m. After k iterations the length is at most floor(n/2^k). For n>0, at most floor(log2 n)+1 comparisons suffice, giving worst-case Θ(log(n+1)) iterations. The iterative algorithm stores lo, hi and mid, so auxiliary space is Θ(1). Recursive versions use Θ(log n) stack frames unless tail-call elimination is guaranteed. Lower bound cannot generally stop immediately on equality because earlier equal values might exist."
+    },
+    {
+      "id": "memory",
+      "title": "Memory and engineering consequences",
+      "body": "An array offers contiguous storage and constant-time address calculation, but binary search jumps across cache lines rather than scanning sequentially. For small inputs, a linear scan can be faster despite its worse asymptotic cost. Large indexes may use B-trees to reduce storage-page reads. Keep theoretical comparisons separate from measured nanoseconds: branch prediction, cache misses, comparator cost and runtime overhead all matter. Python integers avoid fixed-width overflow; C++ and Java midpoint arithmetic needs a valid nonnegative index interval. JavaScript bitwise midpoint tricks coerce numbers to 32-bit integers, so use Math.floor on the interval difference."
+    },
+    {
+      "id": "mistakes",
+      "title": "Common mistakes and edge cases",
+      "body": "Test [], [5], all-equal arrays, targets before the first and after the last value, and duplicate runs at either edge. Common bugs include lo=mid instead of mid+1, returning an unchecked insertion position as an exact match, using hi=n-1 with a half-open proof, and searching unsorted data. A proof-driven debugging method is to write the invariant above the loop and identify the first trace frame where it becomes false. Include maximum integer targets to catch x+1 overflow in upper-bound wrappers."
+    },
+    {
+      "id": "variants",
+      "title": "Variants and extensions",
+      "body": "Exponential search first doubles a bound until it encloses the answer, then binary-searches that interval; it suits unknown-length ordered access with careful bounds checks. Rotated sorted arrays require identifying which side is ordered and need special care with duplicates. Parallel binary search batches many offline monotone queries; it is an advanced scheduling technique rather than ordinary CPU parallel execution. Parametric search and selection algorithms connect decision procedures to optimization, but not every optimization problem has a monotone feasibility test."
+    },
+    {
+      "id": "compare",
+      "title": "When to choose another technique",
+      "body": "Use linear search for tiny or unsorted data when preprocessing cannot be amortized. Use a hash table for repeated exact membership queries when ordering and range queries are unnecessary. Use a balanced search tree for frequent ordered inserts and deletes: binary search finds an array insertion point quickly, but shifting the suffix still takes Θ(n). Two pointers can answer a whole batch of ordered queries in one scan when the queries are themselves sorted."
+    },
+    {
+      "id": "practice-guide",
+      "title": "How to demonstrate mastery",
+      "body": "Before running code, predict lo, hi and mid for a duplicate-heavy input. Implement lower bound from the invariant, then derive upper bound by changing the predicate. Explain why the returned index may equal n. Next translate a scheduling question into a monotone feasibility predicate. Finally prove termination and state the full complexity including predicate evaluation. Reading the explanation and independently passing these tasks are different kinds of progress."
+    }
+  ],
+  "pseudocode": "lo ← 0; hi ← n\nwhile lo < hi:\n  mid ← lo + floor((hi-lo)/2)\n  if a[mid] < target: lo ← mid+1\n  else: hi ← mid\nreturn lo",
+  "implementations": {
+    "python": "def lower_bound(a, target):\n    lo, hi = 0, len(a)\n    while lo < hi:\n        mid = lo + (hi - lo) // 2\n        if a[mid] < target:\n            lo = mid + 1\n        else:\n            hi = mid\n    return lo\n\ndef upper_bound(a, target):\n    lo, hi = 0, len(a)\n    while lo < hi:\n        mid = lo + (hi - lo) // 2\n        if a[mid] <= target:\n            lo = mid + 1\n        else:\n            hi = mid\n    return lo\n\nprint(lower_bound([1, 3, 3, 7, 9], 3))\n",
+    "javascript": "function lowerBound(a, target) {\n  let lo = 0, hi = a.length;\n  while (lo < hi) {\n    const mid = lo + Math.floor((hi - lo) / 2);\n    if (a[mid] < target) lo = mid + 1;\n    else hi = mid;\n  }\n  return lo;\n}\nfunction upperBound(a, target) {\n  let lo = 0, hi = a.length;\n  while (lo < hi) {\n    const mid = lo + Math.floor((hi - lo) / 2);\n    if (a[mid] <= target) lo = mid + 1;\n    else hi = mid;\n  }\n  return lo;\n}\nconsole.log(lowerBound([1, 3, 3, 7, 9], 3));\n",
+    "typescript": "function lowerBound(a: number[], target: number): number {\n  let lo = 0, hi = a.length;\n  while (lo < hi) {\n    const mid = lo + Math.floor((hi - lo) / 2);\n    if (a[mid] < target) lo = mid + 1;\n    else hi = mid;\n  }\n  return lo;\n}\nfunction upperBound(a: number[], target: number): number {\n  let lo = 0, hi = a.length;\n  while (lo < hi) {\n    const mid = lo + Math.floor((hi - lo) / 2);\n    if (a[mid] <= target) lo = mid + 1;\n    else hi = mid;\n  }\n  return lo;\n}\nconsole.log(lowerBound([1, 3, 3, 7, 9], 3));\n",
+    "cpp": "#include <iostream>\n#include <vector>\n#include <cstddef>\nstd::size_t lower_bound_index(const std::vector<int>& a, int target) {\n    std::size_t lo = 0, hi = a.size();\n    while (lo < hi) {\n        auto mid = lo + (hi - lo) / 2;\n        if (a[mid] < target) lo = mid + 1;\n        else hi = mid;\n    }\n    return lo;\n}\nstd::size_t upper_bound_index(const std::vector<int>& a, int target) {\n    std::size_t lo = 0, hi = a.size();\n    while (lo < hi) {\n        auto mid = lo + (hi - lo) / 2;\n        if (a[mid] <= target) lo = mid + 1;\n        else hi = mid;\n    }\n    return lo;\n}\nint main() { std::cout << lower_bound_index({1,3,3,7,9},3) << '\\n'; }\n",
+    "java": "class Main {\n  static int lowerBound(int[] a, int target) {\n    int lo=0, hi=a.length;\n    while(lo<hi) {\n      int mid=lo+(hi-lo)/2;\n      if(a[mid]<target) lo=mid+1; else hi=mid;\n    }\n    return lo;\n  }\n  static int upperBound(int[] a, int target) {\n    int lo=0, hi=a.length;\n    while(lo<hi) {\n      int mid=lo+(hi-lo)/2;\n      if(a[mid]<=target) lo=mid+1; else hi=mid;\n    }\n    return lo;\n  }\n  public static void main(String[] args) {\n    System.out.println(lowerBound(new int[]{1,3,3,7,9},3));\n  }\n}\n"
+  },
+  "complexity": [
+    {
+      "operation": "Lower/upper bound",
+      "time": "Θ(log(n+1))",
+      "space": "Θ(1)",
+      "why": "Each comparison discards at least half of the unresolved positions."
+    },
+    {
+      "operation": "Insert into sorted array",
+      "time": "Θ(n) worst case",
+      "space": "Θ(1) excluding resizing",
+      "why": "Finding the position is logarithmic; shifting elements is linear."
+    },
+    {
+      "operation": "Search on answer",
+      "time": "O(T log R)",
+      "space": "Predicate-dependent",
+      "why": "R is answer-range width; each feasibility evaluation costs T."
+    }
+  ],
+  "quiz": [
+    {
+      "id": "bs-boundary",
+      "type": "single",
+      "prompt": "Lower bound of 3 in [1,3,3,7] is:",
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "answer": 1,
+      "explanation": "The first value at least 3 is at index 1.",
+      "dimension": "Trace"
+    },
+    {
+      "id": "bs-absent",
+      "type": "single",
+      "prompt": "What does lower bound return when every value is smaller than target?",
+      "options": [
+        "-1",
+        "The last index",
+        "n",
+        "An exception"
+      ],
+      "answer": 2,
+      "explanation": "n is the valid boundary after all elements.",
+      "dimension": "Implement"
+    },
+    {
+      "id": "bs-loop",
+      "type": "single",
+      "prompt": "Which update can stall a half-open search?",
+      "options": [
+        "hi=mid",
+        "lo=mid+1",
+        "lo=mid",
+        "Return lo after termination"
+      ],
+      "answer": 2,
+      "explanation": "When hi=lo+1, mid=lo; assigning lo=mid makes no progress.",
+      "dimension": "Debug"
+    },
+    {
+      "id": "bs-proof",
+      "type": "single",
+      "prompt": "Why can a[mid]<target eliminate every index through mid?",
+      "options": [
+        "Because the midpoint is random",
+        "Because the array is sorted under the same comparison",
+        "Because duplicates are forbidden",
+        "Because n is a power of two"
+      ],
+      "answer": 1,
+      "explanation": "Sorted order makes every earlier value no larger than a[mid].",
+      "dimension": "Prove"
+    },
+    {
+      "id": "bs-predicate",
+      "type": "single",
+      "prompt": "If a feasibility check costs O(n) and search width is R, the total is:",
+      "options": [
+        "O(log R)",
+        "O(n+R)",
+        "O(n log R)",
+        "O(R log n)"
+      ],
+      "answer": 2,
+      "explanation": "Each of logarithmically many decisions scans n items.",
+      "dimension": "Analyze"
+    }
+  ],
+  "problems": [
+    {
+      "id": "lower-bound",
+      "title": "First acceptable position",
+      "difficulty": "Easy",
+      "statement": "Implement lowerBound(a,target) / lower_bound(a,target) / lower_bound_index(a,target). Return the first index whose value is at least target, or a.length when none exists. Do not call a library binary search.",
+      "constraints": "0 ≤ n ≤ 100000; a is sorted nondecreasing; integer values and target; O(log(n+1)) time, O(1) auxiliary space.",
+      "examples": [
+        "[1,3,3,7], target=3 → 1",
+        "[1,3,3,7], target=8 → 4",
+        "[], target=0 → 0"
+      ],
+      "hints": [
+        "Think of indices before the answer as a false prefix.",
+        "Keep an unresolved half-open interval [lo,hi).",
+        "When a[mid] is large enough, mid must remain a possible answer.",
+        "Use hi=mid or lo=mid+1 until lo==hi."
+      ],
+      "solution": {
+        "naive": "Scan left to right until finding a value at least target; O(n).",
+        "insight": "Sorted order permits eliminating a whole prefix or suffix.",
+        "algorithm": "Maintain [lo,hi), compare its midpoint, and keep the first acceptable boundary.",
+        "correctness": "The prefix is too small and the suffix is acceptable; when no unknown positions remain, lo is the first acceptable position.",
+        "complexity": "O(log(n+1)) time and O(1) auxiliary space."
+      },
+      "starter": {
+        "javascript": "function lowerBound(a, target) {\n  // Return the first acceptable index.\n}\n",
+        "python": "def lower_bound(a, target):\n    pass\n",
+        "cpp": "#include <vector>\n#include <cstddef>\nstd::size_t lower_bound_index(const std::vector<int>& a, int target) {\n    return 0;\n}\n"
+      },
+      "tests": {
+        "javascript": "for (const [a,x,want] of [[[],0,0],[[1,3,3,7],3,1],[[1,3],8,2],[[5],0,0],[[2,2,2],2,0]]) __check('lower bound '+JSON.stringify(a)+' / '+x,lowerBound(a,x),want);",
+        "python": "for a,x,want in [([],0,0),([1,3,3,7],3,1),([1,3],8,2),([5],0,0),([2,2,2],2,0)]:\n    __check('lower bound '+str(a)+' / '+str(x),lower_bound(a,x),want)",
+        "cpp": "int main(){__check(\"empty\",(long long)lower_bound_index({},0),0LL);__check(\"duplicates\",(long long)lower_bound_index({1,3,3,7},3),1LL);__check(\"past end\",(long long)lower_bound_index({1,3},8),2LL);__check(\"all equal\",(long long)lower_bound_index({2,2,2},2),0LL);}"
+      }
+    }
+  ],
+  "resources": [
+    "cp-binary"
+  ],
+  "trace": {
+    "kind": "binary-search",
+    "input": {
+      "values": [
+        1,
+        3,
+        3,
+        7,
+        9
+      ],
+      "target": 3,
+      "mode": "lower_bound"
+    }
+  }
+}
