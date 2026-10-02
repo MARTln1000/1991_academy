@@ -236,6 +236,7 @@
       '<div class="field"><label for="re-pw">' + t("Password (min 8 characters)") + "</label>" +
       '<input id="re-pw" name="password" type="password" autocomplete="new-password" minlength="8" required /></div>' +
       '<button class="btn btn-primary" type="submit">' + t("Create account") + "</button>" +
+      '<p class="f-sub form-privacy">' + t("What we store and why:") + ' <a href="privacy.html">' + t("Privacy Policy") + "</a></p>" +
       '<p class="form-error" data-error></p></form>' +
       "</div>" +
 

@@ -12,31 +12,12 @@
   <link rel="stylesheet" href="../css/base.css" />
   <link rel="stylesheet" href="../css/components.css" />
   <link rel="stylesheet" href="../css/game.css" />
-  <!-- KaTeX for rendering the homework math (loaded only on the math track) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
-  <script>
-    /* typesetMath(el): render \( \) and \[ \] via KaTeX auto-render.
-       KaTeX loads deferred, after track.js runs — queue until it's ready. */
-    window.__mathQueue = [];
-    window.typesetMath = function (el) {
-      if (window.renderMathInElement) {
-        renderMathInElement(el, {
-          delimiters: [
-            { left: "\\[", right: "\\]", display: true },
-            { left: "\\(", right: "\\)", display: false },
-          ],
-          throwOnError: false,
-        });
-      } else {
-        window.__mathQueue.push(el);
-      }
-    };
-    window.addEventListener("load", function () {
-      window.__mathQueue.splice(0).forEach(function (el) { window.typesetMath(el); });
-    });
-  </script>
+  <!-- KaTeX for rendering the homework math (loaded only on the math track).
+       integrity= pins the exact files: a tampered CDN copy is refused. -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+  <script src="../js/math-typeset.js"></script>
 </head>
 <body data-track="math">
   <nav class="nav">
@@ -67,10 +48,12 @@
   <script src="../js/data/math.js"></script>
   <script src="../js/data/math-exercises.js"></script>
   <script src="../js/data/math-exercises-2.js"></script>
-  <script src="../js/runner.js"></script>
+  <script src="../js/colab.js"></script>
   <script src="../js/exercises.js"></script>
   <script src="../js/data/i18n-hy.js"></script>
   <script src="../js/data/i18n-hy-math.js"></script>
+  <script src="../api/content.js"></script>
+  <script src="../js/custom-content.js"></script>
   <script src="../js/track.js"></script>
 </body>
 </html>

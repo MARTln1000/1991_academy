@@ -1,8 +1,8 @@
 /* ============================================
    1991 Academy — Interactive exercises
    Parsons (reorder), faded blanks, matching,
-   worked problems and graded code.
-   Sandboxed execution lives in runner.js.
+   worked problems, and code exercises that
+   are solved in Google Colab (colab.js).
    ============================================ */
 
 const Exercises = (() => {
@@ -208,66 +208,17 @@ const Exercises = (() => {
     });
   }
 
-  /* ---------- Graded code exercise (in-lesson mini-Lab) ---------- */
+  /* ---------- Code exercise: solved in Google Colab ---------- */
 
+  /* The learner opens the exercise's notebook in Colab (task, starter code,
+     tests), solves it there, and marks it solved here. */
   function mountCode(ex, root, onSolved) {
-    if (typeof CodeEditor === "undefined" || typeof Runner === "undefined") {
+    if (typeof Colab === "undefined") {
       root.innerHTML = '<p class="ex-prompt">' + t("This exercise needs the code runtime — open it from its track page.") + "</p>";
       return;
     }
-    root.innerHTML =
-      '<div class="editor-host"></div>' +
-      '<div class="ex-actions" style="margin-top:12px">' +
-      '<button class="btn btn-primary" data-run>' + t("▶ Run tests") + "</button>" +
-      '<button class="btn" data-reset-code>' + t("Reset") + "</button>" +
-      '<span class="ex-status"></span></div>' +
-      '<div class="test-results"></div>';
-
-    const draftKey = ex.__draftKey;
-    const editor = CodeEditor.create(root.querySelector(".editor-host"), {
-      value: (draftKey && localStorage.getItem(draftKey)) || ex.starter,
-      language: "python",
-      filename: ex.fnName || "solution",
-      onChange(v) {
-        if (draftKey) {
-          localStorage.setItem(draftKey, v);
-          if (window.Sync) Sync.schedule();
-        }
-      },
-    });
-
-    const status = root.querySelector(".ex-status");
-    const resultsEl = root.querySelector(".test-results");
-    const runBtn = root.querySelector("[data-run]");
-
-    root.querySelector("[data-reset-code]").addEventListener("click", () => {
-      editor.setValue(ex.starter);
-      if (draftKey) localStorage.removeItem(draftKey);
-      resultsEl.innerHTML = "";
-      status.textContent = "";
-    });
-
-    runBtn.addEventListener("click", async () => {
-      runBtn.disabled = true;
-      status.textContent = t("Running…");
-      status.className = "ex-status";
-      try {
-        let out;
-        try {
-          out = await Runner.python(editor.getValue(), ex.tests, (msg) => {
-            status.textContent = msg;
-          });
-        } catch (err) {
-          out = { error: (err && err.message) || String(err), results: [] };
-        }
-        const summary = Runner.renderResults(resultsEl, out);
-        status.textContent = Runner.statusText(out, summary);
-        status.className = "ex-status " + (summary.allPass ? "ok" : "bad");
-        if (summary.allPass) onSolved();
-      } finally {
-        runBtn.disabled = false;
-      }
-    });
+    root.innerHTML = Colab.panel(ex.__notebook, ex.__solved);
+    Colab.wire(root, onSolved);
   }
 
   const MOUNTERS = { order: mountOrder, blanks: mountBlanks, match: mountMatch, problem: mountProblem, code: mountCode };
@@ -289,7 +240,8 @@ const Exercises = (() => {
         const box = document.createElement("div");
         box.className = "exercise";
         const icon = ex.type === "problem" ? "📝" : ex.type === "code" ? "🐍" : "🛠️";
-        ex.__draftKey = "1991_academy:draft:ex:" + lesson.id + ":" + i;
+        ex.__notebook = lesson.id + "-ex" + (i + 1);   /* tools/site_data.js names them the same way */
+        ex.__solved = solvedBefore;
         box.innerHTML =
           "<h3>" + icon + " " + esc(L(ex, "title")) +
           (ex.source ? ' <span class="ex-source">' + esc(ex.source) + "</span>" : "") +

@@ -20,7 +20,7 @@ tests/
 .gitignore
 .github/
 .claude/
-.DS_Store
+**/.DS_Store
 .dockerignore
 Dockerfile
 docker-compose*.yml
@@ -28,8 +28,8 @@ Makefile
 *.md
 requirements-dev.txt
 
-# The C++ runner is an image of its own (runner/Dockerfile)
-runner/
+# The notebook generator (its output, assets/colab/, is part of the site)
+tools/
 
 # The image needs only the backup script from deploy/ (Caddy reads the
 # Caddyfile from the host)

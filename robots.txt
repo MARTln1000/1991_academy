@@ -1,0 +1,4 @@
+# 1991 Academy. The lesson pages are public; the API is not for crawlers.
+# (The account page and course downloads also send X-Robots-Tag: noindex.)
+User-agent: *
+Disallow: /api/

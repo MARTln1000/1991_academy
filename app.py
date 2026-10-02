@@ -9,11 +9,10 @@ Serves the static site and the JSON API.
 
 Design notes that matter if you touch this file:
 
-* **Nothing blocking runs on the event loop.** SQLite calls, scrypt hashing and
-  C++ runs all go through `run_in_threadpool`. A single 25-second C++ compile
-  used to stall every other request, including static files.
-* **Static serving is an allowlist, not a blocklist.** Only `/`, the five page
-  files, and the css/js/tracks/assets trees are reachable. An extension
+* **Nothing blocking runs on the event loop.** SQLite calls and scrypt hashing
+  go through `run_in_threadpool`.
+* **Static serving is an allowlist, not a blocklist.** Only `/`, the seven page
+  files, robots.txt, and the css/js/tracks/assets trees are reachable. An extension
   blocklist could be walked around by case (`/APP.PY` on macOS) and wrongly
   404'd the `.py` starter files under `assets/courses/`.
 * **Schema setup + expiry sweeping live in the lifespan handler**, so they run
@@ -25,11 +24,6 @@ Environment:
                    your LAN; in Docker, compose publishes it on 127.0.0.1 only)
     ACADEMY_DB     SQLite path                      (default ./1991_academy.db)
     ACADEMY_DEBUG  1 = dev mode: no-store caching   (default 1)
-    ACADEMY_CPP_RUNNER  socket of the C++ runner container; Docker sets it
-                   (docker-compose.yml), and C++ then runs there, sandboxed
-    ACADEMY_CPP    1 = without a runner, compile learner C++ in-process
-                   (default 1, for development on your own computer; the
-                   Docker image sets 0. Never 1 on a public server)
     ACADEMY_SECURE_COOKIES  1 = Secure (HTTPS-only) session cookie
                    (default: on unless ACADEMY_DEBUG=1)
     ACADEMY_TRUST_PROXY     1 = read client IP from X-Forwarded-For
@@ -48,8 +42,17 @@ API:
     POST /api/forgot-password     {email}            (always 200; emails a reset link)
     POST /api/reset-password      {token, password}
     POST /api/delete-account      {password}
-    POST /api/run-cpp             {source, harness, prelude?}
     GET  /api/health
+    GET  /api/content.js          lessons and announcements added in the admin panel
+
+Admin (accounts with users.is_admin; `python app.py admin add NAME` grants it):
+    GET  /api/admin/overview      site statistics
+    GET  /api/admin/users[?q=&sort=created|active|xp|name&offset=]
+    GET  /api/admin/users/NAME    one learner, with their progress
+    POST /api/admin/users/NAME/reset-link | sign-out | delete
+    GET  /api/admin/lessons       PUT|DELETE /api/admin/lessons/ID   POST .../ID/preview
+    GET  /api/admin/announcements POST /api/admin/announcements  PUT|DELETE .../ID
+    GET  /api/admin/log           what admins changed
 
 Email (password reset) env, all optional — unset ⇒ links are logged not sent:
     ACADEMY_SMTP_HOST / _PORT / _USER / _PASS / _FROM,  ACADEMY_BASE_URL
@@ -58,26 +61,25 @@ Email (password reset) env, all optional — unset ⇒ links are logged not sent
 import asyncio
 import hashlib
 import hmac
-import importlib.util
 import json
 import logging
 import math
 import os
 import re
 import secrets
-import shutil
 import smtplib
-import socket
 import sqlite3
+import sys
 import time
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from contextlib import asynccontextmanager, contextmanager
 from email.message import EmailMessage
 from pathlib import Path
 
+import nh3
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
@@ -97,7 +99,6 @@ PORT = int(os.environ.get("PORT", 8735))
 HOST = os.environ.get("ACADEMY_HOST", "0.0.0.0")
 DB_PATH = os.environ.get("ACADEMY_DB", str(ROOT / "1991_academy.db"))
 DEBUG = os.environ.get("ACADEMY_DEBUG", "1") == "1"
-ENABLE_CPP = os.environ.get("ACADEMY_CPP", "1") == "1"
 
 # Mark the session cookie Secure (HTTPS-only) in production. Defaults to the
 # opposite of DEBUG so local http://localhost dev still works, prod does not
@@ -110,7 +111,6 @@ TRUST_PROXY = os.environ.get("ACADEMY_TRUST_PROXY", "0") == "1"
 
 SESSION_TTL = 30 * 86400          # 30 days
 MAX_BODY = 300_000                # bytes, hard cap for any request body
-MAX_CODE_BYTES = 60_000
 RESET_TTL = 3600                  # password-reset links live 1 hour
 SWEEP_INTERVAL = 3600             # expired sessions / reset tokens, hourly
 # Ceiling for the leaderboard XP snapshot. The whole curriculum is worth a few
@@ -139,9 +139,11 @@ SMTP_FROM = os.environ.get("ACADEMY_SMTP_FROM") or SMTP_USER or "no-reply@1991.a
 BASE_URL = os.environ.get("ACADEMY_BASE_URL", f"http://localhost:{PORT}").rstrip("/")
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,20}$")
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-CPP_COMPILER = shutil.which("c++") or shutil.which("g++") or shutil.which("clang++")
+# No whitespace, control characters, or characters that mean something in HTML
+# or in a mail header: an address can never carry markup onto a page.
+_EMAIL_CHAR = r"[^@\s\x00-\x1f\x7f<>\"'`()\[\]\\,;:]"
+EMAIL_RE = re.compile(rf"^{_EMAIL_CHAR}+@{_EMAIL_CHAR}+\.{_EMAIL_CHAR}+$")
+MAX_EMAIL = 254                   # the longest address SMTP allows
 
 # The git commit this image was built from ("-dirty" = with uncommitted
 # changes). The Dockerfile writes the file from the REVISION build argument the
@@ -168,7 +170,8 @@ log = logging.getLogger("academy")
 # or by an extension nobody thought to block.
 PAGE_FILES = {
     "",  # "/" → index.html via StaticFiles(html=True)
-    "index.html", "lab.html", "missions.html", "practice.html", "account.html",
+    "index.html", "lab.html", "missions.html", "practice.html", "account.html", "privacy.html",
+    "admin.html", "robots.txt",
 }
 # Course materials are whatever the lecturer published — PDFs, notebooks, CSVs,
 # images, zips and .py starter files — so that tree can't be extension-limited.
@@ -248,6 +251,41 @@ def init_db():
                 created REAL NOT NULL,
                 expires REAL NOT NULL
             );
+            -- Lessons written in the admin panel. An id that matches a built-in
+            -- lesson (js/data/) replaces its text; any other id is a new lesson,
+            -- placed in `module` after `after` (NULL: at the end). `data` is the
+            -- lesson as JSON, already validated and sanitized (parse_lesson).
+            CREATE TABLE IF NOT EXISTS lessons (
+                id TEXT PRIMARY KEY,
+                track TEXT NOT NULL,
+                module TEXT NOT NULL,
+                after TEXT,
+                data TEXT NOT NULL,
+                published INTEGER NOT NULL DEFAULT 0,
+                created REAL NOT NULL,
+                updated REAL NOT NULL,
+                updated_by TEXT NOT NULL
+            );
+            -- The banners shown at the top of every page while active.
+            CREATE TABLE IF NOT EXISTS announcements (
+                id INTEGER PRIMARY KEY,
+                text TEXT NOT NULL,
+                text_hy TEXT NOT NULL DEFAULT '',
+                level TEXT NOT NULL DEFAULT 'info',
+                active INTEGER NOT NULL DEFAULT 1,
+                created REAL NOT NULL,
+                created_by TEXT NOT NULL
+            );
+            -- Every change made through the admin panel or `app.py admin`.
+            -- Names, not user ids: the record outlives deleted accounts.
+            CREATE TABLE IF NOT EXISTS admin_log (
+                id INTEGER PRIMARY KEY,
+                ts REAL NOT NULL,
+                admin TEXT NOT NULL,
+                action TEXT NOT NULL,
+                target TEXT,
+                detail TEXT
+            );
             """
         )
         # migrate pre-leaderboard databases in place
@@ -265,6 +303,9 @@ def init_db():
             conn.execute("ALTER TABLE users ADD COLUMN xp_week_start INTEGER NOT NULL DEFAULT 0")
             conn.execute("ALTER TABLE users ADD COLUMN week_id TEXT")
             log.info("migration: added users.xp_week_start / week_id")
+        if "is_admin" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+            log.info("migration: added users.is_admin")
 
         # Login accepts username OR email case-insensitively, but the UNIQUE
         # constraints above are BINARY — so "Alice" and "alice" could both be
@@ -304,6 +345,9 @@ def init_db():
                 ON password_resets(user_id);
             CREATE INDEX IF NOT EXISTS idx_resets_expires
                 ON password_resets(expires);
+            -- the activity log is read newest first.
+            CREATE INDEX IF NOT EXISTS idx_admin_log_ts
+                ON admin_log(ts);
             """
         )
 
@@ -390,10 +434,14 @@ def current_week_id(now: float | None = None) -> str:
     return time.strftime("%G-W%V", time.gmtime(now if now is not None else time.time()))
 
 
+def email_configured() -> bool:
+    return bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
+
+
 def send_email(to: str, subject: str, body: str) -> bool:
     """Send a plaintext email. If SMTP isn't configured, log the body instead
     (so local dev / reset links stay testable) and report False."""
-    if not (SMTP_HOST and SMTP_USER and SMTP_PASS):
+    if not email_configured():
         log.warning("SMTP not configured — email to %s NOT sent. Contents:\n%s", to, body)
         return False
     msg = EmailMessage()
@@ -426,6 +474,7 @@ def public_user(row) -> dict:
         "created": row["created"],
         "leaderboardOptIn": bool(row["leaderboard_opt_in"]),
         "xp": row["xp_total"],
+        "admin": bool(row["is_admin"]),
     }
 
 
@@ -475,13 +524,17 @@ def clear_session_cookie(response: JSONResponse):
 
 
 async def json_body(request: Request):
+    """The request's JSON object, or None. Every endpoint takes an object, so a
+    list or a bare number is as invalid as malformed JSON (and must not reach
+    the handlers' body.get() as a 500)."""
     try:
         body = await request.body()
         if len(body) > MAX_BODY:
             return None
-        return json.loads(body)
-    except (json.JSONDecodeError, UnicodeDecodeError):
+        body = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError):
         return None
+    return body if isinstance(body, dict) else None
 
 # --------------------------------------------------------------- rate limit
 
@@ -551,20 +604,26 @@ app = FastAPI(
     openapi_url="/api/openapi.json" if DEBUG else None,
 )
 
-# Tuned to what the site actually loads: Pyodide + KaTeX from jsDelivr, Google
-# Fonts, YouTube thumbnails and no-cookie embeds. 'unsafe-eval' and blob:
-# workers are required — the learner's code runs through new Function() and
-# Pyodide compiles WASM; 'unsafe-inline' covers the inline KaTeX bootstrap in
-# tracks/math.html and the style attributes the renderers emit.
+# Tuned to what the site actually loads: KaTeX from jsDelivr, Google Fonts,
+# YouTube thumbnails and no-cookie embeds. No eval and no workers: learners'
+# code runs in Google Colab, never in these pages.
+#
+# Scripts: only files from this site and the one KaTeX release, never inline
+# code. So even if markup were ever injected into a page, an inline
+# <script> or onclick= in it would not run. jsDelivr is pinned to the KaTeX
+# path (it also serves any npm package or GitHub repo, which an attacker
+# could publish), and tracks/math.html adds integrity= hashes on top.
+# 'unsafe-inline' stays for styles only: the renderers emit style attributes.
+KATEX = "https://cdn.jsdelivr.net/npm/katex@0.16.11/"
 CSP = "; ".join([
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net blob:",
-    "worker-src 'self' blob:",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
-    "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net",
-    "img-src 'self' data: blob: https://i.ytimg.com",
+    f"script-src 'self' {KATEX}",
+    "worker-src 'none'",
+    f"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com {KATEX}",
+    f"font-src 'self' data: https://fonts.gstatic.com {KATEX}",
+    "img-src 'self' data: https://i.ytimg.com",
     "frame-src 'self' https://www.youtube-nocookie.com",
-    "connect-src 'self' https://cdn.jsdelivr.net",
+    "connect-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -593,6 +652,15 @@ async def guard(request: Request, call_next):
     path = request.url.path
     if not path.startswith("/api/") and not static_allowed(path):
         return err("not found", 404)
+    # Cross-site request forgery: a form or <img> on another site can only send
+    # form or text bodies. A JSON body from another origin needs a CORS
+    # preflight, which this API never grants. Requiring JSON on every API write
+    # therefore also covers same-site pages (other subdomains), where the
+    # SameSite=Lax cookie alone would still be sent.
+    if path.startswith("/api/") and request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        ctype = request.headers.get("content-type", "").split(";")[0].strip().lower()
+        if ctype != "application/json":
+            return err("Send the request as JSON.", 415)
     # global body-size cap (cheap check via header; body() re-checks)
     cl = request.headers.get("content-length")
     if cl and cl.isdigit() and int(cl) > MAX_BODY:
@@ -604,6 +672,9 @@ async def guard(request: Request, call_next):
 
     if DEBUG or path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
+    elif path.startswith("/assets/colab/"):
+        # the exercise notebooks change with the exercises: always revalidate
+        response.headers["Cache-Control"] = "no-cache"
     elif path.startswith("/assets/"):
         response.headers["Cache-Control"] = "public, max-age=86400"
     else:
@@ -615,6 +686,11 @@ async def guard(request: Request, call_next):
     response.headers["Content-Security-Policy"] = CSP
     if SECURE_COOKIES:  # only meaningful (and only sent) over HTTPS in production
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # Search engines index the pages people read, nothing else: not the API,
+    # not the account and admin pages (password-reset links land on the
+    # former), and not the course downloads, so "site: filetype:pdf"-style searches find nothing.
+    if path.startswith(("/api/", "/assets/")) or path in ("/account.html", "/admin.html"):
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
 
     if path.startswith("/api/"):
         log.info("%s %s %s %dms", request.method, path, response.status_code, ms)
@@ -660,7 +736,7 @@ async def api_register(request: Request):
 
     if not USERNAME_RE.match(username):
         return err("Username must be 3-20 characters: letters, digits, underscore.")
-    if not EMAIL_RE.match(email):
+    if len(email) > MAX_EMAIL or not EMAIL_RE.match(email):
         return err("That doesn't look like an email address.")
     if len(password) < 8:
         return err("Password must be at least 8 characters.")
@@ -955,6 +1031,21 @@ async def api_change_password(request: Request):
     return {"ok": True}
 
 
+def new_reset_link(conn, user_id: int) -> str:
+    """A fresh one-hour password-reset link for the user, replacing any older
+    one. Only the token's hash is stored. The caller commits."""
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    now = time.time()
+    conn.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
+    conn.execute(
+        "INSERT INTO password_resets (token_hash, user_id, created, expires) "
+        "VALUES (?, ?, ?, ?)",
+        (token_hash, user_id, now, now + RESET_TTL),
+    )
+    return f"{BASE_URL}/account.html?reset={token}"
+
+
 def _forgot_password(email: str):
     """Returns the reset link to send, or None when the email is unknown."""
     with db() as conn:
@@ -963,17 +1054,9 @@ def _forgot_password(email: str):
         ).fetchone()
         if row is None:
             return None
-        token = secrets.token_urlsafe(32)
-        token_hash = hashlib.sha256(token.encode()).hexdigest()
-        now = time.time()
-        conn.execute("DELETE FROM password_resets WHERE user_id = ?", (row["id"],))
-        conn.execute(
-            "INSERT INTO password_resets (token_hash, user_id, created, expires) "
-            "VALUES (?, ?, ?, ?)",
-            (token_hash, row["id"], now, now + RESET_TTL),
-        )
+        link = new_reset_link(conn, row["id"])
         conn.commit()
-    return f"{BASE_URL}/account.html?reset={token}"
+    return link
 
 
 @app.post("/api/forgot-password")
@@ -1040,6 +1123,15 @@ async def api_reset_password(request: Request):
     return {"ok": True}
 
 
+def delete_user_rows(conn, uid: int):
+    """Remove an account and everything stored for it. The caller commits."""
+    # child rows first: foreign keys are enforced on this connection.
+    conn.execute("DELETE FROM state WHERE user_id = ?", (uid,))
+    conn.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
+    conn.execute("DELETE FROM password_resets WHERE user_id = ?", (uid,))
+    conn.execute("DELETE FROM users WHERE id = ?", (uid,))
+
+
 def _delete_account(token, password: str):
     with db() as conn:
         user = current_user(token, conn)
@@ -1047,12 +1139,7 @@ def _delete_account(token, password: str):
             return "unauthorized"
         if not verify_password(user, password):
             return "wrong-password"
-        uid = user["id"]
-        # child rows first: foreign keys are enforced on this connection.
-        conn.execute("DELETE FROM state WHERE user_id = ?", (uid,))
-        conn.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
-        conn.execute("DELETE FROM password_resets WHERE user_id = ?", (uid,))
-        conn.execute("DELETE FROM users WHERE id = ?", (uid,))
+        delete_user_rows(conn, user["id"])
         conn.commit()
         return user["username"]
 
@@ -1073,184 +1160,676 @@ async def api_delete_account(request: Request):
     clear_session_cookie(response)
     return response
 
-# ---------------------------------------------------------------- C++ runner
+# ---------------------------------------------------------------- admin
 #
-# C++ is the one language that can't run in the learner's browser, so it's
-# compiled and run on the server. Never by this process: in Docker, by the
-# `runner` container (runner/cpp_runner.py), which has no network, holds
-# nothing, and runs each program as a throwaway user with hard limits; this app
-# only hands it the program over a Unix socket (ACADEMY_CPP_RUNNER). Without
-# Docker, ACADEMY_CPP=1 runs the same code in-process on a developer's own
-# computer. Neither set: C++ is off.
-
-CPP_RUNNER_SOCKET = os.environ.get("ACADEMY_CPP_RUNNER", "")
-CPP_MODE = "runner" if CPP_RUNNER_SOCKET else ("local" if ENABLE_CPP and CPP_COMPILER else "off")
-CPP_OUTPUT_KEEP = 20_000
-
-# Compiled ahead of every submission. `#line` directives name each part, so a
-# compile error says `solution.cpp:3:12`, the learner's own line 3, not a line
-# number shifted by everything above it. __check reports each test as one JSON
-# array per line on file descriptor 3, apart from anything the learner prints.
-CPP_PREAMBLE = r"""#line 1 "academy.h"
-#include <algorithm>
-#include <array>
-#include <climits>
-#include <cmath>
-#include <cstdio>
-#include <deque>
-#include <functional>
-#include <iomanip>
-#include <iostream>
-#include <map>
-#include <numeric>
-#include <queue>
-#include <set>
-#include <sstream>
-#include <stack>
-#include <string>
-#include <tuple>
-#include <unordered_map>
-#include <unordered_set>
-#include <utility>
-#include <vector>
-using namespace std;
-// Printed lines reach the output panel even if the program crashes later.
-static int __academy_line_buffered = (setvbuf(stdout, nullptr, _IOLBF, 0), 0);
-static string __json(const string& s) {
-  string r = "\"";
-  for (unsigned char c : s) {
-    if (c == '"' || c == '\\') { r += '\\'; r += (char)c; }
-    else if (c < 0x20) { char b[8]; snprintf(b, sizeof b, "\\u%04x", c); r += b; }
-    else r += (char)c;
-  }
-  return r + "\"";
-}
-static string __ts(bool v) { return v ? "true" : "false"; }
-static string __ts(char v) { return __json(string(1, v)); }
-static string __ts(int v) { return to_string(v); }
-static string __ts(long v) { return to_string(v); }
-static string __ts(long long v) { return to_string(v); }
-static string __ts(unsigned v) { return to_string(v); }
-static string __ts(unsigned long v) { return to_string(v); }
-static string __ts(unsigned long long v) { return to_string(v); }
-static string __ts(double v) { char b[40]; snprintf(b, sizeof b, "%.10g", v); return b; }
-static string __ts(float v) { return __ts((double)v); }
-static string __ts(const string& v) { return __json(v); }
-static string __ts(const char* v) { return __json(v); }
-template <class T> string __ts(const vector<T>& v);
-template <class A, class B> string __ts(const pair<A, B>& p);
-template <class T, size_t N> string __ts(const array<T, N>& v);
-template <class T> string __seq(const T& v) {
-  string r = "[";
-  bool first = true;
-  for (const auto& x : v) { if (!first) r += ","; r += __ts(x); first = false; }
-  return r + "]";
-}
-template <class T> string __ts(const vector<T>& v) { return __seq(v); }
-template <class T, size_t N> string __ts(const array<T, N>& v) { return __seq(v); }
-template <class A, class B> string __ts(const pair<A, B>& p) { return "[" + __ts(p.first) + "," + __ts(p.second) + "]"; }
-template <class A, class B>
-void __check(const string& name, const A& actual, const B& expected) {
-  static FILE* results = fdopen(3, "w");
-  string a = __ts(actual), e = __ts(expected);
-  if (!results) return;
-  fprintf(results, "[%s,%s,%s,%s]\n", __json(name).c_str(), a == e ? "true" : "false",
-          __json(e).c_str(), __json(a).c_str());
-  fflush(results);
-}
-"""
+# Admins are ordinary accounts with users.is_admin = 1. Only the command line
+# on the server grants or removes it (`make admin NAME=...` runs
+# `python app.py admin add NAME`). Nothing reachable over HTTP can make an
+# admin, so a stolen admin session can't mint more of them. Every admin
+# endpoint checks the flag on each request, and every change an admin makes
+# is written to admin_log as well as the app log.
 
 
-def build_cpp_program(source: str, harness: str, prelude: str = "") -> str:
-    """The preamble, the problem's given types (prelude), the learner's code
-    and the tests, each under its own name for compiler messages."""
-    return "\n".join([CPP_PREAMBLE, '#line 1 "given.cpp"', prelude,
-                      '#line 1 "solution.cpp"', source, '#line 1 "tests.cpp"', harness, ""])
+class AdminError(Exception):
+    def __init__(self, message: str, status: int = 400):
+        super().__init__(message)
+        self.message = message
+        self.status = status
 
 
-_local_cpp = None
+def _as_admin(token, fn, *args):
+    with db() as conn:
+        admin = current_user(token, conn)
+        if admin is None:
+            raise AdminError("not signed in", 401)
+        if not admin["is_admin"]:
+            raise AdminError("Admins only.", 403)
+        return fn(conn, admin, *args)
 
 
-def _run_cpp_program(program: str) -> dict:
-    """Blocking (called via run_in_threadpool): the runner's raw reply."""
-    global _local_cpp
+async def admin_call(request: Request, fn, *args):
+    """fn(conn, admin_row, *args) in the thread pool, for a signed-in admin
+    only. AdminError becomes the matching JSON error response."""
     try:
-        if CPP_MODE == "runner":
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-                s.settimeout(75)   # queue wait + compile + run, with room to spare
-                s.connect(CPP_RUNNER_SOCKET)
-                s.sendall(json.dumps({"source": program}).encode() + b"\n")
-                return json.loads(s.makefile("rb").readline(16 * 1024 * 1024))
-        if _local_cpp is None:
-            spec = importlib.util.spec_from_file_location("cpp_runner", ROOT / "runner" / "cpp_runner.py")
-            _local_cpp = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(_local_cpp)
-        return _local_cpp.run_local(program)
-    except (OSError, ValueError) as exc:
-        log.warning("C++ runner unreachable: %r", exc)
-        return {"error": "unavailable"}
-    except Exception:  # noqa: BLE001 — the learner gets a message, the log gets the rest
-        log.exception("C++ runner failed")
-        return {"error": "internal"}
+        return await run_in_threadpool(_as_admin, session_token(request), fn, *args)
+    except AdminError as e:
+        return err(e.message, e.status)
 
 
-def _cpp_results(text: str) -> list:
-    results = []
-    for line in text.splitlines():
+def audit(conn, admin_name: str, action: str, target: str | None = None, detail: str | None = None):
+    """Record an admin's change. The caller commits (with the change itself)."""
+    conn.execute(
+        "INSERT INTO admin_log (ts, admin, action, target, detail) VALUES (?, ?, ?, ?, ?)",
+        (time.time(), admin_name, action, target, detail),
+    )
+    log.info("admin user=%s action=%s target=%s", admin_name, action, target)
+
+
+def learner_progress(data_json) -> dict:
+    """What a learner has done, read from their synced state blob: the
+    browser's localStorage keys (js/progress.js, js/xp.js). Anything
+    malformed counts as nothing."""
+    def obj(raw):
         try:
-            name, passed, expected, actual = json.loads(line)
-        except (ValueError, TypeError):
-            continue
-        results.append({"name": str(name), "pass": passed is True, "expected": str(expected), "actual": str(actual)})
-        if len(results) >= 200:
-            break
-    return results
+            value = json.loads(raw) if isinstance(raw, str) else raw
+        except (json.JSONDecodeError, TypeError, ValueError, RecursionError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    blob = current_keys(obj(data_json))
+    progress = obj(blob.get(STORE_PREFIX + "progress:v1"))
+    awards = obj(obj(blob.get(XP_KEY)).get("awards"))
+    streak = obj(progress.get("streak"))
+
+    def when(v):  # completion time in ms; very old progress stored `true`
+        return v if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) else None
+
+    def ids(prefix):
+        return sorted(k[len(prefix):] for k in awards if k.startswith(prefix))
+
+    return {
+        "done": {k: when(v) for k, v in obj(progress.get("done")).items() if v},
+        "quiz": {
+            k: {"score": v.get("score"), "total": v.get("total")}
+            for k, v in obj(progress.get("quiz")).items() if isinstance(v, dict)
+        },
+        "streak": {"count": streak.get("count") if isinstance(streak.get("count"), int) else 0,
+                   "last": streak.get("last") if isinstance(streak.get("last"), str) else None},
+        "labs": ids("lab:"),
+        "missions": ids("mission:"),
+        "exercises": sum(1 for k in awards if k.startswith("ex:")),
+    }
 
 
-def cpp_response(raw: dict) -> dict:
-    """The runner's reply → what the page shows: test results, the program's
-    own output, and at most one error, as a kind the page words for itself (in
-    English or Armenian)."""
-    if "error" in raw:
-        return {"results": [], "output": "", "error": {"kind": "busy" if raw["error"] == "busy" else "unavailable"}}
-    if not raw.get("compiled"):
-        if raw.get("timed_out"):
-            return {"results": [], "output": "", "error": {"kind": "compile_timeout"}}
-        return {"results": [], "output": "", "error": {"kind": "compile", "detail": raw.get("compile_output", "")[:4000]}}
-    stdout, stderr = raw.get("stdout", ""), raw.get("stderr", "")
-    if stdout and stderr and not stdout.endswith("\n"):
-        stdout += "\n"
-    out = {"results": _cpp_results(raw.get("results", "")), "output": (stdout + stderr)[:CPP_OUTPUT_KEEP]}
-    if raw.get("output_limit"):
-        out["error"] = {"kind": "output_limit"}
-    elif raw.get("timed_out"):
-        out["error"] = {"kind": "timeout"}
-    elif raw.get("signal"):
-        out["error"] = {"kind": "crash", "signal": raw["signal"]}
-    elif raw.get("exit_code") not in (0, None):
-        out["error"] = {"kind": "exit", "code": raw["exit_code"]}
+def week_xp(row, wk: str) -> int:
+    return (row["xp_total"] - row["xp_week_start"]) if row["week_id"] == wk else 0
+
+
+def find_learner(conn, username: str):
+    row = conn.execute(
+        "SELECT u.*, s.updated AS last_active, s.data AS data FROM users u "
+        "LEFT JOIN state s ON s.user_id = u.id WHERE u.username = ? COLLATE NOCASE",
+        (username,),
+    ).fetchone()
+    if row is None:
+        raise AdminError("No such learner.", 404)
+    return row
+
+
+def learner_summary(row, wk: str) -> dict:
+    return {
+        "username": row["username"],
+        "email": row["email"],
+        "created": row["created"],
+        "lastActive": row["last_active"],
+        "xp": row["xp_total"],
+        "weekXp": week_xp(row, wk),
+        "optIn": bool(row["leaderboard_opt_in"]),
+        "admin": bool(row["is_admin"]),
+    }
+
+
+# --- statistics
+
+def _overview(conn, _admin):
+    now = time.time()
+    day = 86400
+    one = lambda sql, *args: conn.execute(sql, args).fetchone()[0]  # noqa: E731
+    days = [time.strftime("%Y-%m-%d", time.gmtime(now - (29 - i) * day)) for i in range(30)]
+    signups = dict(conn.execute(
+        "SELECT date(created, 'unixepoch'), COUNT(*) FROM users WHERE created >= ? GROUP BY 1",
+        (now - 30 * day,),
+    ).fetchall())
+
+    # Progress lives in each learner's blob, so add them up. Lesson ids start
+    # with their track's id ("web-2-4"), which is how completions map to tracks.
+    lessons, labs, missions, completions = Counter(), Counter(), Counter(), Counter()
+    starters, track_done = Counter(), Counter()
+    with_progress = 0
+    for row in conn.execute("SELECT data FROM state"):
+        p = learner_progress(row["data"])
+        if p["done"]:
+            with_progress += 1
+        lessons.update(p["done"].keys())
+        labs.update(p["labs"])
+        missions.update(p["missions"])
+        tracks = Counter(lid.split("-", 1)[0] for lid in p["done"])
+        starters.update(tracks.keys())
+        track_done.update(tracks)
+        for ms in p["done"].values():
+            if ms and ms / 1000 >= now - 30 * day:
+                completions[time.strftime("%Y-%m-%d", time.gmtime(ms / 1000))] += 1
+
+    return {
+        "learners": one("SELECT COUNT(*) FROM users"),
+        "admins": one("SELECT COUNT(*) FROM users WHERE is_admin = 1"),
+        "new7": one("SELECT COUNT(*) FROM users WHERE created >= ?", now - 7 * day),
+        "new30": one("SELECT COUNT(*) FROM users WHERE created >= ?", now - 30 * day),
+        "active7": one("SELECT COUNT(*) FROM state WHERE updated >= ?", now - 7 * day),
+        "active30": one("SELECT COUNT(*) FROM state WHERE updated >= ?", now - 30 * day),
+        "optedIn": one("SELECT COUNT(*) FROM users WHERE leaderboard_opt_in = 1"),
+        "xpTotal": one("SELECT COALESCE(SUM(xp_total), 0) FROM users"),
+        "withProgress": with_progress,
+        "days": days,
+        "signups": [signups.get(d, 0) for d in days],
+        "completions": [completions.get(d, 0) for d in days],
+        "lessons": dict(lessons),
+        "tracks": {t: {"starters": starters[t], "completions": track_done[t]} for t in starters},
+        "labs": dict(labs),
+        "missions": dict(missions),
+    }
+
+
+@app.get("/api/admin/overview")
+async def api_admin_overview(request: Request):
+    return await admin_call(request, _overview)
+
+
+# --- learners
+
+# ORDER BY clauses by name. The request picks a key; its text never reaches SQL.
+LEARNER_SORTS = {
+    "created": "u.created DESC",
+    "active": "COALESCE(s.updated, 0) DESC, u.created DESC",
+    "xp": "u.xp_total DESC, u.username COLLATE NOCASE",
+    "name": "u.username COLLATE NOCASE",
+}
+LEARNERS_PAGE = 50
+
+
+def like_pattern(text: str) -> str:
+    """`text` as a literal substring for LIKE ... ESCAPE '\\': its own % and _
+    match only themselves."""
+    return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+def _learners(conn, _admin, query: str, sort: str, offset: int):
+    where, args = "", []
+    if query:
+        where = "WHERE u.username LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\'"
+        args = [like_pattern(query)] * 2
+    total = conn.execute(f"SELECT COUNT(*) FROM users u {where}", args).fetchone()[0]
+    rows = conn.execute(
+        "SELECT u.*, s.updated AS last_active, s.data AS data FROM users u "
+        f"LEFT JOIN state s ON s.user_id = u.id {where} "
+        f"ORDER BY {LEARNER_SORTS[sort]} LIMIT ? OFFSET ?",
+        [*args, LEARNERS_PAGE, offset],
+    ).fetchall()
+    wk = current_week_id()
+    learners = []
+    for row in rows:
+        p = learner_progress(row["data"])
+        learners.append({**learner_summary(row, wk), "lessons": len(p["done"])})
+    return {"total": total, "offset": offset, "pageSize": LEARNERS_PAGE, "learners": learners}
+
+
+@app.get("/api/admin/users")
+async def api_admin_users(request: Request):
+    params = request.query_params
+    query = params.get("q", "").strip()[:100]
+    sort = params.get("sort", "created")
+    if sort not in LEARNER_SORTS:
+        sort = "created"
+    offset = params.get("offset", "0")
+    offset = int(offset) if offset.isdigit() else 0
+    return await admin_call(request, _learners, query, sort, offset)
+
+
+def _learner(conn, _admin, username: str):
+    row = find_learner(conn, username)
+    sessions, last_sign_in = conn.execute(
+        "SELECT COUNT(*), MAX(created) FROM sessions WHERE user_id = ? AND created >= ?",
+        (row["id"], time.time() - SESSION_TTL),
+    ).fetchone()
+    return {
+        "learner": {**learner_summary(row, current_week_id()), "sessions": sessions, "lastSignIn": last_sign_in},
+        "progress": learner_progress(row["data"]),
+    }
+
+
+@app.get("/api/admin/users/{username}")
+async def api_admin_user(request: Request, username: str):
+    return await admin_call(request, _learner, username)
+
+
+def _learner_reset_link(conn, admin, username: str):
+    row = find_learner(conn, username)
+    link = new_reset_link(conn, row["id"])
+    audit(conn, admin["username"], "reset-link", row["username"])
+    conn.commit()
+    return row["email"], link
+
+
+@app.post("/api/admin/users/{username}/reset-link")
+async def api_admin_reset_link(request: Request, username: str):
+    out = await admin_call(request, _learner_reset_link, username)
+    if isinstance(out, JSONResponse):
+        return out
+    email, link = out
+    if not email_configured():
+        # Nothing can send it, so the admin passes it on. With email set up,
+        # the link goes only to the learner: an admin can't take an account.
+        return {"sent": False, "link": link}
+    return JSONResponse({"sent": True, "email": email}, background=BackgroundTask(
+        send_email,
+        email,
+        "Set a new 1991 Academy password",
+        "An administrator of 1991 Academy sent you a link to set a new password.\n\n"
+        f"Set a new password (link valid for 1 hour):\n{link}\n\n"
+        "If you didn't ask for this, ignore this email — your password is unchanged.",
+    ))
+
+
+def _learner_sign_out(conn, admin, username: str):
+    row = find_learner(conn, username)
+    if row["id"] == admin["id"]:
+        raise AdminError("That's you: sign out from your account page instead.")
+    n = conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],)).rowcount
+    audit(conn, admin["username"], "sign-out", row["username"], f"{n} session(s)")
+    conn.commit()
+    return {"ok": True, "sessions": n}
+
+
+@app.post("/api/admin/users/{username}/sign-out")
+async def api_admin_sign_out(request: Request, username: str):
+    return await admin_call(request, _learner_sign_out, username)
+
+
+def _learner_delete(conn, admin, username: str):
+    row = find_learner(conn, username)
+    if row["is_admin"]:
+        raise AdminError("Admin accounts can't be deleted here. Remove the admin rights on the server first.", 409)
+    delete_user_rows(conn, row["id"])
+    audit(conn, admin["username"], "delete-account", row["username"])
+    conn.commit()
+    return {"ok": True}
+
+
+@app.post("/api/admin/users/{username}/delete")
+async def api_admin_delete(request: Request, username: str):
+    return await admin_call(request, _learner_delete, username)
+
+
+# --- lessons
+
+LESSON_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)+$")   # web-2-4: track, then the rest
+SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+# The HTML a lesson may contain: what the built-in lessons use, plus a few
+# harmless extras. Everything else (scripts, styles, event handlers, iframes,
+# javascript: links) is removed when the lesson is saved, so even a stolen
+# admin account can't put code on the pages learners read.
+LESSON_TAGS = {
+    "p", "h3", "h4", "ul", "ol", "li", "strong", "em", "b", "i", "u", "code", "pre",
+    "div", "span", "br", "hr", "blockquote", "a", "sub", "sup", "kbd",
+    "table", "thead", "tbody", "tr", "th", "td",
+}
+
+
+def clean_html(html: str) -> str:
+    return nh3.clean(
+        html,
+        tags=LESSON_TAGS,
+        attributes={"a": {"href", "title"}},
+        allowed_classes={"div": {"callout"}},
+        url_schemes={"http", "https", "mailto"},
+        link_rel="noopener noreferrer",
+    )
+
+
+class Invalid(ValueError):
+    """A lesson or announcement the admin panel should be told to fix."""
+
+
+def _text(obj: dict, key: str, limit: int, label: str, required: bool = False) -> str:
+    value = obj.get(key, "")
+    if value is None:
+        value = ""
+    if not isinstance(value, str):
+        raise Invalid(f"{label} must be text.")
+    value = value.strip()
+    if required and not value:
+        raise Invalid(f"{label} is required.")
+    if len(value) > limit:
+        raise Invalid(f"{label} is too long (at most {limit} characters).")
+    return value
+
+
+def _list(obj: dict, key: str, limit: int, label: str) -> list:
+    value = obj.get(key) or []
+    if not isinstance(value, list):
+        raise Invalid(f"{label} must be a list.")
+    if len(value) > limit:
+        raise Invalid(f"At most {limit} {label}.")
+    return value
+
+
+def _takeaways(obj: dict, key: str, label: str) -> list:
+    out = []
+    for item in _list(obj, key, 12, label):
+        if not isinstance(item, str) or len(item) > 500:
+            raise Invalid(f"Each of the {label} is a line of at most 500 characters.")
+        item = clean_html(item.strip())
+        if item:
+            out.append(item)
     return out
 
 
-@app.post("/api/run-cpp")
-async def api_run_cpp(request: Request):
-    """Compile and run learner C++ against a problem's tests: in the runner
-    container, or (ACADEMY_CPP=1, no Docker) on this machine."""
-    if CPP_MODE == "off":
-        return JSONResponse({"results": [], "output": "", "error": {"kind": "disabled"}})
-    if rate_limited(request, "cpp", 12, 60):
-        return err("Too many compile requests — wait a minute.", 429)
+def _question(q, n: int) -> dict:
+    if not isinstance(q, dict):
+        raise Invalid(f"Quiz question {n} is malformed.")
+    label = f"Question {n}"
+    options = q.get("options")
+    if (not isinstance(options, list) or not 2 <= len(options) <= 6
+            or not all(isinstance(o, str) and o.strip() and len(o) <= 300 for o in options)):
+        raise Invalid(f"{label}: give 2 to 6 answer options, none empty.")
+    options_hy = q.get("options_hy") or []
+    if options_hy and (not isinstance(options_hy, list) or len(options_hy) != len(options)
+                       or not all(isinstance(o, str) and o.strip() and len(o) <= 300 for o in options_hy)):
+        raise Invalid(f"{label}: translate every answer option into Armenian, or none of them.")
+    answer = q.get("answer")
+    if isinstance(answer, bool) or not isinstance(answer, int) or not 0 <= answer < len(options):
+        raise Invalid(f"{label}: mark the correct answer.")
+    out = {
+        "q": _text(q, "q", 500, label, required=True),
+        "options": [o.strip() for o in options],
+        "answer": answer,
+        "explain": _text(q, "explain", 1000, f"{label}'s explanation"),
+        "q_hy": _text(q, "q_hy", 500, f"{label} (Armenian)"),
+        "explain_hy": _text(q, "explain_hy", 1000, f"{label}'s explanation (Armenian)"),
+    }
+    if options_hy:
+        out["options_hy"] = [o.strip() for o in options_hy]
+    return out
 
+
+def _video(v, n: int) -> dict:
+    if not isinstance(v, dict) or not isinstance(v.get("id"), str) or not YOUTUBE_ID_RE.match(v["id"]):
+        raise Invalid(f"Video {n}: paste a YouTube link (or its 11-character video id).")
+    return {
+        "id": v["id"],
+        "title": _text(v, "title", 200, f"Video {n}'s title", required=True),
+        "channel": _text(v, "channel", 100, f"Video {n}'s channel"),
+        "length": _text(v, "length", 20, f"Video {n}'s length"),
+    }
+
+
+def parse_lesson(lesson_id: str, body: dict) -> dict:
+    """A lesson from the admin panel, checked and with its HTML sanitized."""
+    if len(lesson_id) > 40 or not LESSON_ID_RE.match(lesson_id):
+        raise Invalid("Lesson id: lowercase letters, digits and dashes, like web-2-4.")
+    track, module, after = body.get("track"), body.get("module"), body.get("after") or None
+    for value, label in ((track, "track"), (module, "module")):
+        if not isinstance(value, str) or len(value) > 40 or not SLUG_RE.match(value):
+            raise Invalid(f"Unknown {label}.")
+    if not lesson_id.startswith(track + "-"):
+        raise Invalid(f"Lesson ids in this track start with {track}-.")
+    if after is not None and (not isinstance(after, str) or len(after) > 40 or not LESSON_ID_RE.match(after)):
+        raise Invalid("Unknown position.")
+    minutes = body.get("minutes")
+    if isinstance(minutes, bool) or not isinstance(minutes, int) or not 1 <= minutes <= 600:
+        raise Invalid("Reading time: a whole number of minutes, 1 to 600.")
+    content = clean_html(_text(body, "content", 100_000, "Content", required=True))
+    if not content.strip():
+        raise Invalid("Content is empty once unsupported HTML is removed.")
+    data = {
+        "title": _text(body, "title", 200, "Title", required=True),
+        "title_hy": _text(body, "title_hy", 200, "Title (Armenian)"),
+        "minutes": minutes,
+        "content": content,
+        "content_hy": clean_html(_text(body, "content_hy", 100_000, "Content (Armenian)")),
+        "takeaways": _takeaways(body, "takeaways", "takeaways"),
+        "takeaways_hy": _takeaways(body, "takeaways_hy", "Armenian takeaways"),
+        "quiz": [_question(q, i + 1) for i, q in enumerate(_list(body, "quiz", 20, "quiz questions"))],
+        "videos": [_video(v, i + 1) for i, v in enumerate(_list(body, "videos", 10, "videos"))],
+    }
+    return {"track": track, "module": module, "after": after,
+            "published": bool(body.get("published")), "data": data}
+
+
+def lesson_out(row) -> dict:
+    return {
+        "id": row["id"], "track": row["track"], "module": row["module"], "after": row["after"],
+        "published": bool(row["published"]), "created": row["created"], "updated": row["updated"],
+        "updatedBy": row["updated_by"], "data": json.loads(row["data"]),
+    }
+
+
+def _lessons(conn, _admin):
+    return {"lessons": [lesson_out(r) for r in conn.execute("SELECT * FROM lessons ORDER BY created")]}
+
+
+@app.get("/api/admin/lessons")
+async def api_admin_lessons(request: Request):
+    return await admin_call(request, _lessons)
+
+
+def _lesson_save(conn, admin, lesson_id: str, rec: dict):
+    now = time.time()
+    existed = conn.execute("SELECT 1 FROM lessons WHERE id = ?", (lesson_id,)).fetchone()
+    conn.execute(
+        "INSERT INTO lessons (id, track, module, after, data, published, created, updated, updated_by) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET "
+        "track = excluded.track, module = excluded.module, after = excluded.after, data = excluded.data, "
+        "published = excluded.published, updated = excluded.updated, updated_by = excluded.updated_by",
+        (lesson_id, rec["track"], rec["module"], rec["after"], json.dumps(rec["data"]),
+         int(rec["published"]), now, now, admin["username"]),
+    )
+    audit(conn, admin["username"], "lesson-update" if existed else "lesson-create", lesson_id,
+          "published" if rec["published"] else "draft")
+    conn.commit()
+    return {"lesson": lesson_out(conn.execute("SELECT * FROM lessons WHERE id = ?", (lesson_id,)).fetchone())}
+
+
+@app.put("/api/admin/lessons/{lesson_id}")
+async def api_admin_lesson_save(request: Request, lesson_id: str):
     body = await json_body(request)
-    if body is None or not isinstance(body.get("source"), str) or not isinstance(body.get("harness"), str) \
-            or not isinstance(body.get("prelude", ""), str):
+    if body is None:
         return err("invalid request body")
-    source, harness, prelude = body["source"], body["harness"], body.get("prelude", "")
-    if max(len(source), len(harness), len(prelude)) > MAX_CODE_BYTES:
-        return JSONResponse({"results": [], "output": "", "error": {"kind": "too_large"}})
+    try:
+        rec = parse_lesson(lesson_id, body)
+    except Invalid as e:
+        return err(str(e))
+    return await admin_call(request, _lesson_save, lesson_id, rec)
 
-    raw = await run_in_threadpool(_run_cpp_program, build_cpp_program(source, harness, prelude))
-    return JSONResponse(cpp_response(raw))
+
+def _lesson_preview(_conn, _admin, rec: dict):
+    return {"data": rec["data"]}
+
+
+@app.post("/api/admin/lessons/{lesson_id}/preview")
+async def api_admin_lesson_preview(request: Request, lesson_id: str):
+    """The lesson exactly as saving it would store it (checked and sanitized),
+    without saving anything."""
+    body = await json_body(request)
+    if body is None:
+        return err("invalid request body")
+    try:
+        rec = parse_lesson(lesson_id, body)
+    except Invalid as e:
+        return err(str(e))
+    return await admin_call(request, _lesson_preview, rec)
+
+
+def _lesson_delete(conn, admin, lesson_id: str):
+    if conn.execute("DELETE FROM lessons WHERE id = ?", (lesson_id,)).rowcount == 0:
+        raise AdminError("No such lesson.", 404)
+    audit(conn, admin["username"], "lesson-delete", lesson_id)
+    conn.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/admin/lessons/{lesson_id}")
+async def api_admin_lesson_delete(request: Request, lesson_id: str):
+    return await admin_call(request, _lesson_delete, lesson_id)
+
+
+# --- announcements
+
+def parse_announcement(body: dict) -> dict:
+    level = body.get("level", "info")
+    if level not in ("info", "warning"):
+        raise Invalid("Unknown kind of announcement.")
+    return {
+        "text": _text(body, "text", 300, "The announcement", required=True),
+        "text_hy": _text(body, "text_hy", 300, "The Armenian announcement"),
+        "level": level,
+        "active": bool(body.get("active", True)),
+    }
+
+
+def announcement_out(row) -> dict:
+    return {"id": row["id"], "text": row["text"], "text_hy": row["text_hy"], "level": row["level"],
+            "active": bool(row["active"]), "created": row["created"], "createdBy": row["created_by"]}
+
+
+def _announcements(conn, _admin):
+    rows = conn.execute("SELECT * FROM announcements ORDER BY created DESC")
+    return {"announcements": [announcement_out(r) for r in rows]}
+
+
+@app.get("/api/admin/announcements")
+async def api_admin_announcements(request: Request):
+    return await admin_call(request, _announcements)
+
+
+def _announcement_create(conn, admin, rec: dict):
+    cur = conn.execute(
+        "INSERT INTO announcements (text, text_hy, level, active, created, created_by) VALUES (?, ?, ?, ?, ?, ?)",
+        (rec["text"], rec["text_hy"], rec["level"], int(rec["active"]), time.time(), admin["username"]),
+    )
+    audit(conn, admin["username"], "announcement-create", str(cur.lastrowid), rec["text"][:80])
+    conn.commit()
+    return {"announcement": announcement_out(
+        conn.execute("SELECT * FROM announcements WHERE id = ?", (cur.lastrowid,)).fetchone())}
+
+
+def _announcement_update(conn, admin, aid: int, rec: dict):
+    if conn.execute(
+        "UPDATE announcements SET text = ?, text_hy = ?, level = ?, active = ? WHERE id = ?",
+        (rec["text"], rec["text_hy"], rec["level"], int(rec["active"]), aid),
+    ).rowcount == 0:
+        raise AdminError("No such announcement.", 404)
+    audit(conn, admin["username"], "announcement-update", str(aid), "shown" if rec["active"] else "hidden")
+    conn.commit()
+    return {"announcement": announcement_out(
+        conn.execute("SELECT * FROM announcements WHERE id = ?", (aid,)).fetchone())}
+
+
+def _announcement_delete(conn, admin, aid: int):
+    if conn.execute("DELETE FROM announcements WHERE id = ?", (aid,)).rowcount == 0:
+        raise AdminError("No such announcement.", 404)
+    audit(conn, admin["username"], "announcement-delete", str(aid))
+    conn.commit()
+    return {"ok": True}
+
+
+async def announcement_body(request: Request):
+    body = await json_body(request)
+    if body is None:
+        return None, err("invalid request body")
+    try:
+        return parse_announcement(body), None
+    except Invalid as e:
+        return None, err(str(e))
+
+
+@app.post("/api/admin/announcements")
+async def api_admin_announcement_create(request: Request):
+    rec, problem = await announcement_body(request)
+    return problem or await admin_call(request, _announcement_create, rec)
+
+
+@app.put("/api/admin/announcements/{aid}")
+async def api_admin_announcement_update(request: Request, aid: int):
+    rec, problem = await announcement_body(request)
+    return problem or await admin_call(request, _announcement_update, aid, rec)
+
+
+@app.delete("/api/admin/announcements/{aid}")
+async def api_admin_announcement_delete(request: Request, aid: int):
+    return await admin_call(request, _announcement_delete, aid)
+
+
+# --- activity log
+
+def _admin_log(conn, _admin):
+    rows = conn.execute("SELECT * FROM admin_log ORDER BY ts DESC, id DESC LIMIT 200")
+    return {"entries": [{"ts": r["ts"], "admin": r["admin"], "action": r["action"],
+                         "target": r["target"], "detail": r["detail"]} for r in rows]}
+
+
+@app.get("/api/admin/log")
+async def api_admin_log(request: Request):
+    return await admin_call(request, _admin_log)
+
+
+# --- what every page loads: published lessons and active announcements
+
+def _public_content():
+    with db() as conn:
+        lessons = [
+            {"id": r["id"], "track": r["track"], "module": r["module"], "after": r["after"],
+             "data": json.loads(r["data"])}
+            for r in conn.execute("SELECT * FROM lessons WHERE published = 1 ORDER BY created")
+        ]
+        announcements = [
+            {"id": r["id"], "text": r["text"], "text_hy": r["text_hy"], "level": r["level"]}
+            for r in conn.execute("SELECT * FROM announcements WHERE active = 1 ORDER BY created DESC")
+        ]
+    return {"lessons": lessons, "announcements": announcements}
+
+
+@app.get("/api/content.js")
+async def api_content_js():
+    """A script, so pages get it before they render (js/custom-content.js
+    applies it). json.dumps escapes every non-ASCII character and quote, so
+    the data can only ever be a JavaScript value."""
+    content = await run_in_threadpool(_public_content)
+    return Response(
+        "window.ACADEMY_CUSTOM = " + json.dumps(content, separators=(",", ":")) + ";\n",
+        media_type="application/javascript",
+    )
+
+
+# ------------------------------------------------------- command line (admins)
+
+
+def cli(args: list) -> int:
+    """python app.py admin add NAME | admin remove NAME | admin list"""
+    usage = "usage: python app.py admin add NAME | admin remove NAME | admin list"
+    if args[:1] != ["admin"] or len(args) < 2:
+        print(usage, file=sys.stderr)
+        return 2
+    init_db()
+    with db() as conn:
+        if args[1:] == ["list"]:
+            rows = conn.execute(
+                "SELECT username, email FROM users WHERE is_admin = 1 ORDER BY username COLLATE NOCASE"
+            ).fetchall()
+            for r in rows:
+                print(f"{r['username']}  <{r['email']}>")
+            if not rows:
+                print("No admins yet. Make one with: make admin NAME=<username>")
+            return 0
+        if len(args) != 3 or args[1] not in ("add", "remove"):
+            print(usage, file=sys.stderr)
+            return 2
+        row = conn.execute(
+            "SELECT id, username FROM users WHERE username = ? COLLATE NOCASE", (args[2],)
+        ).fetchone()
+        if row is None:
+            print(f"No account named {args[2]!r}. Create it on the site first, then run this again.",
+                  file=sys.stderr)
+            return 1
+        add = args[1] == "add"
+        conn.execute("UPDATE users SET is_admin = ? WHERE id = ?", (int(add), row["id"]))
+        audit(conn, "(server)", "admin-add" if add else "admin-remove", row["username"])
+        conn.commit()
+    print(f"{row['username']} is {'now an admin: sign in and open /admin.html' if add else 'no longer an admin'}.")
+    return 0
+
 
 # ---------------------------------------------------------------- health
 
@@ -1261,9 +1840,7 @@ async def api_health():
         "ok": True,
         "uptime_s": int(time.time() - STARTED_AT),
         "debug": DEBUG,
-        "cpp": CPP_MODE != "off",
-        "cpp_mode": CPP_MODE,
-        "email": bool(SMTP_HOST and SMTP_USER and SMTP_PASS),
+        "email": email_configured(),
         "secure_cookies": SECURE_COOKIES,
         "trust_proxy": TRUST_PROXY,
         "week": current_week_id(),
@@ -1277,10 +1854,9 @@ app.mount("/", StaticFiles(directory=str(ROOT), html=True), name="site")
 
 
 if __name__ == "__main__":
-    log.info("1991 Academy backend on http://localhost:%d  [C++ %s, debug=%s, secure_cookies=%s, trust_proxy=%s, rev=%s]",
-             PORT, CPP_MODE, DEBUG, SECURE_COOKIES, TRUST_PROXY, (REVISION or "dev")[:7])
-    # Loud warning if a public-looking config compiles learner code in-process.
-    if not DEBUG and CPP_MODE == "local":
-        log.warning("SECURITY: ACADEMY_CPP=1 in a non-debug run: learner C++ runs on this host, "
-                    "unsandboxed. On a public server use Docker, where the runner container does it.")
-    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+    if len(sys.argv) > 1:   # python app.py admin ... (see cli)
+        sys.exit(cli(sys.argv[1:]))
+    log.info("1991 Academy backend on http://localhost:%d  [debug=%s, secure_cookies=%s, trust_proxy=%s, rev=%s]",
+             PORT, DEBUG, SECURE_COOKIES, TRUST_PROXY, (REVISION or "dev")[:7])
+    # server_header=False: no "server: uvicorn" banner for scanners to match on
+    uvicorn.run(app, host=HOST, port=PORT, log_level="warning", server_header=False)

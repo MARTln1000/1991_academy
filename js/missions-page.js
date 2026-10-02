@@ -1,18 +1,13 @@
 /* ============================================
    1991 Academy — Missions page
    Card list with prerequisite locks + a detail
-   view with editor (JavaScript, Python or
-   C++), sandboxed tests and XP.
+   view: the brief, the mission's Google Colab
+   notebook (Python), hints and XP.
    ============================================ */
 
 (function () {
   const root = document.getElementById("missions-root");
   const missions = M.missions;
-  const DRAFT_PREFIX = "1991_academy:draft:";
-  const LANG_PREFIX = "1991_academy:missionlang:";
-  const LANG_LABEL = { javascript: "JavaScript", python: "Python", cpp: "C++" };
-  /* JavaScript drafts keep their original key, so nobody's saved work moves. */
-  const SUFFIX = { python: ":py", cpp: ":cpp", javascript: "" };
 
   const TRACK_CHIP_COLORS = {
     web: ["rgba(245,158,11,0.14)", "#f59e0b"],
@@ -102,109 +97,27 @@
 
   /* ---------- Detail view ---------- */
 
-  const variantFor = (m, lang) => (lang === "python" ? m.py : lang === "cpp" ? m.cpp : m);
-  const draftKey = (m, lang) => DRAFT_PREFIX + m.id + (SUFFIX[lang] || "");
-
-  function hintsHtml(m, lang) {
-    const hints = L(m, "hints").map((h, i) => "<details><summary>" + t("Hint {0}", i + 1) + "</summary><p>" + esc(h) + "</p></details>");
-    const variant = lang === "javascript" ? null : variantFor(m, lang);
-    if (variant && variant.hint) {
-      hints.push("<details><summary>" + t("Hint for {0}", LANG_LABEL[lang]) + "</summary><p>" + esc(L(variant, "hint")) + "</p></details>");
-    }
-    return hints.join("");
+  function hintsHtml(m) {
+    return L(m, "hints").map((h, i) => "<details><summary>" + t("Hint {0}", i + 1) + "</summary><p>" + esc(h) + "</p></details>").join("");
   }
 
   function renderDetail(m) {
     const doneBefore = XP.has("mission:" + m.id);
-    let lang = localStorage.getItem(LANG_PREFIX + m.id) || "javascript";
-    if (!variantFor(m, lang)) lang = "javascript";
-
     root.innerHTML =
       '<div class="mission-detail">' +
       '<a class="back-link" href="missions.html" style="margin-bottom:20px; display:inline-flex">' + t("← All missions") + "</a>" +
       '<div class="mission-top" style="margin:14px 0 6px"><span class="mission-icon" style="font-size:2.2rem">' + m.icon + "</span>" + chips(m) + "</div>" +
       "<h1 style=\"margin-bottom:14px\">" + esc(L(m, "title")) + (doneBefore ? ' <span class="ex-status ok" style="font-size:1rem">' + t("✓ completed") + "</span>" : "") + "</h1>" +
       '<div class="lesson-body">' + L(m, "brief") + "</div>" +
-      '<div class="editor-host"></div>' +
-      '<div class="ex-actions" style="margin-top:14px">' +
-      '<button class="btn btn-primary" data-run>' + t("▶ Run tests") + "</button>" +
-      '<button class="btn" data-reset-code>' + t("Reset code") + "</button>" +
-      '<span class="ex-status"></span></div>' +
-      '<div class="test-results"></div>' +
-      '<div class="hint-box">' + hintsHtml(m, lang) + "</div></div>";
+      Colab.panel(m.id, doneBefore) +
+      '<div class="hint-box">' + hintsHtml(m) + "</div></div>";
 
-    const resultsEl = root.querySelector(".test-results");
-    const status = root.querySelector(".ex-status");
-    const hintBox = root.querySelector(".hint-box");
-
-    const languages = ["javascript", "python", "cpp"]
-      .filter((l) => variantFor(m, l))
-      .map((l) => ({ id: l, label: LANG_LABEL[l] }));
-    const filenameFor = (l) => (l === "javascript" ? m.id.replace("mission-", "") : variantFor(m, l).fnName);
-    const starterFor = (l) => variantFor(m, l).starter;
-
-    const editor = CodeEditor.create(root.querySelector(".editor-host"), {
-      value: localStorage.getItem(draftKey(m, lang)) ?? starterFor(lang),
-      language: lang,
-      languages,
-      filename: filenameFor(lang),
-      onChange(v) {
-        localStorage.setItem(draftKey(m, lang), v);
-        if (window.Sync) Sync.schedule();
-      },
-      onLanguageChange(next) {
-        if (next === lang || !variantFor(m, next)) return;
-        localStorage.setItem(draftKey(m, lang), editor.getValue());
-        lang = next;
-        localStorage.setItem(LANG_PREFIX + m.id, lang);
-        editor.setLanguage(lang);
-        editor.setFilename(filenameFor(lang));
-        editor.setValue(localStorage.getItem(draftKey(m, lang)) ?? starterFor(lang));
-        resultsEl.innerHTML = "";
-        status.textContent = "";
-        hintBox.innerHTML = hintsHtml(m, lang);
-        if (lang === "python") Runner.warmPython(); /* start the download early */
-      },
-    });
-    if (lang === "python") Runner.warmPython();
-
-    root.querySelector("[data-reset-code]").addEventListener("click", () => {
-      editor.setValue(starterFor(lang));
-      localStorage.removeItem(draftKey(m, lang));
-      resultsEl.innerHTML = "";
-      status.textContent = "";
-    });
-
-    function runTests() {
-      const code = editor.getValue();
-      if (lang === "python") return Runner.python(code, m.py.tests, (msg) => { status.textContent = msg; });
-      if (lang === "cpp") return Runner.cpp(code, m.cpp.tests, m.cpp.prelude);
-      return Runner.javascript(code, m.tests);
-    }
-
-    const runBtn = root.querySelector("[data-run]");
-    runBtn.addEventListener("click", async () => {
-      runBtn.disabled = true;
-      status.textContent = t("Running…");
-      status.className = "ex-status";
-      try {
-        let out;
-        try {
-          out = await runTests();
-        } catch (err) {
-          out = { error: (err && err.message) || String(err), results: [] };
-        }
-        const summary = Runner.renderResults(resultsEl, out);
-        status.textContent = Runner.statusText(out, summary);
-        status.className = "ex-status " + (summary.allPass ? "ok" : "bad");
-        if (summary.allPass && XP.add(m.xp, "mission:" + m.id)) {
-          XP.bump("missions");
-          toast(t("🚀 Mission complete! +{0} XP", m.xp));
-          XP.checkAchievements();
-          XP.renderPill();
-        }
-      } finally {
-        runBtn.disabled = false;
+    Colab.wire(root, () => {
+      if (XP.add(m.xp, "mission:" + m.id)) {
+        XP.bump("missions");
+        toast(t("🚀 Mission complete! +{0} XP", m.xp));
+        XP.checkAchievements();
+        XP.renderPill();
       }
     });
   }
@@ -226,7 +139,7 @@
 
   window.addEventListener("hashchange", render);
   /* Keep the lock states honest when progress arrives from a sync or another
-     tab — but don't redraw an open editor out from under the learner. */
+     tab. An open mission is left as it is. */
   onStateChanged(() => {
     if (location.hash.replace("#", "")) {
       renderStreakPill();

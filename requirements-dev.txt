@@ -1,6 +1,9 @@
 # Dev/test only — NOT needed to run the server. Install with:
 #   .venv/bin/pip install -r requirements-dev.txt
-# Then run the API tests with:  .venv/bin/pytest -q
+# Then run the tests with:  .venv/bin/pytest -q
 -r requirements.txt
 pytest>=8
 httpx>=0.27
+# the Colab notebooks' visualizations and numpy exercises (tests/test_notebooks.py)
+matplotlib>=3.8
+numpy>=1.26

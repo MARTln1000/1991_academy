@@ -1,7 +1,7 @@
 # Every push runs the API tests, and builds and smoke-tests the Docker image
 # with the production settings from docker-compose.yml. Nothing is deployed
-# from here: a server picks up new code with `make update` (README.md → Run
-# with Docker).
+# from here: servers pull new commits on master themselves (`make
+# auto-update-on`, or `make update` by hand; README.md → Run with Docker).
 name: CI
 
 on:
@@ -38,8 +38,8 @@ jobs:
             requirements.lock
       - name: Install dependencies (pinned by requirements.lock)
         run: pip install -r requirements-dev.txt -c requirements.lock
-      # includes tests/test_content.py: every Lab problem and mission in all
-      # three languages (needs Node.js and g++, both on the runner image)
+      # includes tests/test_notebooks.py: every Colab notebook is up to date and
+      # works (needs Node.js, which the image has)
       - name: Run the tests
         run: pytest -q
 
@@ -49,8 +49,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - name: Build and start the app and the C++ runner (docker-compose.yml)
-        run: REVISION=$(git rev-parse HEAD) docker compose up -d --build --wait app runner
+      - name: Build and start the app container (docker-compose.yml)
+        run: REVISION=$(git rev-parse HEAD) docker compose up -d --build --wait app
       - name: Smoke test
         run: |
           health=$(curl -fsS http://127.0.0.1:8735/api/health)
@@ -59,11 +59,10 @@ jobs:
           python3 -c 'import json, sys
           h = json.loads(sys.argv[1])
           assert h["ok"] is True and h["revision"] == sys.argv[2], h
-          assert not h["debug"] and h["secure_cookies"] and h["trust_proxy"], h
-          assert h["cpp"] and h["cpp_mode"] == "runner", h' \
+          assert not h["debug"] and h["secure_cookies"] and h["trust_proxy"], h' \
             "$health" "$(git rev-parse HEAD)"
           # the frontend is served: pages, and files from inside its folders
-          for path in / /tracks/dl.html /js/common.js /css/tokens.css "/assets/courses/math/Homeworks/Homework%201.pdf"; do
+          for path in / /tracks/dl.html /js/common.js /css/tokens.css "/assets/courses/math/Homeworks/Homework%201.pdf" /assets/colab/en/lab-two-sum.ipynb; do
             curl -fsS -o /dev/null "http://127.0.0.1:8735$path" || { echo "::error::$path is not served"; exit 1; }
           done
           code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8735/app.py)
@@ -71,15 +70,6 @@ jobs:
           # the app's own user can read every file and enter every folder of the site
           blocked=$(docker compose exec -T app find /app \( ! -readable -o -type d ! -executable \) -print)
           [ -z "$blocked" ] || { echo "::error::unreadable for the app: $(echo "$blocked" | head -5 | tr '\n' ' ')"; exit 1; }
-      - name: C++ through the API, and hostile programs against the runner
-        run: |
-          reply=$(curl -fsS -X POST http://127.0.0.1:8735/api/run-cpp -H 'Content-Type: application/json' \
-            -d '{"source": "int add(int a, int b) { cout << \"hi\"; return a + b; }", "harness": "int main() { __check(\"adds\", add(2, 3), 5); }"}')
-          echo "$reply"
-          python3 -c 'import json, sys
-          r = json.loads(sys.argv[1])
-          assert r["results"] == [{"name": "adds", "pass": True, "expected": "5", "actual": "5"}] and r["output"] == "hi" and "error" not in r, r' "$reply"
-          docker compose exec -T app python - < tests/check_runner_sandbox.py
       - name: Backup and restore (make backup, make restore)
         run: |
           make backup
@@ -88,4 +78,4 @@ jobs:
           curl -fsS http://127.0.0.1:8735/api/health
       - name: Container log
         if: always()
-        run: docker compose logs app runner
+        run: docker compose logs app

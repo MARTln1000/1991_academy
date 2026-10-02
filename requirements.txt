@@ -1,2 +1,3 @@
 fastapi>=0.130
 uvicorn[standard]>=0.40
+nh3>=0.3   # sanitizes the lesson HTML written in the admin panel

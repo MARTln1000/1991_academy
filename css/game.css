@@ -421,75 +421,34 @@
 .mission-detail { max-width: 860px; margin-inline: auto; padding: 36px 0 80px; }
 .mission-detail .lesson-body { margin-bottom: 8px; }
 
-.code-editor {
-  width: 100%;
-  min-height: 260px;
-  resize: vertical;
-  font-family: var(--font-mono);
-  font-size: 0.86rem;
-  line-height: 1.6;
-  color: #dbe2f0;
-  background: #0d1017;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
+/* Code exercises open in Google Colab (js/colab.js) */
+.colab-panel {
+  margin-top: 16px;
   padding: 16px 18px;
-  tab-size: 2;
-}
-.code-editor:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-
-.test-results { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
-
-.test-row {
-  display: flex;
-  gap: 10px;
-  padding: 11px 16px;
-  border-radius: var(--radius-sm);
-  font-size: 0.88rem;
-  background: var(--bg-elevated);
-  border-left: 3px solid var(--border-strong);
-}
-.test-row.pass { border-left-color: var(--success); }
-.test-row.fail { border-left-color: var(--danger); }
-.test-row .t-detail {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  display: block;
-  margin-top: 3px;
-}
-/* An error: compiler messages and tracebacks keep their line breaks. */
-.test-row.run-error { align-items: flex-start; }
-.test-row.run-error pre,
-.run-output pre {
-  margin: 0;
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-/* What the learner's code printed (print, console.log, cout). */
-.run-output {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
-  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--card);
 }
-.run-output-label {
-  padding: 7px 16px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+.colab-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.colab-open { display: inline-flex; align-items: center; gap: 8px; }
+.colab-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f9ab00;
+  color: #1f1f1f;
+  font-size: 0.58rem;
+  font-weight: 800;
 }
-.run-output pre {
-  padding: 11px 16px;
-  max-height: 320px;
-  overflow: auto;
-}
+.colab-steps { margin: 0; padding-left: 1.4em; display: grid; gap: 16px; }
+.colab-steps li::marker { color: var(--text-muted); font-weight: 700; }
+.colab-steps p { margin: 0 0 8px; font-size: 0.9rem; color: var(--text-muted); }
+.colab-steps p strong, .colab-steps p em { color: var(--text); }
+.colab-panel .ex-actions { margin-top: 0; }
+.colab-note { margin: 12px 0 0; font-size: 0.85rem; color: var(--text-muted); }
+
 
 .hint-box { margin-top: 18px; }
 .hint-box details {
@@ -540,126 +499,6 @@
 .practice-done h2 { margin-bottom: 10px; }
 .practice-done p { color: var(--text-muted); margin-bottom: 24px; }
 
-/* ---------- Code editor ---------- */
-.ced {
-  margin-top: 8px;
-  border-radius: 14px;
-  overflow: hidden;
-  border: 1px solid var(--border-strong);
-  background: #0d1017;
-  box-shadow: var(--shadow-card);
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.ced:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), var(--shadow-card);
-}
-
-.ced-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.035);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.ced-dot { width: 11px; height: 11px; border-radius: 50%; opacity: 0.9; }
-
-.ced-title {
-  margin-left: 8px;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: #6b7488;
-}
-
-.ced-lang {
-  margin-left: auto;
-  font: 600 0.78rem var(--font-body);
-  color: #aab3c7;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 4px 8px;
-  cursor: pointer;
-}
-.ced-lang:hover { border-color: rgba(255, 255, 255, 0.25); }
-
-.ced-body {
-  position: relative;
-  display: flex;
-  height: 360px;
-  min-height: 180px;
-  resize: vertical;
-  overflow: hidden;
-}
-
-.ced-gutter {
-  width: 48px;
-  flex-shrink: 0;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.018);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.ced-lines {
-  margin: 0;
-  padding: 14px 10px 14px 0;
-  text-align: right;
-  color: #3d465b;
-  font: 13px/1.65 var(--font-mono);
-  user-select: none;
-}
-
-.ced-main { position: relative; flex: 1; min-width: 0; }
-
-.ced-hl-wrap {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.ced-hl {
-  margin: 0;
-  padding: 14px 16px;
-  font: 13px/1.65 var(--font-mono);
-  color: #dbe2f0;
-  white-space: pre;
-  tab-size: 4;
-  min-width: max-content;
-}
-
-.ced-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  padding: 14px 16px;
-  font: 13px/1.65 var(--font-mono);
-  letter-spacing: normal;
-  tab-size: 4;
-  color: transparent;
-  caret-color: #e8ecf4;
-  background: transparent;
-  border: 0;
-  outline: 0;
-  resize: none;
-  white-space: pre;
-  overflow: auto;
-}
-.ced-input::selection { background: rgba(99, 102, 241, 0.35); }
-.ced-input::placeholder { color: #3d465b; }
-
-/* token colors — one dark palette for both themes (editor stays dark) */
-.tk-kw  { color: #c792ea; }
-.tk-str { color: #8ee8b4; }
-.tk-num { color: #f7bd62; }
-.tk-com { color: #55617a; font-style: italic; }
-.tk-fn  { color: #7dcfff; }
-
-.d-py { background: rgba(125, 207, 255, 0.12); color: #7dcfff; }
-
 /* ---------- The Lab ---------- */
 .lab-filters {
   display: flex;
@@ -697,28 +536,7 @@
 .d-medium { background: rgba(251, 191, 36, 0.14); color: #fbbf24; }
 .d-hard   { background: rgba(248, 113, 113, 0.14); color: #f87171; }
 .d-viz    { background: rgba(99, 102, 241, 0.14); color: #818cf8; }
-
-.viz-panel {
-  margin-top: 20px;
-  padding: 18px;
-  border-radius: var(--radius-lg);
-  background: var(--card);
-  border: 1px solid var(--border);
-}
-
-.viz-canvas {
-  display: block;
-  width: 100%;
-  border-radius: var(--radius-md);
-}
-
-.viz-note {
-  margin-top: 10px;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  text-align: center;
-  min-height: 1.3em;
-}
+.d-py     { background: rgba(125, 207, 255, 0.12); color: #7dcfff; }
 
 /* ---------- Video lessons ---------- */
 .videos { margin: 36px 0; }

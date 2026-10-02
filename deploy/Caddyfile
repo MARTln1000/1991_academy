@@ -5,5 +5,14 @@
 # also sets X-Forwarded-For to the real client address and drops any value the
 # client sent, which is what makes ACADEMY_TRUST_PROXY=1 on the app safe.
 {$DOMAIN} {
+	# Don't tell scanners which server software answers.
+	header {
+		-Server
+		-Via
+	}
+	# /api/health reports the deployed commit and config flags. `make status`,
+	# CI and the container healthcheck reach the app directly on port 8735;
+	# the internet doesn't need it.
+	respond /api/health 404
 	reverse_proxy app:8735
 }

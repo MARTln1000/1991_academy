@@ -209,6 +209,20 @@ const Auth = (() => {
     const label = user ? "👤 " + user.username : (typeof t === "function" ? t("Sign in") : "Sign in");
     document.querySelectorAll("[data-account]").forEach((el) => {
       el.textContent = label;
+      /* Admins get a link to the admin panel next to their name. (Only a
+         shortcut: the server checks the admin flag on every admin request.) */
+      const link = el.previousElementSibling && el.previousElementSibling.matches("[data-admin-link]")
+        ? el.previousElementSibling : null;
+      if (user && user.admin && !link) {
+        const a = document.createElement("a");
+        a.className = "nav-link";
+        a.dataset.adminLink = "";
+        a.href = el.getAttribute("href").replace("account.html", "admin.html");
+        a.textContent = typeof t === "function" ? t("Admin") : "Admin";
+        el.before(a);
+      } else if (!(user && user.admin) && link) {
+        link.remove();
+      }
     });
   }
 

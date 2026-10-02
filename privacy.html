@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — 1991 Academy</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%236366f1'/><text x='50' y='62' font-size='34' font-family='sans-serif' font-weight='800' fill='white' text-anchor='middle'>1991</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Armenian:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/game.css" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="logo" href="index.html"><span class="logo-mark">1991</span> 1991 Academy</a>
+      <a class="nav-link" href="lab.html" data-i18n="Lab">Lab</a>
+      <a class="nav-link" href="missions.html" data-i18n="Missions">Missions</a>
+      <a class="nav-link" href="practice.html" data-i18n="Practice">Practice</a>
+      <div class="nav-spacer"></div>
+      <span class="xp-pill" data-xp>⚡</span>
+      <span class="streak-pill" data-streak>🔥</span>
+      <a class="nav-link" href="account.html" data-account>Sign in</a>
+      <button class="icon-btn" data-lang-toggle aria-label="Language">ՀԱՅ</button>
+      <button class="icon-btn" data-theme-toggle aria-label="Toggle theme">☀️</button>
+    </div>
+  </nav>
+
+  <!-- Both languages are here; js/privacy-page.js shows the one the site is
+       in. Keep them saying the same thing, and keep both true to what app.py
+       and the pages actually do: update this page (and the date) whenever
+       the site starts handling personal data differently. -->
+  <main class="container policy">
+
+    <article class="lesson-body" lang="en" data-policy-lang="en">
+      <h1>Privacy Policy</h1>
+      <p class="policy-date">Last updated: 2 October 2026</p>
+
+      <p>1991 Academy is a free learning site run by <strong>1991 Unit</strong> (Republic of Armenia). This page explains what personal data the site handles, why, and what you can do about it. For questions or requests, write to <a href="mailto:ai.1991@mil.am">ai.1991@mil.am</a>.</p>
+
+      <h2>Using the site without an account</h2>
+      <p>You can use every lesson, quiz, exercise and the Lab without an account. Your progress (completed lessons, XP, streak, review cards) and your settings (language, theme) are then stored only in your own browser, on your device. We don't receive them. Clearing the site's data in your browser deletes them.</p>
+
+      <h2>What we store if you create an account</h2>
+      <ul>
+        <li><strong>Your username and email address.</strong> You sign in with either one. We use your email address only to send you a password-reset link when you ask for one: no newsletters, no marketing.</li>
+        <li><strong>Your password, as a salted scrypt hash.</strong> Nobody, including us, can read your password from it.</li>
+        <li><strong>Your learning progress</strong> (the data listed above), so you can continue on any device where you sign in.</li>
+        <li><strong>When your account was created.</strong></li>
+        <li><strong>Sign-in sessions:</strong> a random token that keeps you signed in, for up to 30 days.</li>
+        <li><strong>Password-reset links:</strong> when you ask for one, stored only as a hash and valid for 1 hour.</li>
+      </ul>
+
+      <h2>The leaderboard</h2>
+      <p>Only if you turn on “Show me on the leaderboard” on your account page do your <strong>username and XP</strong> (in total and this week) appear on the leaderboard on the main page, which anyone visiting the site can see. Your email address never appears there. You can turn it off at any time.</p>
+
+      <h2>Coding exercises in Google Colab</h2>
+      <p>You solve the coding exercises in Google Colab with your own Google account, and the notebooks you upload there are kept in your Google Drive. Google's privacy policy applies to that. We don't receive your code or any data from your Google account: when you click “I solved it”, the site only records that the exercise is solved.</p>
+
+      <h2>Server logs</h2>
+      <p>To keep the site working and secure, the server keeps a log of: the pages and files requested and how it responded; account creations and sign-ins; failed sign-in attempts, with the username or email address that was typed; and password-reset emails sent, with the address. Your IP address is used briefly, in memory only, to limit how many requests one address can make, and is written to the log only if that limit is exceeded. The log has a fixed maximum size: older entries are deleted automatically.</p>
+
+      <h2>Cookies and browser storage</h2>
+      <p>The site sets one cookie, <code>msession</code>, and only when you sign in. It keeps you signed in, can't be read by scripts, and expires after 30 days or when you sign out. There are no advertising or analytics cookies, and nothing tracks you across other sites. Your progress and settings are kept in your browser's local storage, as described above.</p>
+
+      <h2>Other services your browser connects to</h2>
+      <p>Some parts of the pages come from other services, which, as with any website, see your IP address:</p>
+      <ul>
+        <li><strong>Google Fonts</strong>, for the fonts;</li>
+        <li><strong>YouTube</strong>, for the thumbnails of lesson videos. The video player itself loads only when you press play, from the privacy-enhanced youtube-nocookie.com;</li>
+        <li><strong>jsDelivr</strong>, for the formulas in the Mathematics lessons;</li>
+        <li><strong>Google Colab</strong>, when you open it for an exercise.</li>
+      </ul>
+      <p>Password-reset emails are delivered through an email service. These services have their own privacy policies.</p>
+
+      <h2>How long we keep your data</h2>
+      <ul>
+        <li>Account data and progress: until you delete your account.</li>
+        <li>Sign-in sessions: 30 days, or until you sign out. Password-reset links: 1 hour.</li>
+        <li>Backups: the database is backed up regularly, and each backup is deleted after 30 days. After you delete your account, a copy of it can therefore remain in backups for up to 30 days.</li>
+        <li>Server logs: as described above.</li>
+      </ul>
+
+      <h2>Who can see your data</h2>
+      <p>Your data is stored on the server that runs 1991 Academy and is used only to run the site. Only the people who run it can access it: the site's administrators at 1991 Unit can see your username, email address, sign-up date and learning progress, to help you with your account (for example, to send a password-reset link) and to see how the courses are used. Every action an administrator takes on an account is recorded. We don't sell your data or share it with anyone, except where the law requires it.</p>
+
+      <h2>Your rights and choices</h2>
+      <ul>
+        <li>See your username and email address on your <a href="account.html">account page</a>, and change your password there.</li>
+        <li>Show or hide yourself on the leaderboard.</li>
+        <li>Delete your account on your account page: your username, email address, progress and sessions are deleted at once (for backups, see above).</li>
+        <li>For a copy of your data, a correction, or any other request, write to <a href="mailto:ai.1991@mil.am">ai.1991@mil.am</a>.</li>
+      </ul>
+      <p>You also have the rights that the Law of the Republic of Armenia “On Protection of Personal Data” gives you.</p>
+
+      <h2>Security</h2>
+      <p>Passwords are stored only as salted scrypt hashes, the site is served over HTTPS, the sign-in cookie can't be read by scripts, and repeated sign-in attempts are rate-limited. The site never runs code that learners write.</p>
+
+      <h2>Changes to this policy</h2>
+      <p>If we change how the site handles personal data, we'll update this page and the date at the top.</p>
+    </article>
+
+    <article class="lesson-body" lang="hy" data-policy-lang="hy" hidden>
+      <h1>Գաղտնիության քաղաքականություն</h1>
+      <p class="policy-date">Վերջին թարմացում՝ 2026 թ. հոկտեմբերի 2</p>
+
+      <p>1991 Academy-ն անվճար ուսումնական կայք է։ Կայքի սպասարկող՝ <strong>1991 Ստորաբաժանում</strong> (Հայաստանի Հանրապետություն)։ Այս էջը բացատրում է, թե ինչ անձնական տվյալներ է մշակում կայքը, ինչու, և ինչ կարող ես անել դրանց հետ կապված։ Հարցերի և հարցումների համար գրի՛ր <a href="mailto:ai.1991@mil.am">ai.1991@mil.am</a> հասցեին։</p>
+
+      <h2>Կայքից օգտվելը առանց հաշվի</h2>
+      <p>Բոլոր դասերը, հարցաշարերը, վարժություններն ու Լաբը հասանելի են առանց հաշվի։ Այդ դեպքում քո առաջընթացը (ավարտված դասեր, XP, շարք, կրկնության քարտեր) և կարգավորումները (լեզու, թեմա) պահվում են միայն քո դիտարկիչում՝ քո սարքում։ Մենք դրանք չենք ստանում։ Դիտարկիչում կայքի տվյալները մաքրելով՝ դրանք ջնջվում են։</p>
+
+      <h2>Ինչ ենք պահում, եթե հաշիվ ես ստեղծում</h2>
+      <ul>
+        <li><strong>Օգտանունդ և էլ. հասցեդ։</strong> Մուտք ես գործում դրանցից որևէ մեկով։ Էլ. հասցեդ օգտագործում ենք միայն գաղտնաբառի վերականգնման հղում ուղարկելու համար, երբ դու ես դա խնդրում. ոչ մի լրատու, ոչ մի գովազդ։</li>
+        <li><strong>Գաղտնաբառդ՝ աղով scrypt hash-ի տեսքով։</strong> Դրանից ոչ ոք, այդ թվում՝ մենք, չի կարող կարդալ գաղտնաբառդ։</li>
+        <li><strong>Ուսումնական առաջընթացդ</strong> (վերը նշված տվյալները), որպեսզի կարողանաս շարունակել ցանկացած սարքում, որտեղ մուտք ես գործում։</li>
+        <li><strong>Հաշվի ստեղծման ամսաթիվը։</strong></li>
+        <li><strong>Մուտքի սեսիաներ.</strong> պատահական նշան, որը քեզ մուտք գործած է պահում մինչև 30 օր։</li>
+        <li><strong>Գաղտնաբառի վերականգնման հղումներ.</strong> երբ խնդրում ես, պահվում են միայն hash-ի տեսքով և գործում են 1 ժամ։</li>
+      </ul>
+
+      <h2>Առաջատարների ցուցակը</h2>
+      <p>Միայն եթե հաշվիդ էջում միացնես «Ցուցադրի՛ր ինձ առաջատարների ցուցակում»-ը, քո <strong>օգտանունն ու XP-ն</strong> (ընդհանուր և այս շաբաթվա) հայտնվում են գլխավոր էջի առաջատարների ցուցակում, որը տեսնում է կայքի ցանկացած այցելու։ Էլ. հասցեդ այնտեղ երբեք չի հայտնվում։ Կարող ես անջատել այն ցանկացած պահի։</p>
+
+      <h2>Ծրագրավորման վարժությունները Google Colab-ում</h2>
+      <p>Ծրագրավորման վարժությունները լուծում ես Google Colab-ում՝ քո Google հաշվով, և այնտեղ վերբեռնած նոթբուքները պահվում են քո Google Drive-ում։ Դրա վրա տարածվում է Google-ի գաղտնիության քաղաքականությունը։ Մենք չենք ստանում քո կոդը կամ որևէ տվյալ քո Google հաշվից. երբ սեղմում ես «Ես լուծեցի», կայքը միայն նշում է, որ վարժությունը լուծված է։</p>
+
+      <h2>Սերվերի մատյանները</h2>
+      <p>Կայքի աշխատանքն ու անվտանգությունն ապահովելու համար սերվերը մատյան է վարում՝ հայցված էջերն ու ֆայլերը և սերվերի պատասխանը. հաշիվների ստեղծումն ու մուտքերը. մուտքի անհաջող փորձերը՝ մուտքագրված օգտանունով կամ էլ. հասցեով. ուղարկված գաղտնաբառի վերականգնման նամակները՝ հասցեով։ Քո IP հասցեն կարճ ժամանակով, միայն հիշողության մեջ, օգտագործվում է մեկ հասցեից եկող հարցումների քանակը սահմանափակելու համար և մատյանում գրանցվում է միայն այդ սահմանը գերազանցելու դեպքում։ Մատյանն ունի սահմանված առավելագույն չափ. ավելի հին գրառումները ջնջվում են ինքնաշխատ։</p>
+
+      <h2>Cookie-ներ և դիտարկչի պահոց</h2>
+      <p>Կայքը տեղադրում է մեկ cookie՝ <code>msession</code>, և միայն երբ մուտք ես գործում։ Այն քեզ մուտք գործած է պահում, սկրիպտները չեն կարող կարդալ այն, և այն լրանում է 30 օրից կամ երբ դուրս ես գալիս։ Չկան գովազդային կամ վերլուծական cookie-ներ, և ոչինչ քեզ չի հետևում այլ կայքերում։ Առաջընթացդ ու կարգավորումներդ պահվում են դիտարկչիդ local storage-ում, ինչպես նկարագրված է վերևում։</p>
+
+      <h2>Այլ ծառայություններ, որոնց միանում է դիտարկիչդ</h2>
+      <p>Էջերի որոշ մասեր գալիս են այլ ծառայություններից, որոնք, ինչպես ցանկացած կայքի դեպքում, տեսնում են քո IP հասցեն.</p>
+      <ul>
+        <li><strong>Google Fonts</strong>՝ տառատեսակների համար.</li>
+        <li><strong>YouTube</strong>՝ դասերի տեսանյութերի մանրապատկերների համար։ Տեսանվագարկիչն ինքը բեռնվում է միայն երբ սեղմում ես նվագարկել՝ գաղտնիությունն ուժեղացված youtube-nocookie.com-ից.</li>
+        <li><strong>jsDelivr</strong>՝ Մաթեմատիկայի դասերի բանաձևերի համար.</li>
+        <li><strong>Google Colab</strong>՝ երբ բացում ես այն վարժության համար։</li>
+      </ul>
+      <p>Գաղտնաբառի վերականգնման նամակներն առաքվում են էլ. փոստի ծառայության միջոցով։ Այս ծառայություններն ունեն իրենց գաղտնիության քաղաքականությունները։</p>
+
+      <h2>Որքան ժամանակ ենք պահում տվյալները</h2>
+      <ul>
+        <li>Հաշվի տվյալներն ու առաջընթացը՝ մինչև հաշիվդ ջնջես։</li>
+        <li>Մուտքի սեսիաները՝ 30 օր կամ մինչև դուրս գալը։ Գաղտնաբառի վերականգնման հղումները՝ 1 ժամ։</li>
+        <li>Պահուստային պատճենները. տվյալների բազան պարբերաբար պատճենվում է, և յուրաքանչյուր պատճեն ջնջվում է 30 օրից։ Ուստի հաշիվդ ջնջելուց հետո դրա պատճենը կարող է պահուստային պատճեններում մնալ մինչև 30 օր։</li>
+        <li>Սերվերի մատյանները՝ ինչպես նկարագրված է վերևում։</li>
+      </ul>
+
+      <h2>Ով կարող է տեսնել քո տվյալները</h2>
+      <p>Տվյալներդ պահվում են 1991 Academy-ն աշխատեցնող սերվերում և օգտագործվում են միայն կայքի աշխատանքի համար։ Դրանց հասանելիություն ունեն միայն կայքը սպասարկողները. 1991 Ստորաբաժանման կայքի ադմինիստրատորները տեսնում են քո օգտանունը, էլ. փոստի հասցեն, գրանցման ամսաթիվը և ուսման առաջընթացը՝ հաշվիդ հարցում օգնելու (օրինակ՝ գաղտնաբառի վերականգնման հղում ուղարկելու) և դասընթացների օգտագործումը տեսնելու համար։ Ադմինիստրատորի յուրաքանչյուր գործողություն հաշվի նկատմամբ գրանցվում է։ Մենք չենք վաճառում տվյալներդ և ոչ մեկի հետ չենք կիսում, բացի օրենքով պահանջվող դեպքերից։</p>
+
+      <h2>Քո իրավունքներն ու ընտրությունները</h2>
+      <ul>
+        <li>Տե՛ս օգտանունդ ու էլ. հասցեդ <a href="account.html">հաշվիդ էջում</a> և այնտեղ փոխի՛ր գաղտնաբառդ։</li>
+        <li>Ցուցադրի՛ր կամ թաքցրո՛ւ քեզ առաջատարների ցուցակում։</li>
+        <li>Ջնջի՛ր հաշիվդ հաշվիդ էջում. օգտանունդ, էլ. հասցեդ, առաջընթացդ և սեսիաները ջնջվում են անմիջապես (պահուստային պատճենների մասին՝ տե՛ս վերևում)։</li>
+        <li>Տվյալներիդ պատճենի, ուղղման կամ այլ հարցման համար գրի՛ր <a href="mailto:ai.1991@mil.am">ai.1991@mil.am</a> հասցեին։</li>
+      </ul>
+      <p>Դու ունես նաև «Անձնական տվյալների պաշտպանության մասին» ՀՀ օրենքով քեզ վերապահված իրավունքները։</p>
+
+      <h2>Անվտանգություն</h2>
+      <p>Գաղտնաբառերը պահվում են միայն աղով scrypt hash-երի տեսքով, կայքը մատուցվում է HTTPS-ով, մուտքի cookie-ն սկրիպտները չեն կարող կարդալ, և մուտքի կրկնվող փորձերը սահմանափակված են։ Կայքը երբեք չի գործարկում սովորողների գրած կոդը։</p>
+
+      <h2>Այս քաղաքականության փոփոխությունները</h2>
+      <p>Եթե փոխենք, թե ինչպես է կայքը մշակում անձնական տվյալները, կթարմացնենք այս էջը և վերևի ամսաթիվը։</p>
+    </article>
+
+  </main>
+
+  <script src="js/common.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/progress.js"></script>
+  <script src="js/xp.js"></script>
+  <script src="api/content.js"></script>
+  <script src="js/custom-content.js"></script>
+  <script src="js/privacy-page.js"></script>
+</body>
+</html>

@@ -6,12 +6,11 @@
 #   DOMAIN= (empty)              this file + docker-compose.local.yml, app only:
 #                                http://localhost:8735 on your own computer
 #
-# Three containers, and that's everything:
-#   app     app.py: the API *and* the frontend. The database is a SQLite file in
-#           the `data` volume, created on first start; there is no database server.
-#   runner  compiles and runs learners' C++ (JavaScript and Python run in their
-#           browsers). Locked down: no network, nothing inside worth taking.
-#   caddy   HTTPS: gets and renews the certificate for $DOMAIN, forwards to app.
+# Two containers, and that's everything:
+#   app    app.py: the API *and* the frontend. The database is a SQLite file in
+#          the `data` volume, created on first start; there is no database server.
+#   caddy  HTTPS: gets and renews the certificate for $DOMAIN, forwards to app.
+# Learners' code never runs here: they solve the exercises in Google Colab.
 #
 # Settings come from .env (copy .env.example). README.md → "Run with Docker".
 
@@ -42,11 +41,8 @@ services:
       # app, and Caddy sets X-Forwarded-For itself, so it can be trusted.
       ACADEMY_TRUST_PROXY: "1"
       ACADEMY_BASE_URL: https://${DOMAIN:-localhost}
-      # C++ goes to the runner container through this socket, never compiled here.
-      ACADEMY_CPP_RUNNER: /run/cpp/runner.sock
     volumes:
       - data:/data
-      - cpp-socket:/run/cpp
     ports:
       # Loopback only: for `make status` on a server, and the site itself on
       # your own computer. Never publish it on 0.0.0.0: Docker's published
@@ -60,47 +56,6 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    depends_on:
-      - runner
-    logging: *logging
-
-  # Learners' C++ runs here, one program per throwaway user, never as root
-  # (runner/cpp_runner.py has the details). If someone's program is hostile,
-  # this is all it can reach:
-  runner:
-    build: runner
-    image: 1991-academy-runner
-    restart: unless-stopped
-    # A real init as process 1, to collect the exit of every process a program
-    # leaves orphaned; uncollected, they would pile up and use up the limits.
-    init: true
-    # No network at all, not even to the app: it can't attack other machines,
-    # download anything, or reach the app with forged headers. The app talks
-    # to it through a socket file in this volume, which only the app's group
-    # (10001) may open.
-    network_mode: none
-    volumes:
-      - cpp-socket:/run/cpp
-    read_only: true
-    tmpfs:
-      # where programs are compiled and run; each run's files are deleted after it
-      - /work:rw,exec,nosuid,nodev,size=256m,mode=1777
-    # Root inside the container keeps only what it needs to hand each program
-    # to its own user, set that user's files up, and stop it afterwards.
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
-      - KILL
-    security_opt:
-      - no-new-privileges:true
-    # Two programs at a time (CPP_SLOTS), each with its own CPU, memory and
-    # process limits; these cap the whole container on top.
-    mem_limit: 1g
-    memswap_limit: 1g
-    pids_limit: 128
     logging: *logging
 
   caddy:
@@ -122,6 +77,5 @@ services:
 
 volumes:
   data:          # the database (academy.db) and in-container backups
-  cpp-socket:    # app ↔ runner socket; holds nothing else
   caddy-data:
   caddy-config:

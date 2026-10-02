@@ -7,7 +7,9 @@ Every test runs against its own fresh temp SQLite DB (the `client` fixture
 repoints app.DB_PATH per test), so nothing here can touch real accounts.
 """
 import json
+import os
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -61,6 +63,13 @@ def test_register_duplicate_is_409(client):
     {"username": "ab", "email": "a@b.co", "password": "longenough1"},   # username too short
     {"username": "okname", "email": "nope", "password": "longenough1"},  # bad email
     {"username": "okname", "email": "a@b.co", "password": "short"},      # password too short
+    # markup, SQL and header injection never get stored
+    {"username": "x' OR '1'='1", "email": "a@b.co", "password": "longenough1"},
+    {"username": "<b>bold</b>", "email": "a@b.co", "password": "longenough1"},
+    {"username": "okname", "email": "<img/src=x/onerror=alert(1)>@b.co", "password": "longenough1"},
+    {"username": "okname", "email": "a\"onmouseover=\"x@b.co", "password": "longenough1"},
+    {"username": "okname", "email": "a@b.co\r\nBcc:x@evil.co", "password": "longenough1"},
+    {"username": "okname", "email": "a" * 250 + "@b.co", "password": "longenough1"},
 ])
 def test_register_validation(client, body):
     assert client.post("/api/register", json=body).status_code == 400
@@ -70,7 +79,7 @@ def test_register_validation(client, body):
 
 def test_login_success_and_wrong_password(client):
     register(client)
-    client.post("/api/logout")
+    client.post("/api/logout", json={})
     ok = client.post("/api/login", json={"identifier": "alice", "password": "hunter2pw"})
     assert ok.status_code == 200
     bad = client.post("/api/login", json={"identifier": "alice", "password": "WRONG"})
@@ -79,7 +88,7 @@ def test_login_success_and_wrong_password(client):
 
 def test_login_by_email_case_insensitive(client):
     register(client)
-    client.post("/api/logout")
+    client.post("/api/logout", json={})
     r = client.post("/api/login", json={"identifier": "ALICE@EXAMPLE.COM", "password": "hunter2pw"})
     assert r.status_code == 200
 
@@ -93,7 +102,7 @@ def test_login_does_not_leak_which_accounts_exist(client):
     Returning early skipped the hash, so a ~30ms vs ~1ms gap enumerated every
     registered username and email."""
     register(client)
-    client.post("/api/logout")
+    client.post("/api/logout", json={})
 
     def median_ms(identifier):
         samples = []
@@ -261,7 +270,7 @@ def test_change_password(client):
     assert wrong.status_code == 403
     ok = client.post("/api/change-password", json={"currentPassword": "hunter2pw", "newPassword": "brandnew99"})
     assert ok.status_code == 200
-    client.post("/api/logout")
+    client.post("/api/logout", json={})
     assert client.post("/api/login", json={"identifier": "alice", "password": "hunter2pw"}).status_code == 401
     assert client.post("/api/login", json={"identifier": "alice", "password": "brandnew99"}).status_code == 200
 
@@ -394,21 +403,22 @@ def test_rate_limit_per_proxy_ip(client, monkeypatch):
     "/.env",
     "/deploy/Caddyfile",
     "/.github/workflows/ci.yml",
-    # the C++ runner, and the reference solutions
-    "/runner/cpp_runner.py",
-    "/runner/Dockerfile",
-    "/tests/content/solutions/lab-two-sum.js",
-    "/tests/check_runner_sandbox.py",
+    # the notebook generator, and the exercises' reference solutions
+    "/tools/build_notebooks.py",
+    "/tools/site_data.js",
+    "/tests/content/solutions/lab-two-sum.py",
 ])
 def test_non_web_files_are_not_served(client, path):
     assert client.get(path).status_code == 404
 
 
 @pytest.mark.parametrize("path", [
-    "/index.html", "/lab.html", "/missions.html", "/practice.html", "/account.html",
+    "/index.html", "/lab.html", "/missions.html", "/practice.html", "/account.html", "/privacy.html",
     "/tracks/web.html",
     "/css/tokens.css",
-    "/js/runner.js",
+    "/js/colab.js",
+    "/assets/colab/en/lab-two-sum.ipynb",
+    "/assets/colab/hy/prog-1-1-ex1.ipynb",
     "/js/data/lab.js",
     # course materials are arbitrary file types, INCLUDING .py starter files —
     # an extension blocklist used to 404 these download links.
@@ -431,13 +441,157 @@ def test_allowlist_rejects_traversal_and_hidden_segments():
     assert not app.static_allowed("/nope/x.js")  # unknown tree
 
 
+def test_notebooks_are_always_revalidated(client, monkeypatch):
+    """The exercise notebooks change with the exercises; other course files are
+    cached for a day. (Debug mode sends no-store everywhere, so turn it off.)"""
+    monkeypatch.setattr(app, "DEBUG", False)
+    notebook = client.get("/assets/colab/en/lab-two-sum.ipynb")
+    assert notebook.status_code == 200 and notebook.headers["Cache-Control"] == "no-cache"
+    assert json.loads(notebook.content)["cells"]
+    pdf = client.get("/assets/courses/math/Homeworks/Homework%201.pdf")
+    assert pdf.headers["Cache-Control"] == "public, max-age=86400"
+
+
 def test_security_headers_include_csp(client):
     r = client.get("/api/health")
     csp = r.headers["Content-Security-Policy"]
     assert "default-src 'self'" in csp
     assert "object-src 'none'" in csp
-    # the runtimes the site genuinely needs must stay permitted
-    assert "blob:" in csp and "https://cdn.jsdelivr.net" in csp
+    # KaTeX still loads from jsDelivr, but only that one release...
+    script_src = next(d for d in csp.split("; ") if d.startswith("script-src "))
+    assert script_src == "script-src 'self' https://cdn.jsdelivr.net/npm/katex@0.16.11/"
+    # ...no inline script runs (injected markup stays inert)...
+    assert "unsafe-inline" not in script_src
+    # ...and no page runs learners' code any more (that happens in Colab)
+    assert "unsafe-eval" not in csp and "blob:" not in csp
+
+
+def test_no_page_has_inline_scripts_or_handlers(client):
+    """The CSP blocks inline scripts, so a page that had one would silently
+    break. Every external script it loads carries an integrity hash."""
+    pages = [p for p in app.PAGE_FILES if p.endswith(".html")]
+    pages += ["tracks/" + p.name for p in (app.ROOT / "tracks").glob("*.html")]
+    for page in pages:
+        html = (app.ROOT / page).read_text(encoding="utf-8")
+        assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", html), page
+        assert not re.search(r"\son[a-z]+\s*=", html), page
+        assert "javascript:" not in html, page
+        for tag in re.findall(r"<(?:script|link)[^>]*https://[^>]*>", html):
+            if "fonts.g" not in tag:   # Google Fonts' CSS varies by browser: no fixed hash
+                assert 'integrity="sha384-' in tag and 'crossorigin="anonymous"' in tag, (page, tag)
+
+
+# ------------------------------------------- injection, forgery, search engines
+
+@pytest.mark.parametrize("identifier", [
+    "' OR '1'='1", "' OR 1=1 --", "admin'--", "\" OR \"\"=\"",
+    "alice' UNION SELECT pass_hash FROM users --", "1; DROP TABLE users",
+])
+def test_sql_injection_in_login_gets_nowhere(client, identifier):
+    register(client)
+    client.post("/api/logout", json={})
+    r = client.post("/api/login", json={"identifier": identifier, "password": "' OR '1'='1"})
+    assert r.status_code == 401
+    # the tables are all still there and intact
+    with app.db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
+
+
+def test_sql_injection_is_stored_as_plain_text(client):
+    """State values are data: SQL in them is saved and handed back verbatim."""
+    register(client)
+    evil = "'); DROP TABLE users; --"
+    assert client.put("/api/state", json={"data": {"k": evil}}).status_code == 200
+    assert client.get("/api/state").json()["data"] == {"k": evil}
+    assert client.get("/api/me").status_code == 200
+
+
+@pytest.mark.parametrize("body", ["[]", "[1, 2]", "42", '"text"', "null", "[" * 50_000 + "]" * 50_000])
+def test_non_object_json_is_a_400_not_a_crash(client, body):
+    for path in ("/api/login", "/api/register", "/api/forgot-password"):
+        r = client.post(path, content=body, headers={"Content-Type": "application/json"})
+        assert r.status_code == 400, (path, body[:10], r.status_code)
+
+
+@pytest.mark.parametrize("ctype", [
+    None,                                   # <img>/fetch with no body type
+    "application/x-www-form-urlencoded",    # a plain <form method=post>
+    "multipart/form-data; boundary=x",      # <form enctype=multipart/form-data>
+    "text/plain",                           # <form enctype=text/plain>, the classic JSON-CSRF trick
+])
+def test_api_writes_must_be_json(client, ctype):
+    """Cross-site forms can only send these types; JSON needs a CORS preflight
+    this API never grants. So a forged request is refused before it runs."""
+    register(client)
+    headers = {"Content-Type": ctype} if ctype else {}
+    body = '{"optIn": true}'
+    for method, path in [("POST", "/api/leaderboard-optin"), ("POST", "/api/logout"),
+                         ("PUT", "/api/state"), ("POST", "/api/delete-account")]:
+        r = client.request(method, path, content=body, headers=headers)
+        assert r.status_code == 415, (method, path, r.status_code)
+    assert client.get("/api/me").status_code == 200    # still signed in, account intact
+    assert client.get("/api/me").json()["user"]["leaderboardOptIn"] is False
+
+
+def test_api_has_no_cors(client):
+    r = client.options("/api/login", headers={"Origin": "https://evil.example",
+                                              "Access-Control-Request-Method": "POST"})
+    assert "access-control-allow-origin" not in r.headers
+
+
+def test_robots_txt(client):
+    r = client.get("/robots.txt")
+    assert r.status_code == 200
+    assert "Disallow: /api/" in r.text
+
+
+@pytest.mark.parametrize("path,indexed", [
+    ("/", True), ("/index.html", True), ("/tracks/web.html", True), ("/privacy.html", True),
+    ("/account.html", False),
+    ("/assets/courses/ml/HW/1/HW1.ipynb", False),
+    ("/assets/courses/math/Homeworks/Homework%201.pdf", False),
+    ("/assets/colab/en/lab-two-sum.ipynb", False),
+    ("/api/health", False),
+])
+def test_search_engines_index_only_the_pages(client, path, indexed):
+    r = client.get(path)
+    assert r.status_code == 200, path
+    assert ("X-Robots-Tag" not in r.headers) == indexed, path
+
+
+@pytest.mark.parametrize("path", [
+    "/assets/", "/assets/courses/", "/assets/courses/ml/", "/tracks/", "/css/", "/js/data/",
+    "/.git/config", "/.git/HEAD", "/.env", "/backups/", "/assets/courses/.DS_Store",
+    "/server-status", "/phpmyadmin/", "/wp-admin/",
+    "/admin", "/.well-known/../app.py", "/%2e%2e/app.py", "/css/%2e%2e/app.py",
+])
+def test_nothing_for_a_dork_to_find(client, path, monkeypatch):
+    """No directory listings, no repository or secrets, whatever the path a
+    scanner tries."""
+    monkeypatch.setattr(app, "DEBUG", False)
+    assert client.get(path).status_code == 404, path
+
+
+def test_api_docs_are_off_in_production():
+    # The docs routes are chosen when the app is built; the Docker image sets
+    # ACADEMY_DEBUG=0, which turns them off.
+    out = subprocess.run(
+        [sys.executable, "-c", "import app; print(app.app.docs_url, app.app.openapi_url)"],
+        cwd=app.ROOT, env={**os.environ, "ACADEMY_DEBUG": "0"},
+        capture_output=True, text=True, check=True,
+    ).stdout.split()
+    assert out == ["None", "None"]
+
+
+def test_course_notebooks_carry_no_author_account_data():
+    """Colab stamps every executed cell with the Google account that ran it
+    (name, account id, photo URL). The published copies must not."""
+    leaks = [str(p) for p in (app.ROOT / "assets").rglob("*.ipynb")
+             if re.search(r'"(userId|photoUrl|executionInfo)"', p.read_text(encoding="utf-8"))]
+    assert leaks == [], (
+        "strip Colab's executionInfo from: %s\n(e.g. python3 -c \"import json,sys; f=sys.argv[1]; nb=json.load(open(f)); "
+        "[c.get('metadata', {}).pop('executionInfo', None) for c in nb['cells']]; "
+        "json.dump(nb, open(f, 'w'), indent=1, ensure_ascii=False)\" FILE)" % leaks)
 
 
 # ----------------------------------------------------------------- hygiene
@@ -484,81 +638,3 @@ def test_schema_is_ready_without_calling_init_db(tmp_path, monkeypatch):
         assert c.post("/api/register", json={
             "username": "bob", "email": "bob@example.com", "password": "hunter2pw"
         }).status_code == 201
-
-
-# ------------------------------------------------------------- C++
-
-def test_cpp_is_off_without_a_runner(client):
-    # conftest.py sets ACADEMY_CPP=0 and no ACADEMY_CPP_RUNNER
-    assert app.CPP_MODE == "off"
-    r = client.post("/api/run-cpp", json={"source": "int f() { return 1; }", "harness": "int main() {}"})
-    assert r.json() == {"results": [], "output": "", "error": {"kind": "disabled"}}
-    assert client.get("/api/health").json()["cpp"] is False
-
-
-def test_cpp_program_names_each_part_for_compiler_messages():
-    program = app.build_cpp_program("int f() {\n  return x;\n}", "int main() {}", "struct P { int a; };")
-    lines = program.splitlines()
-    solution = lines.index('#line 1 "solution.cpp"')
-    assert lines[solution + 2] == "  return x;"   # reported as solution.cpp:2
-    assert lines.index('#line 1 "given.cpp"') < solution < lines.index('#line 1 "tests.cpp"')
-
-
-@pytest.mark.parametrize("raw, expected", [
-    ({"error": "busy"}, {"kind": "busy"}),
-    ({"error": "internal"}, {"kind": "unavailable"}),
-    ({"compiled": False, "timed_out": False, "compile_output": "solution.cpp:2:10: error: x"},
-     {"kind": "compile", "detail": "solution.cpp:2:10: error: x"}),
-    ({"compiled": False, "timed_out": True}, {"kind": "compile_timeout"}),
-    ({"compiled": True, "timed_out": True, "signal": "SIGXCPU"}, {"kind": "timeout"}),
-    ({"compiled": True, "output_limit": True, "signal": "SIGXFSZ"}, {"kind": "output_limit"}),
-    ({"compiled": True, "signal": "SIGSEGV", "exit_code": None}, {"kind": "crash", "signal": "SIGSEGV"}),
-    ({"compiled": True, "exit_code": 3}, {"kind": "exit", "code": 3}),
-    ({"compiled": True, "exit_code": 0}, None),
-])
-def test_cpp_runner_replies_become_one_error_kind(raw, expected):
-    assert app.cpp_response(raw).get("error") == expected
-
-
-def test_cpp_results_come_from_the_harness_channel_not_stdout():
-    raw = {"compiled": True, "exit_code": 0, "stdout": '["fake",true,"1","1"]\n', "stderr": "",
-           "results": '["adds",true,"5","5"]\n["vec",false,"[2,4]","[1,2]"]\nnot json\n'}
-    out = app.cpp_response(raw)
-    assert out["results"] == [
-        {"name": "adds", "pass": True, "expected": "5", "actual": "5"},
-        {"name": "vec", "pass": False, "expected": "[2,4]", "actual": "[1,2]"},
-    ]
-    assert out["output"] == '["fake",true,"1","1"]\n'   # the learner's print, shown, never counted
-
-
-def test_cpp_unreachable_runner_is_reported(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(app, "CPP_MODE", "runner")
-    monkeypatch.setattr(app, "CPP_RUNNER_SOCKET", str(tmp_path / "missing.sock"))
-    r = client.post("/api/run-cpp", json={"source": "", "harness": "int main() {}"})
-    assert r.json()["error"] == {"kind": "unavailable"}
-
-
-def test_cpp_rejects_bad_and_oversized_bodies(client, monkeypatch):
-    monkeypatch.setattr(app, "CPP_MODE", "local")
-    assert client.post("/api/run-cpp", json={"source": 1, "harness": ""}).status_code == 400
-    assert client.post("/api/run-cpp", json={"source": "", "harness": "", "prelude": 5}).status_code == 400
-    big = "x" * (app.MAX_CODE_BYTES + 1)
-    assert client.post("/api/run-cpp", json={"source": big, "harness": ""}).json()["error"] == {"kind": "too_large"}
-
-
-@pytest.mark.skipif(app.CPP_COMPILER is None, reason="no C++ compiler")
-def test_cpp_runs_locally_with_output_and_line_numbers(client, monkeypatch):
-    monkeypatch.setattr(app, "CPP_MODE", "local")
-    harness = 'int main() { __check("adds", add(2, 3), 5); __check("str", greet("A"), string("hi A")); }'
-    good = 'int add(int a, int b) { cout << "adding" << endl; return a + b; }\nstring greet(string s) { return "hi " + s; }'
-    out = client.post("/api/run-cpp", json={"source": good, "harness": harness}).json()
-    assert [r["pass"] for r in out["results"]] == [True, True] and "error" not in out
-    assert out["output"] == "adding\n"
-    broken = 'int add(int a, int b) { return a + b; }\nstring greet(string s) { return nope; }'
-    out = client.post("/api/run-cpp", json={"source": broken, "harness": harness}).json()
-    assert out["error"]["kind"] == "compile" and "solution.cpp:2:" in out["error"]["detail"]
-    prelude = "struct P { int a; };"
-    out = client.post("/api/run-cpp", json={"source": "int get(P p) { return p.a; }", "prelude": prelude,
-                                            "harness": 'int main() { __check("given type", get({7}), 7); }'}).json()
-    assert out["results"] == [{"name": "given type", "pass": True, "expected": "7", "actual": "7"}]
-

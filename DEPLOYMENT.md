@@ -16,16 +16,14 @@ development: `make dev` (or `.venv/bin/python app.py`).
 | `ACADEMY_HOST` | `0.0.0.0` | `0.0.0.0` inside the container, published on the host's `127.0.0.1` only | Bind address. Nothing but the proxy may reach the app; see §3 |
 | `ACADEMY_DB` | `./1991_academy.db` | `/data/academy.db`, in the `academy_data` volume | SQLite path |
 | `ACADEMY_DEBUG` | `1` | `0` | `0` enables asset caching and hides the API docs |
-| `ACADEMY_CPP_RUNNER` | unset | `/run/cpp/runner.sock` | The C++ runner container's socket. When set, learners' C++ is compiled and run there, never in the app (§2) |
-| `ACADEMY_CPP` | `1` | `0` | Without a runner, `1` compiles learner C++ inside the app process: a convenience for development on your own computer, not a sandbox. **Never `1` on a public server.** (The app image has no compiler, so it couldn't anyway) |
 | `ACADEMY_SECURE_COOKIES` | on unless `ACADEMY_DEBUG=1` | on | Marks the session cookie `Secure` (HTTPS only) and sends HSTS |
 | `ACADEMY_TRUST_PROXY` | `0` | `1` | **`1` when, and only when, a trusted reverse proxy sets `X-Forwarded-For`.** See §3 |
 | `ACADEMY_BASE_URL` | `http://localhost:8735` | `https://$DOMAIN` | Public origin used to build password-reset links |
 
 Where each one is set:
 
-- **`Dockerfile`**: `ACADEMY_HOST`, `PORT`, `ACADEMY_DB`, `ACADEMY_DEBUG`, `ACADEMY_CPP`.
-- **`docker-compose.yml`**: `ACADEMY_TRUST_PROXY`, `ACADEMY_BASE_URL`, `ACADEMY_CPP_RUNNER`.
+- **`Dockerfile`**: `ACADEMY_HOST`, `PORT`, `ACADEMY_DB`, `ACADEMY_DEBUG`.
+- **`docker-compose.yml`**: `ACADEMY_TRUST_PROXY`, `ACADEMY_BASE_URL`.
 - **`docker-compose.local.yml`**: used instead when `DOMAIN` is empty (your own
   computer, plain http). It turns `ACADEMY_SECURE_COOKIES` and
   `ACADEMY_TRUST_PROXY` off, and sets `ACADEMY_BASE_URL=http://localhost:8735`.
@@ -43,12 +41,10 @@ log (`make logs`) instead of emailed:
 ## 2. What runs where
 
 ```
-container academy-app-1     image 1991-academy, built from this folder   127.0.0.1:8735
-container academy-runner-1  image 1991-academy-runner, from runner/      no network at all
-container academy-caddy-1   caddy:2-alpine                               :80, :443 (tcp + udp)
+container academy-app-1    image 1991-academy, built from this folder   127.0.0.1:8735
+container academy-caddy-1  caddy:2-alpine                               :80, :443 (tcp + udp)
 
 volume academy_data           /data in the app: academy.db (+ -wal, -shm) and backups/
-volume academy_cpp-socket     the socket the app reaches the runner through; nothing else
 volume academy_caddy-data     the HTTPS certificates and Caddy's ACME account
 volume academy_caddy-config   Caddy's saved config
 
@@ -65,8 +61,7 @@ dependencies pinned by `requirements.lock`, and the site's files.
 `.dockerignore` keeps out the local database, `.env`, `.venv`, tests and docs.
 A `REVISION` file records the commit it was built from (with `-dirty` if there
 were uncommitted changes), and `/api/health` reports it. The app runs as the
-unprivileged user `academy` (uid and gid 10001; the runner lets group 10001,
-and only it, open its socket).
+unprivileged user `academy` (uid and gid 10001).
 
 **The app container** has a read-only filesystem. Its only writable places
 are the `academy_data` volume and a `/tmp` in memory. It holds no Linux
@@ -75,32 +70,19 @@ modify its own code. Logs are capped at 5 × 10 MB per container.
 `restart: unless-stopped` means Docker starts the containers again after a
 reboot.
 
-**The C++ runner container** (`runner/`) exists because C++, unlike
-JavaScript and Python, can't run in the learner's browser: it has to be
-compiled, so it runs on the server. It is built so that even a hostile
-program reaches nothing worth reaching:
+**Coding exercises run in Google Colab, not here.** Every coding exercise
+has a notebook in `assets/colab/` (task, starter code, tests, hints; built by
+`make notebooks` from the exercises in `js/data/`). The site serves them like
+its other files: the learner downloads one, uploads it to Colab in their own
+browser (*File → Upload notebook*), and Colab keeps it in their own Google
+Drive. Nothing depends on GitHub or on any account of yours. So:
 
-- **No network at all** (`network_mode: none`): it can't attack other
-  machines, download anything, or send requests to the app. The app hands it
-  each program through a socket file in the `academy_cpp-socket` volume.
-- **Nothing inside**: no database, no `.env`, no site files, a read-only
-  filesystem. Programs are compiled and run in a 256 MB in-memory folder,
-  and each run's files are deleted after it.
-- **A throwaway user per run**, never root: two slots, uid 20000 and 20001
-  (`CPP_SLOTS` sets how many programs run at once). Each run is limited to
-  5 s of CPU (8 s wall clock), 512 MB of memory, 16 processes and 1 MB of
-  output; the compiler gets 20 s and 2 GB. After every run, every process
-  that user still has is killed, however it detached.
-- **The container itself** is capped at 1 GB of memory and 128 processes. It
-  keeps only the capabilities needed to switch to those users and clean up
-  after them (`CHOWN`, `SETUID`, `SETGID`, `KILL`), with `no-new-privileges`.
-
-CI checks all of this on every push by running a set of hostile programs
-through it (`tests/check_runner_sandbox.py`): network access, reading the
-database, becoming root, a fork bomb, memory and disk hogs, endless output,
-and a process left running in the background must all fail or be stopped.
-The one thing a container can't rule out is a bug in the Linux kernel
-itself, so keep the server's kernel updated (`apt upgrade`).
+- A changed exercise reaches learners once its notebooks are rebuilt
+  (`make notebooks`, then commit) and the site is updated (`make update`).
+  CI fails if the notebooks are out of date. Browsers recheck
+  `/assets/colab/` on every download, so nobody gets an old copy.
+- Learners need a Google account for Colab. The same notebooks also open in
+  Jupyter, for anyone who prefers it.
 
 **Updating** (`make update`) runs `git pull`, rebuilds the image and recreates
 the app container. The site is unavailable for a few seconds while the app
@@ -146,6 +128,9 @@ server {
     listen 443 ssl http2;
     # ssl_certificate ... (certbot --nginx fills these in)
     client_max_body_size 1m;
+    server_tokens off;            # no nginx version in headers and error pages
+    # the deployed commit and config flags: `make status` asks the app directly
+    location = /api/health { return 404; }
     location / {
         proxy_pass http://127.0.0.1:8735;
         # overwrite, don't append: a forged header from the client must not survive
@@ -182,30 +167,71 @@ database with the backup, and starts the app.
 
 Course assets and code are static and can always be rebuilt from git.
 
+The privacy policy (`privacy.html`) tells users that backups are deleted after
+30 days and that logs have a fixed maximum size. If you change either (for
+example `ACADEMY_BACKUP_KEEP_DAYS`, or the log limits in docker-compose.yml),
+or anything else about what the site stores, update the policy in both
+languages and its date.
+
 ## 5. Built-in protections
 
 In `app.py`:
 
-- Rate limits: login 10/min·IP, register 5/10min·IP, reset 5/10min·IP, C++ runs 12/min·IP.
-- 300 KB request-body cap; 60 KB code-size cap.
+- Rate limits: login 10/min·IP, register 5/10min·IP, reset 5/10min·IP.
+- 300 KB request-body cap.
 - scrypt password hashing, HttpOnly SameSite=Lax session cookies (30 days),
   `Secure` + HSTS whenever `ACADEMY_SECURE_COOKIES` is on.
-- **Static serving is an allowlist**: only `/`, the five page files and the
-  `css/ js/ tracks/ assets/` trees are reachable. Source, the database,
-  `deploy/`, `REVISION`, dotfiles and everything else 404, however the path is
-  spelled.
-- Content-Security-Policy, `X-Content-Type-Options`, `X-Frame-Options`,
-  `Referrer-Policy` on every response.
+- **SQL injection:** every query passes user input as a `?` parameter, never
+  by building SQL text, so input is only ever data. Usernames are limited to
+  letters, digits and `_`; email addresses can't contain `< > " ' ;` etc.
+- **XSS:** everything a user or the URL supplies is escaped (`esc()`) before it
+  reaches the page. The Content-Security-Policy runs no inline scripts at all
+  (so injected markup would stay inert), only this site's files and the one
+  pinned KaTeX release, which `tracks/math.html` also checks by `integrity`
+  hash.
+- **Admin panel** (`/admin.html`): only accounts with the admin flag, which
+  only the server's command line sets (`make admin NAME=…`); every admin
+  request re-checks it, and every change is written to `admin_log`. Lesson
+  HTML from the panel is sanitized with an allowlist (`nh3`) before it is
+  stored, and admins can't delete admin accounts or see a reset link when
+  email is set up.
+- **Cross-site request forgery:** every API write must be sent as JSON (else
+  415), which a form on another site can't do; there is no CORS.
+- **Static serving is an allowlist**: only `/`, the seven page files,
+  `robots.txt` and the `css/ js/ tracks/ assets/` trees are reachable. Source,
+  the database, `.git`, `.env`, `deploy/`, `REVISION`, dotfiles and everything
+  else 404, however the path is spelled. No directory listings, and the API
+  docs are off in production.
+- **Search engines** (Google dorking): `X-Robots-Tag: noindex` on the API, the
+  account page and every course download, so only the lesson pages can show up
+  in search results. No `server:` banner.
+- `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` on every
+  response.
 - Expired sessions and reset tokens are swept at startup and hourly.
 - Structured request + auth-event logging to stdout (`make logs`).
 
 In the Docker setup:
 
 - The app's port is published on `127.0.0.1` only; the proxy is the only way in (§3).
+- Updates: `make auto-update-on` adds a cron job that runs
+  `deploy/auto-update.sh` every 5 minutes. It only acts when the checked-out
+  branch (normally `master`) moved on GitHub; then it backs up the database
+  and runs the steps of `make update`. If the new version doesn't build or
+  start, it resets to the commit that was running, rebuilds that, and skips
+  the bad commit until a newer one arrives. It never discards changes made on
+  the server and never follows a rewritten history: both are logged to
+  `backups/auto-update.log` for a person to sort out.
+- Caddy answers `/api/health` with 404 from the internet (`make status` and
+  the healthcheck reach the app directly) and sends no `Server`/`Via` header.
 - The container sandbox (§2): read-only code, no capabilities, non-root.
-- Learners' C++ runs only in the locked-down runner container (§2).
+- Learners' code never runs on the server, nor in the site's pages: they solve
+  the exercises in Google Colab (§2), and the Content-Security-Policy forbids
+  `eval` and workers outright.
 - Secrets live in `.env` on the server. They are never in git and never in
   the image.
+- Course notebooks are published without Colab's `executionInfo` (the Google
+  account that ran each cell). Strip it from any notebook you add:
+  `tests/test_api.py` fails while one has it.
 
 ## 6. Scale notes
 

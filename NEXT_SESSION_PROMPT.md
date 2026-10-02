@@ -31,8 +31,7 @@ standards exactly. They are non-negotiable:
    `dsa-1-3`, `dsa-2-1`, `dsa-2-2`, `ml-1-2`, `ml-2-1`, `agents-2-1`.
    Guest mode (static serving, no account) must keep working after every
    change. Track data files use augmentation modules (`ml-course.js`,
-   `dl-course.js`, `math-exercises.js`, `lab-py.js`, `lab-cpp.js`,
-   `missions-py.js`, `missions-cpp.js`) — follow
+   `dl-course.js`, `math-exercises.js`) — follow
    that pattern rather than rewriting base data files.
 4. **Report honestly.** Failed test → say so, with output. Lead summaries
    with what happened, in plain sentences, not hype.
@@ -43,8 +42,11 @@ directly from the FAST Foundation courses — one lesson per lecture, each
 with slide PDFs / homework / datasets served from `assets/courses/{math,
 prog,ml,dl}` as download buttons, plus verified YouTube lecture videos for
 math and ML (DL has none yet — Martin will provide the playlist; do not
-hunt for one yourself). The Lab runs graded JS/Python/C++ problems with
-canvas visualizations; lessons embed graded Python exercises (Pyodide),
+hunt for one yourself). Every coding exercise is Python (the Lab problems,
+the missions, the Programming lessons' exercises) and is solved in
+Google Colab: `make notebooks` builds a notebook per exercise into
+`assets/colab/{en,hy}/`, the site links to it and awards XP on "I solved it"
+(tests/test_notebooks.py runs every notebook). Lessons also embed
 worked math problems (KaTeX), Parsons/blanks/match interactions; there's
 XP/levels/streaks/achievements, spaced-repetition practice, cross-track
 missions, accounts with progress sync, and an opt-in XP leaderboard
@@ -68,8 +70,6 @@ pure translation — add `_hy` fields, no code changes:
   survive byte-identical, translate only the prose around it.
 - Mission and Lab `brief_hy` + `hints_hy`; exercise test NAMES (the
   `__check` labels) may stay English.
-- The Pyodide loading status strings in `js/pyrunner.js` (route its
-  onStatus messages through `t()`).
 - Add `Noto Sans Armenian` to the font stack as a fallback.
 - CAUTION: local variables named `t` shadow the global `t()` — this bug was
   hit twice already; rename locals when you touch a function.
@@ -79,8 +79,7 @@ pure translation — add `_hy` fields, no code changes:
 ### B. Backend hardening (the FastAPI backend EXISTS — app.py; polish it)
 The backend was rewritten as FastAPI (2026-07-08): same /api/* contracts,
 in-place DB migration, rate limiting, body caps, structured logging,
-/api/health, env config (PORT, ACADEMY_DB, ACADEMY_DEBUG, ACADEMY_CPP,
-ACADEMY_CPP_RUNNER) and
+/api/health, env config (PORT, ACADEMY_DB, ACADEMY_DEBUG) and
 an opt-in XP leaderboard (server snapshots XP from the state blob on every
 sync; landing panel + account checkbox are live). See DEPLOYMENT.md.
 Remaining backend work, in order:
@@ -100,9 +99,9 @@ Remaining backend work, in order:
    lessons — 2 per lesson, every answer numerically verified before
    publishing (same recipe as the 14 live Linear Algebra problems in
    `js/data/math-exercises.js`).
-2. Pandas graded exercises for `prog-2-3` — pandas runs in Pyodide
-   (`loadPackagesFromImports` is already wired) but verify the tests
-   in-browser via the preview before shipping; there is no local pandas.
+2. Pandas graded exercises for `prog-2-3` — they run in Colab, which has
+   pandas; add them as `type: "code"` exercises, `make notebooks`, and verify
+   each with a reference solution through tests/test_notebooks.py.
 3. DL homework text extraction: the six DL homework PDFs in
    `assets/courses/dl/Homeworks/Problems/` are short and task-based; where
    a task is checkable (e.g. HW1's "approximate √(1+x) with a linear
@@ -112,7 +111,8 @@ Remaining backend work, in order:
 ## Ground rules recap
 - Zero frontend build steps; vanilla JS stays vanilla. Allowed dependency
   surface: the Python backend (B) and the CDN runtime assets already in
-  use (KaTeX, Pyodide, Google Fonts, YouTube embeds).
+  use (KaTeX, Google Fonts, YouTube embeds). Learners' code runs in Google
+  Colab, never in the site's pages.
 - Update `README.md` for everything you change; keep the auto-memory notes
   current (the project memory lives under the Ditaket project's memory
   directory — see the existing "1991 Academy site" note).

@@ -162,3 +162,16 @@ function renderStreakPill() {
 }
 
 initTheme();
+
+/* ---------- Credit ----------
+   The courses' lectures, slides and homework were created by FAST Foundation.
+   One very small line at the foot of every page says so; i18n.js translates
+   it. (Who runs the site, the support address and the privacy policy link
+   are in the main page's footer.) */
+(function fastCredit() {
+  const credit = document.createElement("p");
+  credit.className = "fast-credit";
+  credit.setAttribute("data-i18n", "credit.fast");
+  credit.textContent = "Course materials (lectures, slides and homework) were created by FAST Foundation.";
+  document.body.appendChild(credit);
+})();

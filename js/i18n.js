@@ -24,9 +24,8 @@ const I18N = (() => {
     "{0}-day streak": "{0} օր անընդմեջ",
     "Start your streak": "Սկսի՛ր շարքդ",
     /* landing static */
-    "hero.kicker": "⚡ Քո անձնական ուսումնական տիեզերքը",
     "hero.title": 'Սովորի՛ր խորությամբ։<br /><span class="grad">Վայելի՛ր ընթացքը։</span>',
-    "hero.sub": "Յոթ կառուցված ուղի — մաթեմատիկա, ծրագրավորում, վեբ, մեքենայական ուսուցում, խորը ուսուցում, ԱԲ գործակալներ և ալգորիթմներ — գումարած Լաբը, որտեղ մոդելներ ու ալգորիթմներ ես գրում JavaScript-ով, Python-ով կամ C++-ով և տեսնում դրանք աշխատելիս։ Դասեր, տեսադասախոսություններ, հարցաշարեր, իրական կոդ։ Ոչ մի ավելորդ բան։",
+    "hero.sub": "Յոթ կառուցված ուղի — մաթեմատիկա, ծրագրավորում, վեբ, մեքենայական ուսուցում, խորը ուսուցում, ԱԲ գործակալներ և ալգորիթմներ — գումարած Լաբը, որտեղ մոդելներ ու ալգորիթմներ ես գրում Python-ով Google Colab-ում և տեսնում դրանք աշխատելիս։ Դասեր, տեսադասախոսություններ, հարցաշարեր, իրական կոդ։ Ոչ մի ավելորդ բան։",
     "tracks.title": "Ընտրի՛ր քո ուղին",
     "tracks.sub": "Յուրաքանչյուր ուղի կարճ դասերի հաջորդականություն է՝ հարցաշարերով։ Սկսի՛ր որտեղից ուզում ես — առաջընթացդ պահպանվում է այս սարքում։",
     "missions.title": "🛰️ Առաքելություններ. որտեղ ուղիները խաչվում են",
@@ -43,6 +42,10 @@ const I18N = (() => {
     "f3.body": "Առաջընթացի օղակները, ավարտի նշաններն ու շարքերը վերացական ճանապարհը դարձնում են շոշափելի։",
     "f4.title": "Կապակցված գաղափարներ",
     "f4.body": "Ուղիները հղվում են իրար — գրադիենտային վայրէջքը հայտնվում է ML-ում, վերադառնում DL-ում և աշխատում գործակալների ուղում։ Կրկնություն՝ խորությամբ։",
+    "credit.fast": "Դասընթացների նյութերը (դասախոսություններ, սլայդներ և տնային աշխատանքներ) ստեղծվել են FAST Foundation-ի կողմից։",
+    "footer.support": '1991 Academy-ի սպասարկող՝ 1991 Ստորաբաժանում։ Ինչ-որ բան չի՞ աշխատում։ Գրի՛ր <a href="mailto:ai.1991@mil.am">ai.1991@mil.am</a> հասցեին։',
+    "Privacy Policy": "Գաղտնիության քաղաքականություն",
+    "What we store and why:": "Ինչ ենք պահում և ինչու՝",
     "footer.left": "1991 Academy — կառուցված սովորելու հաճույքի համար։",
     "footer.right": "Առաջընթացը պահվում է քո դիտարկիչում։ Զրոյացնելու համար մաքրի՛ր կայքի տվյալները։",
     /* dashboard */
@@ -110,43 +113,15 @@ const I18N = (() => {
     "I solved it ✓": "Ես լուծեցի ✓",
     "Worked answer": "Լուծում",
     "✓ Nice work — self-checked.": "✓ Լավ աշխատանք — ինքնաստուգված։",
-    "▶ Run tests": "▶ Թեստավորել",
-    "Running…": "Կատարվում է…",
-    "✓ All {0} tests pass!": "✓ Բոլոր {0} թեստերն անցան։",
-    "{0}/{1} passing.": "{0}/{1} թեստ է անցնում։",
-    "Error — see below.": "Սխալ — տե՛ս ներքևում։",
-    "No tests ran — is your function named correctly?": "Ոչ մի թեստ չաշխատեց — ֆունկցիայիդ անունը ճի՞շտ է։",
     "✓ solved": "✓ լուծված",
     "This exercise needs the code runtime — open it from its track page.": "Այս վարժությանը կոդի միջավայր է պետք — բացի՛ր այն իր ուղու էջից։",
-    /* pyodide / python runner status */
-    "Downloading the Python runtime (~10 MB, first time only)…": "Ներբեռնվում է Python-ի միջավայրը (~10 ՄԲ, միայն առաջին անգամ)…",
-    "Python runtime is still loading…": "Python-ի միջավայրը դեռ բեռնվում է…",
-    "Timed out — an infinite loop somewhere?": "Ժամանակը սպառվեց — ինչ-որ տեղ անվերջ ցի՞կլ կա։",
-    "Could not load the Python runtime (offline?). JavaScript still works!": "Չհաջողվեց բեռնել Python-ի միջավայրը (անցանց ես՞)։ JavaScript-ը դեռ աշխատում է։",
-    /* run results: output panel and error messages (js/runner.js) */
-    "Output": "Ելք",
-    "expected {0} · got {1}": "սպասվում էր {0} · ստացվեց {1}",
-    "Line {0}": "Տող {0}",
-    "In your code": "Քո կոդում",
-    "Your code doesn't compile:": "Կոդդ չի կոմպիլացվում՝",
-    "Compiling took too long.": "Կոմպիլյացիան չափազանց երկար տևեց։",
-    "Your program crashed: {0}.": "Ծրագիրդ վթարի ենթարկվեց՝ {0}։",
-    "it read or wrote memory it doesn't own, e.g. an index past the end of a vector": "այն կարդաց կամ գրեց իրեն չպատկանող հիշողություն, օրինակ՝ վեկտորի վերջից այն կողմ ինդեքսով",
-    "an exception nobody caught, or a failed assert": "բացառություն, որը ոչ ոք չբռնեց, կամ ձախողված assert",
-    "an arithmetic error, e.g. an integer division by zero": "թվաբանական սխալ, օրինակ՝ ամբողջ թվի բաժանում զրոյի",
-    "it used too much memory or time": "այն չափազանց շատ հիշողություն կամ ժամանակ օգտագործեց",
-    "it reached code that should be unreachable, e.g. a function that doesn't return a value": "այն հասավ կոդի, որին չպետք է հասներ, օրինակ՝ ֆունկցիա, որը արժեք չի վերադարձնում",
-    "it was stopped by the system": "համակարգը կանգնեցրեց այն",
-    "Your program exited with code {0} before the tests finished.": "Ծրագիրդ ավարտվեց {0} կոդով՝ նախքան թեստերի ավարտը։",
-    "Your program printed too much (or wrote too big a file), so it was stopped.": "Ծրագիրդ չափազանց շատ բան տպեց (կամ չափազանց մեծ ֆայլ գրեց), ուստի այն կանգնեցվեց։",
-    "The C++ runner is busy right now. Try again in a few seconds.": "C++-ի կատարիչն այս պահին զբաղված է։ Փորձի՛ր մի քանի վայրկյանից։",
-    "The C++ runner isn't reachable right now. JavaScript and Python still work.": "C++-ի կատարիչն այս պահին հասանելի չէ։ JavaScript-ն ու Python-ը դեռ աշխատում են։",
-    "C++ isn't available on this server. JavaScript and Python still work.": "C++-ը հասանելի չէ այս սերվերում։ JavaScript-ն ու Python-ը դեռ աշխատում են։",
-    "Your code is too long.": "Կոդդ չափազանց երկար է։",
-    "input() doesn't work here: your code gets its values from the tests, as function arguments. Use print() to see them in the output.": "input()-ը այստեղ չի աշխատում. կոդդ արժեքները ստանում է թեստերից՝ որպես ֆունկցիայի արգումենտներ։ Օգտագործի՛ր print()՝ դրանք ելքում տեսնելու համար։",
-    "Couldn't download “{0}” (offline?).": "Չհաջողվեց ներբեռնել «{0}»-ը (անցանց ես՞)։",
-    "“{0}” isn't available in the browser's Python. You can import: {1} and the standard library.": "«{0}»-ը հասանելի չէ դիտարկչի Python-ում։ Կարող ես import անել՝ {1} և ստանդարտ գրադարանը։",
-    "The tests call {0}, but your code doesn't define it. Check the name.": "Թեստերը կանչում են {0}-ը, բայց կոդդ այն չի սահմանում։ Ստուգի՛ր անունը։",
+    /* code exercises: solved in Google Colab (js/colab.js) */
+    "Download the notebook": "Ներբեռնել նոթբուքը",
+    "Download the exercise's notebook:": "Ներբեռնի՛ր վարժության նոթբուքը՝",
+    "Open Google Colab, choose <strong>File → Upload notebook</strong> and pick the file you downloaded ({0}). Colab saves it in your Google Drive, in the <em>Colab Notebooks</em> folder.": "Բացի՛ր Google Colab-ը, ընտրի՛ր <strong>File → Upload notebook</strong> և ընտրի՛ր ներբեռնածդ ֆայլը ({0})։ Colab-ն այն պահում է քո Google Drive-ում՝ <em>Colab Notebooks</em> թղթապանակում։",
+    "Open Google Colab": "Բացել Google Colab-ը",
+    "Solve it there: run your code, then the test cell. When every test passes, come back here:": "Լուծի՛ր այն այնտեղ. գործարկի՛ր կոդդ, հետո՝ թեստերի բջիջը։ Երբ բոլոր թեստերն անցնեն, վերադարձի՛ր այստեղ՝",
+    "📊 The notebook also plots what your code does.": "📊 Նոթբուքը նաև պատկերում է, թե ինչ է անում կոդդ։",
     /* practice */
     "Session complete": "Փուլն ավարտված է",
     "{0}/{1} correct · +{2} XP earned.": "{0}/{1} ճիշտ · +{2} XP վաստակած։",
@@ -196,7 +171,7 @@ const I18N = (() => {
     "Progress synced. {0} large code draft(s) stayed on this device.": "Առաջընթացը համաժամացվեց։ {0} մեծ սևագիր մնաց այս սարքում։",
     /* lab & missions */
     "🧪 The Lab": "🧪 Լաբորատորիա",
-    "Don't just read about algorithms and models — write them in <strong>JavaScript, Python or C++</strong>, test them, and <strong>watch your own code run</strong>. ": "Մի՛ կարդա ալգորիթմների ու մոդելների մասին — գրի՛ր դրանք <strong>JavaScript-ով, Python-ով կամ C++-ով</strong>, թեստավորի՛ր և <strong>դիտի՛ր, թե ինչպես է աշխատում քո սեփական կոդը</strong>։ ",
+    "Don't just read about algorithms and models — write them yourself in <strong>Python</strong> in Google Colab, test them, and <strong>plot what your own code does</strong>. ": "Մի՛ կարդա ալգորիթմների ու մոդելների մասին — գրի՛ր դրանք ինքդ <strong>Python-ով</strong> Google Colab-ում, թեստավորի՛ր և <strong>պատկերի՛ր, թե ինչ է անում քո սեփական կոդը</strong>։ ",
     "{0} of {1} solved.": "{0}/{1} լուծված։",
     "All": "Բոլորը",
     "Algorithms": "Ալգորիթմներ",
@@ -207,30 +182,9 @@ const I18N = (() => {
     "✓ Solved · {0} XP earned": "✓ Լուծված · {0} XP",
     "▶ Reward {0} XP": "▶ Պարգև՝ {0} XP",
     "← All problems": "← Բոլոր խնդիրները",
-    "📊 Visualize my code": "📊 Պատկերացրո՛ւ կոդս",
-    "Reset code": "Զրոյացնել կոդը",
     "Hint {0}": "Հուշում {0}",
-    "Hint for {0}": "Հուշում {0}-ի համար",
-    " Now hit Visualize →": " Հիմա սեղմի՛ր «Պատկերացրո՛ւ» →",
     "🧪 Solved! +{0} XP": "🧪 Լուծված է։ +{0} XP",
     /* lab visualization captions */
-    "swap {0} of {1}": "փոխատեղում {0} / {1}",
-    " — sorted! 🎉": " — դասավորված է։ 🎉",
-    "step {0} / {1}": "քայլ {0} / {1}",
-    " — shortest path found! 🎉": " — ամենակարճ ուղին գտնված է։ 🎉",
-    "Your function returned no path for this maze — but one exists. Keep going!": "Ֆունկցիադ ուղի չվերադարձրեց այս լաբիրինթոսի համար — բայց ուղի կա։ Շարունակի՛ր։",
-    "gradient step {0} / {1}": "գրադիենտային քայլ {0} / {1}",
-    " — converged 🎉": " — զուգամիտեց 🎉",
-    "iteration {0} / {1}": "կրկնություն {0} / {1}",
-    "your decision boundary, k = {0} 🎉": "քո որոշման սահմանը, k = {0} 🎉",
-    "painting the plane… {0}%": "հարթությունը ներկվում է… {0}%",
-    "epoch {0}": "դարաշրջան {0}",
-    "epoch {0} / {1}": "դարաշրջան {0} / {1}",
-    " — separated 🎉": " — տարանջատված է 🎉",
-    "loss over {0} epochs": "կորուստը {0} դարաշրջանում",
-    "final: {0}": "վերջնական՝ {0}",
-    "your network's map of the plane — corners predict {0} 🎉": "քո ցանցի հարթության քարտեզը — անկյունները կանխատեսում են {0} 🎉",
-    "running your Python…": "կատարվում է քո Python-ը…",
     "Real problems that need knowledge from more than one track — this is where the lessons click together. ": "Իրական խնդիրներ, որոնք պահանջում են մեկից ավելի ուղու գիտելիք — հենց այստեղ են դասերը իրար կպչում։ ",
     "{0} of {1} unlocked.": "{0}/{1} բացված։",
     "✓ Completed · {0} XP earned": "✓ Ավարտված · {0} XP",
@@ -297,6 +251,9 @@ const I18N = (() => {
     "This week": "Այս շաբաթ",
     "All time": "Ամբողջ ժամանակ",
     "No XP earned this week yet — be the first.": "Այս շաբաթ դեռ XP չի վաստակվել — եղի՛ր առաջինը։",
+    /* admin link in the nav, announcement banner */
+    "Admin": "Ադմին",
+    "Dismiss": "Փակել",
   };
 
   /* ---------- API ---------- */
@@ -361,7 +318,12 @@ const I18N = (() => {
     start();
   }
 
-  return { t, L, lang: () => lang, setLang };
+  /* More strings for one page (the admin panel keeps its own, js/i18n-admin.js) */
+  function extend(dict) {
+    Object.assign(HY, dict);
+  }
+
+  return { t, L, lang: () => lang, setLang, extend };
 })();
 
 const t = I18N.t;

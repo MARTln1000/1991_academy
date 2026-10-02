@@ -40,7 +40,7 @@ endif
 export REVISION := $(shell sha=$$(git rev-parse HEAD 2>/dev/null) && { git diff --quiet HEAD 2>/dev/null && echo $$sha || echo $$sha-dirty; })
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test up down restart logs status shell update backup nightly-backup restore
+.PHONY: help install dev test notebooks up down restart restart-caddy prune-images logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
 
 help: ## list these commands
 	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 5)} /^[a-z][a-z-]*:.*## / {printf "  make %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -50,7 +50,8 @@ help: ## list these commands
 ##@ Run the site (Docker)
 
 up: .env ## build and start the site in the background (again after code changes)
-	$(COMPOSE) up -d --build --wait $(SERVICES)
+	@# --remove-orphans: containers of services no longer in docker-compose.yml go too
+	$(COMPOSE) up -d --build --wait --remove-orphans $(SERVICES)
 	@echo
 	@echo "==> 1991 Academy is running on $(WHERE): $(URL)"
 ifeq ($(DOMAIN),)
@@ -58,8 +59,21 @@ ifeq ($(DOMAIN),)
 	@echo "    To publish it on a server, set DOMAIN in .env there (README.md → Run with Docker)."
 endif
 
+.env:
+	cp .env.example .env
+	@echo "==> Created .env from .env.example."
+
 down: ## stop the site (the database is kept)
 	$(COMPOSE) down
+
+# Caddy reads deploy/Caddyfile only when it starts: restart it (a few seconds;
+# the certificates are kept) when an update changed that file. (Used by update
+# and deploy/auto-update.sh; nothing to do without Caddy.)
+restart-caddy:
+ifeq ($(SERVICES),)
+	@echo "==> deploy/Caddyfile changed: restarting Caddy"
+	$(COMPOSE) restart caddy
+endif
 
 restart: ## restart the site, e.g. after editing .env
 	$(COMPOSE) up -d --wait --force-recreate $(SERVICES)
@@ -71,20 +85,58 @@ status: ## is it running, and which version
 	$(COMPOSE) ps
 	@curl -fsS http://127.0.0.1:8735/api/health && echo || echo "The app is not answering on 127.0.0.1:8735."
 	@echo "Site: $(URL)"
+	@if crontab -l 2>/dev/null | grep -qF "$(AUTO_UPDATE_MARK)"; then \
+	  echo "Automatic updates: on, following '$$(git symbolic-ref --short HEAD 2>/dev/null || echo '?')'. Latest:"; \
+	  tail -n 3 backups/auto-update.log 2>/dev/null | sed 's/^/  /' || true; \
+	else echo "Automatic updates: off (make auto-update-on)"; fi
 
 shell: ## open a shell inside the app container (sqlite3 /data/academy.db opens the database)
 	$(COMPOSE) exec app bash
 
+##@ Updating the site
+
+release: ## publish your work: run the tests, then push your branch to GitHub's dev and master (servers follow master)
+	@sh tools/release.sh
+
 update: ## on a server: pull the latest code from git, rebuild and restart
-	git pull --ff-only
-	$(MAKE) up
-	@# Each rebuild leaves the previous image behind; drop the unused ones so a
-	@# small server's disk doesn't slowly fill up.
+	@old=$$(git rev-parse HEAD:deploy/Caddyfile 2>/dev/null); \
+	git pull --ff-only && $(MAKE) up && \
+	if [ "$$old" != "$$(git rev-parse HEAD:deploy/Caddyfile)" ]; then $(MAKE) restart-caddy; fi
+	@$(MAKE) prune-images
+
+# Each rebuild leaves the previous image behind; drop the unused ones so a
+# small server's disk doesn't slowly fill up. (Used by update and auto-update.sh.)
+prune-images:
 	docker image prune -f
 
-.env:
-	cp .env.example .env
-	@echo "==> Created .env from .env.example."
+# The cron line carries a marker, so on/off find exactly this job of this checkout.
+AUTO_UPDATE_MARK := \# 1991_academy auto-update $(CURDIR)
+
+auto-update-on: ## on a server: install every new commit pushed to GitHub by itself (checks every 5 min; backup first, rollback if it fails)
+	@mkdir -p backups
+	@line="*/5 * * * * cd '$(CURDIR)' && sh deploy/auto-update.sh >> backups/auto-update.log 2>&1 $(AUTO_UPDATE_MARK)"; \
+	{ crontab -l 2>/dev/null | grep -vF "$(AUTO_UPDATE_MARK)" ; echo "$$line"; } | crontab - \
+	  && echo "==> Automatic updates are on: this server follows '$$(git symbolic-ref --short HEAD)' on GitHub." \
+	  && echo "    Every 5 minutes it checks for new commits; the log is backups/auto-update.log." \
+	  && echo "    Stop with: make auto-update-off"
+
+auto-update-off: ## stop the automatic updates ('make update' still updates by hand)
+	@crontab -l 2>/dev/null | grep -vF "$(AUTO_UPDATE_MARK)" | crontab - ; \
+	echo "==> Automatic updates are off. 'make update' installs new commits by hand."
+
+##@ Admin panel
+
+# NAME, not USER: make would quietly use your login name for an unset $(USER).
+admin: ## make an account an admin: make admin NAME=<username>, then sign in and open /admin.html
+	@test -n "$(NAME)" || { echo "usage: make admin NAME=<username>  (the account must exist on the site)"; exit 2; }
+	$(COMPOSE) exec -T app python app.py admin add "$(NAME)"
+
+admin-remove: ## take the admin rights away again: make admin-remove NAME=<username>
+	@test -n "$(NAME)" || { echo "usage: make admin-remove NAME=<username>"; exit 2; }
+	$(COMPOSE) exec -T app python app.py admin remove "$(NAME)"
+
+admins: ## list the admin accounts
+	$(COMPOSE) exec -T app python app.py admin list
 
 ##@ Database (Docker)
 
@@ -95,7 +147,7 @@ backup: ## snapshot the database into backups/ (safe while the site is running)
 
 nightly-backup: ## on a server: add a cron job that runs 'make backup' every night at 03:30
 	@line="30 3 * * * cd '$(CURDIR)' && mkdir -p backups && make backup >> backups/cron.log 2>&1"; \
-	{ crontab -l 2>/dev/null | grep -vF "cd '$(CURDIR)' && " ; echo "$$line"; } | crontab - \
+	{ crontab -l 2>/dev/null | grep -vF "cd '$(CURDIR)' && mkdir -p backups && make backup" ; echo "$$line"; } | crontab - \
 	  && echo "==> Nightly backup scheduled (see: crontab -l):" && echo "    $$line"
 
 restore: ## put a backup back: make restore FILE=backups/academy-<time>.db.gz
@@ -116,8 +168,11 @@ install: $(VENV) ## create .venv and install the dependencies and test tools
 dev: $(VENV) ## run app.py directly in dev mode at http://localhost:8735 (stop 'make up' first)
 	$(PYTHON) app.py
 
-test: $(VENV) ## run the API tests
+test: $(VENV) ## run the tests (the API, and every Colab notebook)
 	$(PYTHON) -m pytest -q
+
+notebooks: ## rebuild the Google Colab notebooks after changing an exercise in js/data/ (needs Node.js)
+	python3 tools/build_notebooks.py
 
 # Reinstalls whenever a requirements file changes.
 $(VENV): requirements.txt requirements-dev.txt requirements.lock

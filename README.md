@@ -1,13 +1,15 @@
 # 1991 Academy ⚡
 
+Run by **1991 Unit** (1991 Ստորաբաժանում). Support: [ai.1991@mil.am](mailto:ai.1991@mil.am), also in the main page's footer, next to the [privacy policy](privacy.html).
+
 A personal learning platform: seven structured tracks — **Mathematics for ML, Programming for ML, Web Development, Machine Learning, Deep Learning, Agentic AI, and Algorithms & Data Structures** — built like Duolingo-meets-freeCodeCamp:
 
 - **XP everywhere** — lessons (+20), quiz answers (+5), exercises (+15), missions (+60), lab problems (+30–80), reviews (+5). One currency feeds the daily goal, levels (Spark → Sage), streak and achievements. First-try perfect quizzes pay a random bonus (variable reward).
 - **Video lectures** embedded per-lesson — hand-picked free courses (3Blue1Brown, Karpathy, freeCodeCamp, Traversy) plus the full FAST "Mathematics for ML" lecture series — click-to-play YouTube no-cookie embeds, no API keys.
 - **Interactive exercises** inside lessons — Parsons problems (reorder code), faded blanks, matching pairs.
-- **Missions** — real coding challenges in **JavaScript, Python or C++** (editor + sandboxed tests) that need ideas from *two tracks at once*, unlocked by completing their prerequisite lessons.
-- **The Lab** — implement-it-yourself practice in **JavaScript, Python, or C++**: LeetCode-style DSA problems, classical ML models (k-NN, linear regression, k-means) and neural networks (perceptron, XOR MLP with backprop) written from scratch — then **visualized live by your own code**: your sort animating as bars, your BFS snaking through a maze, your k-means centroids marching, your network's decision boundary solving XOR.
-  - **JavaScript** runs in-page; **Python** runs in-browser via Pyodide (WebAssembly CPython, loaded from a CDN on first use: the standard library plus numpy, pandas, scipy, scikit-learn, sympy and networkx); **C++** compiles and runs on the server, in a locked-down container of its own (no network, a throwaway user per run, strict limits). Whatever the code prints shows in an **Output** panel, and errors point at the learner's own line. The editor has syntax highlighting, line numbers, and LeetCode-style auto-closing brackets/smart indent.
+- **Missions** — real coding challenges in **Python** that need ideas from *two tracks at once*, unlocked by completing their prerequisite lessons.
+- **The Lab** — implement-it-yourself practice in **Python**: LeetCode-style DSA problems, classical ML models (k-NN, linear regression, k-means) and neural networks (perceptron, XOR MLP with backprop) written from scratch — then **plotted from your own code**: your sort step by step, your BFS path through a maze, your k-NN's decision regions, your network solving XOR.
+  - **Every coding exercise is solved in Google Colab** (lesson exercises, Lab problems, missions): the learner downloads the exercise's notebook from the site (the task, the starter code, a test cell and the hints) and uploads it to Colab with *File → Upload notebook*, which keeps it in their own Google Drive. When the tests pass, **I solved it ✓** on the site awards the XP (honor system). Nothing runs learners' code on the server or in the site's pages, and nothing depends on GitHub.
 - **Practice** — spaced repetition: quiz questions from completed lessons become review cards, due just before you'd forget them.
 - **Achievements, streak, daily goal ring** — loss-aversion mechanics that make skipping a day feel expensive.
 
@@ -22,8 +24,7 @@ account). `js/i18n.js` translates the UI: **English strings are the dictionary
 keys**, so `t("Mark as complete")` returns Armenian in hy mode and the key
 itself otherwise — anything untranslated gracefully falls back to English.
 **Never name a local variable `t`** — it shadows the global translate function
-and silently breaks Armenian in that scope. Theme objects in `lab-viz.js` are
-called `th` for exactly this reason.
+and silently breaks Armenian in that scope.
 Content is translated per-field: add `title_hy` / `content_hy` / `tagline_hy`
 / quiz `q_hy`/`options_hy`/`explain_hy` / exercise `prompt_hy` / mission &
 Lab `brief_hy`/`hints_hy` etc. next to the English fields; renderers read
@@ -41,9 +42,10 @@ pack guards on its data file being present and must load **after** it (course
 tracks: after `ml-course.js`/`dl-course.js` too). Code blocks, `<pre>`,
 starter code and `__check` test names stay English by design. The Programming
 track's exercise prompts use the FAST course's own Armenian wording from its
-bilingual homework notebooks. `Noto Sans Armenian` is in the font stack; the
-Pyodide loader's status strings route through `t()`. To translate more, add
-`_hy` fields — no code changes needed.
+bilingual homework notebooks. `Noto Sans Armenian` is in the font stack. The
+Colab notebooks come in both languages too (`assets/colab/en|hy/`), built from
+the same `_hy` fields. To translate more, add `_hy` fields — no code changes
+needed (then `make notebooks`).
 
 ## Run it
 
@@ -54,7 +56,7 @@ frontend server, build step or database server.
 
 ```bash
 make install   # once: creates .venv with the pinned dependencies
-make dev       # → http://localhost:8735   (accounts, sync, leaderboard, C++ runner)
+make dev       # → http://localhost:8735   (accounts, sync, leaderboard)
 ```
 
 `make` on its own lists every command. Without make, that's
@@ -201,23 +203,60 @@ This part is for whoever puts the site on the internet.
    `ufw allow OpenSSH && ufw allow 80,443/tcp && ufw allow 443/udp && ufw enable`.
    The app's own port 8735 is published on `127.0.0.1` only, so it isn't
    reachable from outside either way.
+9. **Automatic updates** (recommended). Run `make auto-update-on`. From then
+   on the server checks GitHub every 5 minutes and installs whatever is
+   pushed to `master` by itself, so the site's developers can keep changing
+   the site without logging in to this server. Each update makes a database
+   backup first; if the new version fails to build or start, the server goes
+   back to the version that was running and logs why in
+   `backups/auto-update.log`. `make auto-update-off` stops it; `make update`
+   still updates by hand.
 
 **Checking it works:** `make status` should show the app `Up (healthy)` (and
-`caddy` `Up`, unless `PROXY=external`) and `runner` `Up (healthy)`, and `"debug":false,"cpp":true,"cpp_mode":"runner","secure_cookies":true,"trust_proxy":true`.
+`caddy` `Up`, unless `PROXY=external`), and `"debug":false,"secure_cookies":true,"trust_proxy":true`.
 Then create an account on the site and sign in.
+
+### Changing the site after it's deployed
+
+Servers run the `master` branch. With automatic updates on (step 9 above),
+anything that reaches `master` on GitHub is live within about 5 minutes, and
+nobody needs to log in to the server.
+
+| Branch | What it is |
+|--------|------------|
+| your own (e.g. `martin`) | Where you work and commit |
+| `dev` | Everything released so far; the same as `master` after each release |
+| `master` | What the servers run |
+
+To publish your work:
+
+```bash
+git add -A && git commit -m "What changed"   # on your branch
+make release
+```
+
+`make release` runs the tests, then pushes your branch to GitHub and moves
+`dev` and `master` to it, all three at once. It changes nothing (and says
+why) if something isn't committed, if `dev` or `master` has commits your
+branch doesn't (then `git merge origin/master` first), or if a test fails.
+
+Lessons and announcements don't need any of this: the admin panel changes
+them on the live site directly.
 
 ### Day to day
 
 | Command | What it does |
 |---------|--------------|
-| `make update` | On a server: `git pull`, rebuild, restart. This is how new code goes live |
+| `make update` | On a server: `git pull`, rebuild, restart. Not needed with automatic updates on |
+| `make auto-update-on` / `-off` | On a server: install every new commit on `master` by itself, within 5 minutes (backup first, rollback if it fails). Log: `backups/auto-update.log` |
 | `git checkout <commit> && make up` | Roll back to an earlier version (`git log --oneline` lists them). `git checkout master && make update` returns to the latest |
 | `make logs` | Requests, sign-ins, errors, certificate renewals (Ctrl-C stops watching) |
-| `make status` | Containers, health, and `revision`: the commit that is live (`-dirty` = built with uncommitted changes) |
+| `make status` | Containers, health, `revision` (the commit that is live; `-dirty` = built with uncommitted changes), and whether automatic updates are on |
 | `make restart` | After editing `.env` |
 | `make backup` | Snapshot into `backups/academy-<UTC time>.db.gz`. Integrity-checked, safe while running. On a server, copy these somewhere else now and then |
 | `make restore FILE=…` | Snapshots the current database first, then puts the backup back |
 | `make shell` | A shell in the app container; `sqlite3 /data/academy.db` opens the database |
+| `make admin NAME=…` | Make an account an admin (`make admin-remove NAME=…` undoes it, `make admins` lists them) |
 | `make down` | Stops the site. The database is kept |
 
 Never run `docker compose down -v`: `-v` deletes the volumes, and with them
@@ -231,10 +270,8 @@ On a server the app runs with production settings (`DEPLOYMENT.md` explains
 each one): no debug mode, secure cookies, trusting Caddy's
 `X-Forwarded-For`. It runs as a non-root user on a read-only
 filesystem, where the database volume is the only writable path. Learners'
-C++ runs in a separate `runner` container with no network and nothing inside
-worth taking (DEPLOYMENT.md §2). CI builds both images on every push and
-smoke-tests them, including a backup and a set of hostile C++ programs that
-must all be contained.
+code never runs on the server: they solve the exercises in Google Colab. CI
+builds the image on every push and smoke-tests it, including a backup.
 
 | Symptom | Cause, and fix |
 |---------|----------------|
@@ -248,57 +285,58 @@ must all be contained.
 
 ```
 1991 Academy/
-├── app.py                FastAPI backend: auth, sync, leaderboard, C++ runner, static
+├── app.py                FastAPI backend: auth, sync, leaderboard, admin API, static
 ├── requirements.txt      Runtime dependencies; requirements.lock pins their exact versions
 ├── Makefile              Every common command: `make` lists them
 ├── Dockerfile            The app image (API + frontend in one)
-├── docker-compose.yml    app + C++ runner + Caddy (HTTPS); settings from .env (template: .env.example)
+├── docker-compose.yml    app + Caddy (HTTPS); settings from .env (template: .env.example)
 ├── docker-compose.local.yml  Mac/local overrides, used when DOMAIN in .env is empty
 ├── DEPLOYMENT.md         Production reference: every setting, the server layout, why
 ├── .github/workflows/
 │   └── ci.yml            CI: API tests + Docker image smoke test on every push
-├── deploy/               Caddyfile (HTTPS proxy) and backup.sh (run by make backup)
-├── runner/               The C++ runner container: cpp_runner.py + its Dockerfile
-├── tests/                API tests; test_content.py runs every Lab problem and mission
-│                         in all three languages against content/solutions/
+├── deploy/               Caddyfile (HTTPS proxy), backup.sh (make backup), auto-update.sh (make auto-update-on)
+├── assets/colab/         The Colab notebooks, en/ and hy/ (generated: `make notebooks`)
+├── tools/                build_notebooks.py (`make notebooks`) + site_data.js: the Colab notebooks; release.sh (`make release`)
+├── tests/                API tests; test_notebooks.py runs every Colab notebook, with the
+│                         reference solutions in content/solutions/ and with its starter code
 ├── index.html            Dashboard: goal ring, level, tracks, missions, badges
-├── missions.html         Cross-track coding challenges (editor + tests)
-├── lab.html              The Lab: implement + visualize problems
+├── missions.html         Cross-track coding challenges (solved in Colab)
+├── lab.html              The Lab: implement-it-yourself problems (solved in Colab)
 ├── practice.html         Spaced-repetition review sessions
 ├── account.html          Sign in / create account / profile
+├── admin.html            The admin panel (admin accounts only; see "Admin panel")
+├── privacy.html          Privacy policy, English + Armenian (keep it true to what the site does)
 ├── tracks/               One shell page per track (identical except track id)
 │   ├── math.html  web.html  ml.html  dl.html  agents.html  dsa.html
 ├── css/
 │   ├── tokens.css        Design tokens: colors, fonts, radii (dark/light themes)
 │   ├── base.css          Reset + typography + layout primitives
 │   ├── components.css    Navbar, cards, lesson reader, quiz, toast…
-│   └── game.css          XP pill, goal ring, exercises, missions, practice
+│   ├── game.css          XP pill, goal ring, exercises, missions, practice
+│   └── admin.css         The admin panel
 └── js/
     ├── common.js         Namespace, theme toggle, queued toasts, helpers
     ├── auth.js           Session check, login/register calls, progress sync
     ├── account-page.js   Account page: forms + profile
+    ├── admin-page.js     The admin panel: overview, learners, lesson editor, announcements, log
+    ├── i18n-admin.js     The admin panel's Armenian strings
+    ├── custom-content.js Applies api/content.js: lessons and announcements from the admin panel
     ├── progress.js       localStorage: lesson completion, streak
     ├── xp.js             XP ledger, levels, daily goal, achievements
     ├── review.js         Spaced-repetition card store & scheduling
     ├── exercises.js      Parsons/blanks/match/problem/code renderers
-    ├── editor.js         Code editor: highlight, line numbers, auto-close brackets
-    ├── runner.js         ALL sandboxed execution: JS + Python in Web Workers,
-    │                     C++ via the API, plus the shared test-results renderer
+    ├── colab.js          Every coding exercise's steps: download the notebook, upload it to Colab, "I solved it"
     ├── main.js           Landing page rendering
     ├── track.js          Track page: sidebar, lesson reader, quiz engine, routing
-    ├── missions-page.js  Mission cards, lock logic, editor, test UI
-    ├── lab-page.js       Lab problem browser, editor, multi-language run, visualize
-    ├── lab-viz.js        Canvas renderers driven by the learner's code
+    ├── missions-page.js  Mission cards, lock logic, Colab links, hints
+    ├── lab-page.js       Lab problem browser, Colab links, hints
     ├── practice-page.js  Review session flow
     └── data/             All content lives here
         ├── math.js  web.js  ml.js  dl.js  agents.js  dsa.js   (tracks)
         ├── ml-course.js  dl-course.js                         (FAST course rebuilds of the ml/dl tracks)
         ├── math-exercises.js  math-exercises-2.js             (math homework problems + course materials)
-        ├── missions.js                                        (cross-track missions, JavaScript)
-        ├── missions-py.js  missions-cpp.js                    (their Python and C++ variants)
-        ├── lab.js                                             (Lab problems + JS + viz configs)
-        ├── lab-py.js                                          (Python variants of Lab problems)
-        ├── lab-cpp.js                                         (C++ variants of every Lab problem)
+        ├── missions.js                                        (cross-track missions, with their Python code)
+        ├── lab.js                                             (Lab problems, their Python code + plot configs)
         ├── i18n-hy.js                                         (Armenian: UI chrome + all titles + Lab cards)
         └── i18n-hy-{web,dsa,agents,math,ml,dl,prog,missions,lab}.js  (Armenian per-track/section content packs)
 ```
@@ -306,24 +344,24 @@ must all be contained.
 ## How it works
 
 - **Content is data.** Each `js/data/*.js` file registers a track object (modules → lessons → exercises → quiz questions) on `window.ACADEMY_1991`. Pages are thin shells that render from it.
-- **State is local-first.** Progress (`1991_academy:progress:v1`), XP/badges (`1991_academy:xp:v1`), review cards (`1991_academy:review:v1`), the language choice (`1991_academy:lang`) and code drafts (`1991_academy:draft:*`) live in localStorage. Signed in, the same keys are pushed to `/api/state` ~1.5 s after every change (coalesced into one request, and flushed on `pagehide`) and pulled back on any device you sign in on. Conflict rule: the copy with more XP wins; signing in as a *different* user on a shared device always adopts that account's server copy. The theme and per-problem editor language stay device-local on purpose. (The prefix was `martinium:` before the project was renamed. `js/common.js` moves a returning visitor's old keys over once on page load, and the server renames old keys in stored and incoming blobs.)
+- **State is local-first.** Progress (`1991_academy:progress:v1`), XP/badges (`1991_academy:xp:v1`), review cards (`1991_academy:review:v1`), and the language choice (`1991_academy:lang`) live in localStorage (so do code drafts, `1991_academy:draft:*`, from before exercises moved to Colab). Signed in, the same keys are pushed to `/api/state` ~1.5 s after every change (coalesced into one request, and flushed on `pagehide`) and pulled back on any device you sign in on. Conflict rule: the copy with more XP wins; signing in as a *different* user on a shared device always adopts that account's server copy. The theme and per-problem editor language stay device-local on purpose. (The prefix was `martinium:` before the project was renamed. `js/common.js` moves a returning visitor's old keys over once on page load, and the server renames old keys in stored and incoming blobs.)
 - **State changes are announced, not reloaded.** `Progress`/`XP`/`Review` cache their parsed blob, so a render pass parses it once instead of forty times. Anything that rewrites those keys from outside — a sync pull, or another tab — calls `notifyStateChanged()` (`js/common.js`), which drops the caches and fires `1991_academy:state-changed`; page controllers subscribe with `onStateChanged(render)` and redraw in place. Open editors and in-progress practice sessions are deliberately left alone. Only a language change still forces a reload, because the language is baked into every rendered string.
 - **If a sync fails, you are told once.** Oversized payloads shed the largest code drafts first so progress always gets through; a 401 signs you out cleanly; repeated failures toast once, not every 1.5 seconds.
-- **Auth is boring on purpose.** Passwords are scrypt-hashed with per-user salts; sessions are random tokens in an HttpOnly cookie (30 days); users, sessions and state blobs live in `1991_academy.db` (SQLite). The FastAPI backend adds rate limiting (login/register/reset/C++ runner), request-size caps, structured logging, `/api/health` and env-based config — see `DEPLOYMENT.md` before exposing it to the open internet (HTTPS required; set `ACADEMY_CPP=0` publicly). Change-password and password-reset rotate the hash and invalidate sessions; reset tokens are SHA-256-hashed, single-use and expire in 1 hour; `forgot-password` always returns the same response (no email enumeration). Expired sessions and reset tokens are swept at startup and hourly.
-- **Nothing blocking runs on the event loop.** SQLite, scrypt and C++ runs all go through `run_in_threadpool`. This matters: a single 25-second C++ compile used to stall every other request on the server, including static files.
-- **The web root is an allowlist, not a blocklist.** Only `/`, the five page files and the `css/ js/ tracks/ assets/` trees are reachable. The previous extension blocklist could be walked around by case (`/APP.PY` resolves to `app.py` on macOS and Windows volumes, which served the backend source and the credentials database) and simultaneously 404'd the legitimate `.py` starter files under `assets/courses/`.
+- **Auth is boring on purpose.** Passwords are scrypt-hashed with per-user salts; sessions are random tokens in an HttpOnly cookie (30 days); users, sessions and state blobs live in `1991_academy.db` (SQLite). The FastAPI backend adds rate limiting (login/register/reset), request-size caps, structured logging, `/api/health` and env-based config — see `DEPLOYMENT.md` before exposing it to the open internet (HTTPS required). Change-password and password-reset rotate the hash and invalidate sessions; reset tokens are SHA-256-hashed, single-use and expire in 1 hour; `forgot-password` always returns the same response (no email enumeration). Expired sessions and reset tokens are swept at startup and hourly.
+- **Nothing blocking runs on the event loop.** SQLite and scrypt go through `run_in_threadpool`, so a slow login hash never stalls other requests or static files.
+- **The web root is an allowlist, not a blocklist.** Only `/`, the seven page files, `robots.txt` and the `css/ js/ tracks/ assets/` trees are reachable. The previous extension blocklist could be walked around by case (`/APP.PY` resolves to `app.py` on macOS and Windows volumes, which served the backend source and the credentials database) and simultaneously 404'd the legitimate `.py` starter files under `assets/courses/`.
 - **The database is indexed.** `init_db()` creates `CREATE INDEX IF NOT EXISTS` entries on every start (idempotent, data-safe, and applied to existing DBs too): case-insensitive `username`/`email` for login-by-either, a composite `(leaderboard_opt_in, xp_total DESC)` so the leaderboard is an indexed search rather than a full scan, and `sessions(user_id)` for per-user session cleanup. Session-token, `state.user_id` and the UNIQUE columns are already covered by their PRIMARY KEY / UNIQUE constraints.
 - **Images are lean by design.** The logo and every favicon are inline SVG; the only raster images the UI renders are YouTube thumbnails, served `loading="lazy" decoding="async"` with intrinsic dimensions inside an `aspect-ratio` box (no layout shift), and the players are click-to-play `youtube-nocookie` iframes injected only on click. The 200-odd raster files under `assets/courses/**` are FAST homework **datasets** (downloaded, not displayed) and are deliberately left byte-for-byte intact. Any future in-UI image should be WebP/AVIF, lazy-loaded, with width/height set.
 - **XP is ledgered.** Every award has a key (`lesson:web-1-1`, `ex:dsa-2-1:0`, `mission:mission-maze`) paid out once — nothing can be farmed by re-doing.
-- **Learner code never touches the main thread.** `js/runner.js` is the single entry point for every execution path — `Runner.javascript` / `Runner.python` / `Runner.cpp` for tests, `Runner.computeJavascript` / `Runner.computePython` for visualizations — and they all return the same `{results[], output, error?}` / `{data, output, error?}` shape and share one results renderer, which shows what the code printed and words every error the same way in English and Armenian. JS runs in a Web Worker (3 s for tests, 15 s for a visualization) that is terminated on timeout; Python runs in a long-lived Pyodide worker with runs serialized, so a second click can never land mid-run on the shared interpreter, and every run gets a fresh namespace, so a function deleted from the editor can't keep passing the tests; C++ posts to `POST /api/run-cpp`. An accidental `while (true)` anywhere — tests *or* visualize — times out instead of freezing the tab.
-- **Lab and mission languages.** Every Lab problem and mission comes in JavaScript, Python and C++, all with the same `__check(name, actual, expected)` protocol. C++ is compiled by the `runner` container (`runner/cpp_runner.py`): the app hands it the program over a Unix socket, and it compiles and runs it as a throwaway user with no network and hard limits. Without Docker, `ACADEMY_CPP=1` (the dev default) compiles in-process on your own computer; never set it on a public server. Visualizations run from JS or Python only; each `LabViz.computeJS[kind]` is self-contained so its source can be shipped into the worker verbatim.
+- **Learners' code runs in Google Colab, never here.** Every coding exercise is Python. `tools/build_notebooks.py` turns each one in `js/data/` into a notebook (`assets/colab/en|hy/<id>.ipynb`): the task, a starter cell, a form cell that runs the tests and prints ✓/✗ per test, the hints, and for the Lab problems a matplotlib plot of the learner's own code. The site serves them like any other file; `js/colab.js` shows each exercise's three steps (download the notebook, open Colab and upload it, then *I solved it*). So **a changed exercise reaches learners with `make notebooks` and the next deploy**. `make test` fails if the notebooks are out of date, and runs each one with a reference solution (must pass) and with its starter code (must not).
+- **Lab problems and missions** keep their Python code next to their text: `fnName`, `starter` and `tests` (a script calling `__check(name, actual, expected)`) in `lab.js` / `missions.js`.
 - **Dev server sends `Cache-Control: no-store`** so edits to JS/CSS show up on reload instead of a stale cached bundle.
 - **Routing is the URL hash.** `tracks/dl.html#dl-2-2` deep-links to a lesson, `missions.html#mission-maze` to a mission.
 - **Theming is one attribute.** `data-theme="dark|light"` on `<html>` swaps CSS custom properties; each track sets its accent via `data-track` on `<body>`.
 
 ## Add a mission
 
-Append an object to `js/data/missions.js`: `id`, `title`, `icon`, `tracks`, `prereqs` (lesson ids that unlock it), `xp`, `blurb`, `brief` (HTML), `starter` code, `tests` (a script calling `__check(name, actual, expected)`), and `hints`. Add its Python and C++ versions to `missions-py.js` and `missions-cpp.js` (`fnName`, `starter`, `tests`, and for C++ a `prelude` with any structs it gives the learner), and a reference solution per language to `tests/content/solutions/`: `make test` then checks that each one passes and each starter doesn't. Lock logic, editor and scoring are automatic.
+Append an object to `js/data/missions.js`: `id`, `title`, `icon`, `tracks`, `prereqs` (lesson ids that unlock it), `xp`, `blurb`, `brief` (HTML), its Python `fnName`, `starter` code and `tests` (a script calling `__check(name, actual, expected)`), and `hints`; add a reference solution to `tests/content/solutions/<id>.py`. Then `make notebooks` writes its Colab notebook, and `make test` checks that the solution passes and the starter doesn't. Lock logic, the Colab steps and scoring are automatic.
 
 ## Add a video to a lesson
 
@@ -345,14 +383,16 @@ Add an `exercises: [...]` array to any lesson. Three types:
 { type: "blanks", title, prompt, code: "a {{0}} b", blanks: [{options, answer}] }
 { type: "match",  title, prompt, pairs: [["left", "right"], ...] }
 { type: "problem", title, prompt, source, statement, solution }              // worked math problem
-{ type: "code", title, prompt, source, fnName, starter, tests }              // auto-graded Python
+{ type: "code", title, prompt, source, fnName, starter, tests }              // Python, in Colab
 ```
 
-The `code` type embeds the full editor + in-browser Python grader inside a
-lesson (used by the Programming for ML track — its exercises are the FAST
-course's real homework, often with the course's original asserts). The page
-must include `editor.js` and `pyrunner.js` (see `tracks/prog.html`). NumPy
-imports auto-download the package on first run.
+The `code` type is solved in Google Colab: the lesson shows a download button
+for its notebook, `<lesson id>-ex<n>.ipynb`, how to upload it to Colab, and
+"I solved it ✓"
+(used by the Programming for ML track — its exercises are the FAST course's
+real homework, often with the course's original asserts). Run `make
+notebooks` after adding or changing one; the page must include `colab.js`
+(see `tracks/prog.html`).
 
 Course materials (slides, homework notebooks/PDFs, datasets) are local copies
 under `assets/courses/` — add a `materials: [{label, href}]` array to any
@@ -370,9 +410,44 @@ across modules 2–4 (Homeworks 5–11, two per lesson) — each bilingual
 (`statement_hy`/`solution_hy`, KaTeX kept byte-identical) and every answer
 verified numerically against numpy before shipping.
 
+## Admin panel
+
+`/admin.html` (an **Admin** link appears in the navigation bar for admins):
+
+- **Overview:** learners, sign-ups and lessons completed over the last 30
+  days, progress per track, the most and least completed lessons, Lab
+  problems and missions solved.
+- **Learners:** search and sort every account, open one to see its progress
+  lesson by lesson, send it a password-reset link, sign it out on every
+  device, or delete it.
+- **Lessons:** edit any lesson, or add new ones to a module, in English and
+  Armenian: text, takeaways, quiz, videos. Saved lessons go live at once
+  (no rebuild) when "Visible to learners" is ticked, otherwise they stay
+  drafts. Editing a built-in lesson replaces its text; "Undo my changes"
+  brings the original back.
+- **Announcements:** a banner at the top of every page (English + Armenian).
+- **Activity log:** every change made by an admin.
+
+Admin rights are given on the server only, never from the web:
+
+```bash
+make admin NAME=martin        # the account must exist: sign up on the site first
+make admins                   # who is an admin
+make admin-remove NAME=martin
+```
+
+(Without Docker: `.venv/bin/python app.py admin add martin`.)
+
+Lessons and announcements written in the panel live in the database (tables
+`lessons` and `announcements`), so `make backup` covers them. Lesson HTML is
+sanitized when saved: scripts, styles, event handlers, images and frames are
+removed.
+
 ## Add a lesson
 
-Open the track's file in `js/data/`, add an object to a module's `lessons` array:
+The quickest way is the admin panel (above). To ship a lesson with the code
+instead, open the track's file in `js/data/` and add an object to a module's
+`lessons` array:
 
 ```js
 {
