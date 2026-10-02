@@ -6,11 +6,16 @@
 #
 # Nothing happens unless the branch on GitHub has moved. Then it:
 #   1. snapshots the database (make backup), and stops if that fails;
-#   2. fast-forwards to the new commit and rebuilds (what `make update` does);
+#   2. fast-forwards to the new commit and rebuilds (what `make update` does,
+#      including a check of a changed deploy/Caddyfile before Caddy uses it);
 #   3. if that fails, goes back to the commit that was running, rebuilds it,
 #      and remembers the bad commit, so it isn't retried every 5 minutes.
 #      The next push (a fix) is tried as usual.
 # It never discards local changes and never moves backwards on its own.
+#
+# With --refresh (weekly, from the same cron setup) it instead backs up and
+# runs `make refresh`: the newest Caddy and Python base images, for security
+# fixes that arrive without any new commit.
 
 set -u
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -30,6 +35,19 @@ if ! mkdir "$lock" 2>/dev/null; then
     fi
 fi
 trap 'rmdir "$lock" 2>/dev/null' EXIT
+
+if [ "${1:-}" = "--refresh" ]; then
+    if ! make backup >/dev/null 2>&1; then
+        log "weekly refresh: the database backup failed, so the refresh was skipped. Check 'make status' and 'make logs'."
+        exit 1
+    fi
+    if make refresh >/dev/null 2>&1; then
+        log "weekly refresh: Caddy and Python base images are up to date"
+        exit 0
+    fi
+    log "weekly refresh FAILED (no network, or Docker Hub unreachable?). The site keeps its current images unless 'make status' says otherwise."
+    exit 1
+fi
 
 branch=$(git symbolic-ref --quiet --short HEAD) || {
     log "not on a branch (a rollback with git checkout?): not updating. 'git checkout master' turns updates back on."
@@ -59,8 +77,11 @@ if ! make backup >/dev/null 2>&1; then
 fi
 
 caddyfile=$(git rev-parse "$old:deploy/Caddyfile" 2>/dev/null)
-if git merge --ff-only --quiet "$new" && make up >/dev/null 2>&1; then
-    if [ "$caddyfile" != "$(git rev-parse HEAD:deploy/Caddyfile 2>/dev/null)" ]; then
+caddy_changed() { [ "$caddyfile" != "$(git rev-parse HEAD:deploy/Caddyfile 2>/dev/null)" ]; }
+if git merge --ff-only --quiet "$new" &&
+   { ! caddy_changed || make check-caddy >/dev/null 2>&1; } &&
+   make up >/dev/null 2>&1; then
+    if caddy_changed; then
         make restart-caddy >/dev/null 2>&1 || log "deploy/Caddyfile changed but Caddy didn't restart: run 'make restart'"
     fi
     make prune-images >/dev/null 2>&1

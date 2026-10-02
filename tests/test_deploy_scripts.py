@@ -37,6 +37,12 @@ backup:
 \t@test ! -e .backup-fails
 restart-caddy:
 \t@echo restart-caddy >> .calls
+check-caddy:
+\t@echo check-caddy >> .calls
+\t@test ! -e CADDY_BROKEN
+refresh:
+\t@echo refresh >> .calls
+\t@test ! -e .refresh-fails
 prune-images:
 \t@echo prune-images >> .calls
 test:
@@ -74,7 +80,7 @@ def repos(tmp_path):
         (work / script).parent.mkdir(exist_ok=True)
         shutil.copy(ROOT / script, work / script)
     commit(work, "first", {"Makefile": STUB_MAKEFILE, "deploy/Caddyfile": "site\n", "app.txt": "v1\n",
-                           ".gitignore": ".calls\n.backup-fails\n.tests-fail\n"})
+                           ".gitignore": ".calls\n.backup-fails\n.tests-fail\n.refresh-fails\n"})
     run("git", "remote", "add", "origin", str(origin), cwd=work)
     run("git", "push", "-q", "-u", "origin", "master", "master:dev", cwd=work)
     run("git", "clone", "-q", str(origin), str(server), cwd=tmp_path)
@@ -87,6 +93,11 @@ def push(work):
 
 def auto_update(server):
     r = run("sh", "deploy/auto-update.sh", cwd=server, check=False)
+    return r.returncode, r.stdout + r.stderr
+
+
+def auto_update_refresh(server):
+    r = run("sh", "deploy/auto-update.sh", "--refresh", cwd=server, check=False)
     return r.returncode, r.stdout + r.stderr
 
 
@@ -121,7 +132,31 @@ def test_caddy_restarts_only_when_its_config_changed(repos):
     commit(work, "caddy", {"deploy/Caddyfile": "site2\n"})
     push(work)
     assert auto_update(server)[0] == 0
-    assert calls(server) == ["backup", "up", "restart-caddy", "prune-images"]
+    assert calls(server) == ["backup", "check-caddy", "up", "restart-caddy", "prune-images"]
+
+
+def test_a_broken_caddyfile_is_rolled_back_before_caddy_sees_it(repos):
+    _, work, server = repos
+    good = head(server)
+    commit(work, "bad caddy", {"deploy/Caddyfile": "site{{\n", "CADDY_BROKEN": "x"})
+    push(work)
+    code, out = auto_update(server)
+    assert code == 1 and "going back" in out, out
+    assert head(server) == good and (server / "deploy/Caddyfile").read_text() == "site\n"
+    assert calls(server) == ["backup", "check-caddy", "up"]          # never restarted Caddy
+
+
+def test_weekly_refresh(repos):
+    _, _, server = repos
+    code, out = auto_update_refresh(server)
+    assert code == 0 and "up to date" in out and calls(server) == ["backup", "refresh"]
+    (server / ".refresh-fails").write_text("")
+    code, out = auto_update_refresh(server)
+    assert code == 1 and "refresh FAILED" in out
+    (server / ".backup-fails").write_text("")
+    code, out = auto_update_refresh(server)
+    assert code == 1 and "backup failed" in out
+    assert calls(server) == ["backup", "refresh", "backup"]
 
 
 def test_a_broken_version_is_rolled_back_and_not_retried(repos):
@@ -267,11 +302,14 @@ def test_cron_jobs_leave_each_other_and_other_jobs_alone(tmp_path):
 
     for target in ("nightly-backup", "auto-update-on", "nightly-backup", "auto-update-on"):
         lines = make(target)
-    assert len(lines) == 3
+    assert len(lines) == 4
     assert lines[0] == "0 1 * * * echo someone-else's-job"
     assert sum("make backup" in line for line in lines) == 1
     auto = [line for line in lines if "auto-update.sh" in line]
-    assert auto == [f"*/5 * * * * cd '{ROOT}' && sh deploy/auto-update.sh >> backups/auto-update.log 2>&1 "
-                    f"# 1991_academy auto-update {ROOT}"]
+    assert auto == [
+        f"*/5 * * * * cd '{ROOT}' && sh deploy/auto-update.sh >> backups/auto-update.log 2>&1 # 1991_academy auto-update {ROOT}",
+        f"0 4 * * 0 cd '{ROOT}' && sh deploy/auto-update.sh --refresh >> backups/auto-update.log 2>&1 # 1991_academy auto-update {ROOT}",
+    ]
+    assert not any("%" in line for line in lines)      # cron would cut the line at a %
     lines = make("auto-update-off")
     assert len(lines) == 2 and not any("auto-update" in line for line in lines)

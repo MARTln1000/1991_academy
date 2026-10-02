@@ -209,8 +209,17 @@ This part is for whoever puts the site on the internet.
    the site without logging in to this server. Each update makes a database
    backup first; if the new version fails to build or start, the server goes
    back to the version that was running and logs why in
-   `backups/auto-update.log`. `make auto-update-off` stops it; `make update`
-   still updates by hand.
+   `backups/auto-update.log`. Every Sunday at 04:00 it also installs security
+   updates for Caddy and Python (`make refresh`). `make auto-update-off` stops
+   both; `make update` still updates by hand.
+10. **Two things to set up outside the server** (recommended):
+    - *Off-site backups.* Backups stay on this server (`backups/`, 30 days).
+      Copy them somewhere else now and then, or have a job pull them, e.g.
+      `rsync -a root@SERVER:1991_academy/backups/ ./academy-backups/`. If the
+      server is lost, those copies are all that's left.
+    - *Uptime alerts.* A free monitor (UptimeRobot, Better Stack...) that
+      opens `https://your-domain/` every few minutes and emails you when it
+      fails. (`/api/health` answers only on the server itself.)
 
 **Checking it works:** `make status` should show the app `Up (healthy)` (and
 `caddy` `Up`, unless `PROXY=external`), and `"debug":false,"secure_cookies":true,"trust_proxy":true`.
@@ -248,7 +257,8 @@ them on the live site directly.
 | Command | What it does |
 |---------|--------------|
 | `make update` | On a server: `git pull`, rebuild, restart. Not needed with automatic updates on |
-| `make auto-update-on` / `-off` | On a server: install every new commit on `master` by itself, within 5 minutes (backup first, rollback if it fails). Log: `backups/auto-update.log` |
+| `make auto-update-on` / `-off` | On a server: install every new commit on `master` by itself, within 5 minutes (backup first, rollback if it fails), and security updates weekly. Log: `backups/auto-update.log` |
+| `make refresh` | Security updates now: the newest Caddy and Python base images, rebuilt and restarted |
 | `git checkout <commit> && make up` | Roll back to an earlier version (`git log --oneline` lists them). `git checkout master && make update` returns to the latest |
 | `make logs` | Requests, sign-ins, errors, certificate renewals (Ctrl-C stops watching) |
 | `make status` | Containers, health, `revision` (the commit that is live; `-dirty` = built with uncommitted changes), and whether automatic updates are on |

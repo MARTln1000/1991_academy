@@ -7,6 +7,10 @@ name: CI
 on:
   push:
   workflow_dispatch:
+  # Weekly too, without a push: a vulnerability found in a dependency since the
+  # last push shows up here (GitHub emails the repo owner when a run fails).
+  schedule:
+    - cron: "0 6 * * 1"
 
 permissions:
   contents: read
@@ -76,6 +80,37 @@ jobs:
           ls -l backups/
           make restore FILE="$(ls backups/academy-*.db.gz | tail -n 1)"
           curl -fsS http://127.0.0.1:8735/api/health
+      - name: Through Caddy, as on a server (DOMAIN=localhost, its own certificate)
+        run: |
+          export DOMAIN=localhost
+          docker compose run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker compose up -d --wait
+          for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsSk -o /dev/null https://localhost/ && break; sleep 2; done
+          curl -fsSk -o /dev/null https://localhost/ || { echo "::error::https://localhost/ is not served through Caddy"; exit 1; }
+          headers=$(curl -sSkI https://localhost/)
+          echo "$headers"
+          echo "$headers" | grep -qi '^strict-transport-security:' || { echo "::error::no HSTS header"; exit 1; }
+          echo "$headers" | grep -qi '^content-security-policy:' || { echo "::error::no CSP header"; exit 1; }
+          if echo "$headers" | grep -qiE '^(server|via):'; then echo "::error::the server software is advertised"; exit 1; fi
+          code=$(curl -sk -o /dev/null -w '%{http_code}' https://localhost/api/health)
+          [ "$code" = 404 ] || { echo "::error::/api/health answered $code through Caddy, expected 404"; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/)
+          [ "$code" = 308 ] || { echo "::error::http:// answered $code, expected a redirect to https://"; exit 1; }
       - name: Container log
         if: always()
-        run: docker compose logs app
+        run: docker compose logs
+
+  audit:
+    name: Known vulnerabilities in the dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: pip-audit of the exact versions the image installs (requirements.lock)
+        run: |
+          pip install -q pip-audit
+          grep -v '^#' requirements.lock > "$RUNNER_TEMP/lock.txt"
+          pip-audit --no-deps --progress-spinner off -r "$RUNNER_TEMP/lock.txt"

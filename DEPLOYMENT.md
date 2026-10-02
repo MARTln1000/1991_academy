@@ -221,6 +221,20 @@ In the Docker setup:
   the bad commit until a newer one arrives. It never discards changes made on
   the server and never follows a rewritten history: both are logged to
   `backups/auto-update.log` for a person to sort out.
+  Every Sunday at 04:00 it runs `make refresh` (with a backup first): the
+  newest `caddy:2-alpine` and `python:3.12-slim` images, so security fixes
+  arrive even when no code changes.
+- A changed Caddyfile is validated (`make check-caddy`) before Caddy restarts
+  with it; an invalid one makes the update roll back instead of taking the
+  site down. While the app restarts during an update, Caddy holds requests
+  and retries (`lb_try_duration`), so a normal update causes no errors, only
+  a pause of a second or two.
+- Disk: every update deletes old images and caps Docker's build cache at
+  2 GB (`make prune-images`); backups are kept 30 days, in the volume and in
+  `backups/`. Container logs are capped at 5 × 10 MB.
+- The caddy container is locked down like the app: read-only filesystem,
+  all Linux capabilities dropped except binding ports 80/443, no new
+  privileges. Both have a process limit.
 - Caddy answers `/api/health` with 404 from the internet (`make status` and
   the healthcheck reach the app directly) and sends no `Server`/`Via` header.
 - The container sandbox (§2): read-only code, no capabilities, non-root.

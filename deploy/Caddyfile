@@ -14,5 +14,11 @@
 	# CI and the container healthcheck reach the app directly on port 8735;
 	# the internet doesn't need it.
 	respond /api/health 404
-	reverse_proxy app:8735
+	reverse_proxy app:8735 {
+		# While the app restarts during an update (a few seconds), hold each
+		# request and retry, so visitors see a short pause instead of a 502.
+		# Only requests that never reached the app are retried.
+		lb_try_duration 20s
+		lb_try_interval 250ms
+	}
 }

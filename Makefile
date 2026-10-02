@@ -40,7 +40,7 @@ endif
 export REVISION := $(shell sha=$$(git rev-parse HEAD 2>/dev/null) && { git diff --quiet HEAD 2>/dev/null && echo $$sha || echo $$sha-dirty; })
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test notebooks up down restart restart-caddy prune-images logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
+.PHONY: help install dev test notebooks up down restart restart-caddy prune-images check-caddy refresh logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
 
 help: ## list these commands
 	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 5)} /^[a-z][a-z-]*:.*## / {printf "  make %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -61,6 +61,7 @@ endif
 
 .env:
 	cp .env.example .env
+	@chmod 600 .env   # it may hold the SMTP password
 	@echo "==> Created .env from .env.example."
 
 down: ## stop the site (the database is kept)
@@ -100,24 +101,49 @@ release: ## publish your work: run the tests, then push your branch to GitHub's 
 
 update: ## on a server: pull the latest code from git, rebuild and restart
 	@old=$$(git rev-parse HEAD:deploy/Caddyfile 2>/dev/null); \
-	git pull --ff-only && $(MAKE) up && \
+	git pull --ff-only && \
+	if [ "$$old" != "$$(git rev-parse HEAD:deploy/Caddyfile)" ]; then $(MAKE) check-caddy || exit 1; fi && \
+	$(MAKE) up && \
 	if [ "$$old" != "$$(git rev-parse HEAD:deploy/Caddyfile)" ]; then $(MAKE) restart-caddy; fi
 	@$(MAKE) prune-images
 
-# Each rebuild leaves the previous image behind; drop the unused ones so a
-# small server's disk doesn't slowly fill up. (Used by update and auto-update.sh.)
+refresh: ## security updates: the newest Caddy and Python base images, rebuilt and restarted (auto-update-on does it weekly)
+ifeq ($(SERVICES),)
+	$(COMPOSE) pull --quiet caddy
+endif
+	$(COMPOSE) build --pull app
+	$(MAKE) up
+	@$(MAKE) prune-images
+
+# Each rebuild leaves the previous image and a few hundred MB of build cache
+# behind. Drop the images and cap the cache at 2 GB (enough for quick
+# rebuilds), or a small server's disk fills up. The cap's option is
+# --max-used-space from Docker 28, --keep-storage before. (Used by update,
+# refresh and deploy/auto-update.sh.)
 prune-images:
 	docker image prune -f
+	@docker builder prune -f --max-used-space 2gb 2>/dev/null \
+	  || docker builder prune -f --keep-storage 2gb 2>/dev/null \
+	  || docker builder prune -f --filter until=24h
+
+# Is deploy/Caddyfile valid? Checked before Caddy restarts with a changed one:
+# a broken one would take the site down. (Nothing to check without Caddy.)
+check-caddy:
+ifeq ($(SERVICES),)
+	$(COMPOSE) run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+endif
 
 # The cron line carries a marker, so on/off find exactly this job of this checkout.
 AUTO_UPDATE_MARK := \# 1991_academy auto-update $(CURDIR)
 
-auto-update-on: ## on a server: install every new commit pushed to GitHub by itself (checks every 5 min; backup first, rollback if it fails)
+auto-update-on: ## on a server: install every new commit pushed to GitHub by itself (checks every 5 min; backup first, rollback if it fails), and security updates weekly
 	@mkdir -p backups
 	@line="*/5 * * * * cd '$(CURDIR)' && sh deploy/auto-update.sh >> backups/auto-update.log 2>&1 $(AUTO_UPDATE_MARK)"; \
-	{ crontab -l 2>/dev/null | grep -vF "$(AUTO_UPDATE_MARK)" ; echo "$$line"; } | crontab - \
+	weekly="0 4 * * 0 cd '$(CURDIR)' && sh deploy/auto-update.sh --refresh >> backups/auto-update.log 2>&1 $(AUTO_UPDATE_MARK)"; \
+	{ crontab -l 2>/dev/null | grep -vF "$(AUTO_UPDATE_MARK)" ; echo "$$line"; echo "$$weekly"; } | crontab - \
 	  && echo "==> Automatic updates are on: this server follows '$$(git symbolic-ref --short HEAD)' on GitHub." \
-	  && echo "    Every 5 minutes it checks for new commits; the log is backups/auto-update.log." \
+	  && echo "    Every 5 minutes it checks for new commits, and every Sunday at 04:00 it installs" \
+	  && echo "    security updates for Caddy and Python (make refresh). Log: backups/auto-update.log" \
 	  && echo "    Stop with: make auto-update-off"
 
 auto-update-off: ## stop the automatic updates ('make update' still updates by hand)
@@ -144,6 +170,9 @@ backup: ## snapshot the database into backups/ (safe while the site is running)
 	$(COMPOSE) exec -T app bash deploy/backup.sh
 	@mkdir -p backups
 	$(COMPOSE) cp app:/data/backups/. backups/
+	@# keep the copies here as long as those in the volume (30 days), or
+	@# nightly and per-update backups would slowly fill the disk
+	@find backups -maxdepth 1 -name 'academy-*.db.gz' -mtime +30 -delete
 
 nightly-backup: ## on a server: add a cron job that runs 'make backup' every night at 03:30
 	@line="30 3 * * * cd '$(CURDIR)' && mkdir -p backups && make backup >> backups/cron.log 2>&1"; \
