@@ -43,7 +43,7 @@ endif
 export REVISION := $(shell sha=$$(git rev-parse HEAD 2>/dev/null) && { git diff --quiet HEAD 2>/dev/null && echo $$sha || echo $$sha-dirty; })
 
 .DEFAULT_GOAL := help
-.PHONY: video media-upload help install dev test notebooks up down restart restart-caddy prune-images check-caddy refresh logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
+.PHONY: email-test video media-upload help install dev test notebooks up down restart restart-caddy prune-images check-caddy refresh logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
 
 help: ## list these commands
 	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 5)} /^[a-z][a-z-]*:.*## / {printf "  make %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -177,6 +177,12 @@ media-upload: ## copy the videos (MEDIA_DIR, default media/) to a server: make m
 	@test -n "$(TO)" || { echo "usage: make media-upload TO=root@SERVER  [DIR=folder on the server, default 1991_academy/media]"; exit 2; }
 	@# --chmod: readable by the containers, whatever the files' modes are here
 	rsync -av --partial --progress --exclude '.*' --chmod=D755,F644 "$(MEDIA)/" "$(TO):$(or $(DIR),1991_academy/media)/"
+
+##@ Email
+
+email-test: ## send a test email with the settings in .env: make email-test TO=you@example.com
+	@test -n "$(TO)" || { echo "usage: make email-test TO=<address>"; exit 2; }
+	$(COMPOSE) exec -T app python app.py email-test "$(TO)"
 
 ##@ Database (Docker)
 

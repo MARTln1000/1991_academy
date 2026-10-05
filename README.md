@@ -81,10 +81,17 @@ Or just open `index.html` / serve statically with `python3 -m http.server` — t
 
 There is no sign-up: admins invite students (see "Admin panel"). Signed in,
 the account page offers **change password**, **forgot/reset password**
-(emailed link) and **delete account** (GDPR-clean cascade). Password
-reset needs SMTP — set `ACADEMY_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` /
-`_FROM` and `ACADEMY_BASE_URL` (the origin used to build the reset link). With
-SMTP unset the reset link is **logged, not sent** (fine for local dev). The
+(emailed link) and **delete account** (GDPR-clean cascade).
+
+**Email** (invitations and password resets) is sent from the mailbox in
+`.env`: `ACADEMY_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` / `_FROM` (the
+template has the lines for `ai.1991@mil.am`; the password goes only in `.env`
+on the server). Port 587 (STARTTLS) or 465 (TLS), and the mail server's
+certificate must be valid: it is checked, so the password can't be
+intercepted. After `make restart`, `make email-test TO=you@example.com` sends
+one test email and says exactly what failed, if anything. Without these
+settings nothing is emailed: the admin panel shows invitation and reset
+links to hand out, and "forgot password" links go to the log (`make logs`). The
 leaderboard has **This week / All time** tabs — the weekly league resets every
 ISO week (server rebases each user's weekly baseline on their first sync of a
 new week).

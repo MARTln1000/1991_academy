@@ -77,6 +77,7 @@ import re
 import secrets
 import smtplib
 import sqlite3
+import ssl
 import sys
 import time
 from collections import Counter, defaultdict, deque
@@ -464,26 +465,43 @@ def email_configured() -> bool:
     return bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
 
 
+def deliver(to: str, subject: str, body: str) -> None:
+    """Send a plaintext email through the configured mailbox, or raise.
+
+    The connection is encrypted before the password is sent, and the mail
+    server's certificate is checked against the trusted authorities: an
+    unchecked one would hand the mailbox password to whoever sits in between.
+    Port 465 is encrypted from the start; any other port (587) upgrades with
+    STARTTLS."""
+    msg = EmailMessage()
+    msg["From"] = SMTP_FROM
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.set_content(body)
+    context = ssl.create_default_context()
+    if SMTP_PORT == 465:
+        server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20, context=context)
+    else:
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20)
+    with server as s:
+        if SMTP_PORT != 465:
+            s.starttls(context=context)
+        s.login(SMTP_USER, SMTP_PASS)
+        s.send_message(msg)
+
+
 def send_email(to: str, subject: str, body: str) -> bool:
     """Send a plaintext email. If SMTP isn't configured, log the body instead
     (so local dev / reset links stay testable) and report False."""
     if not email_configured():
         log.warning("SMTP not configured — email to %s NOT sent. Contents:\n%s", to, body)
         return False
-    msg = EmailMessage()
-    msg["From"] = SMTP_FROM
-    msg["To"] = to
-    msg["Subject"] = subject
-    msg.set_content(body)
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as s:
-            s.starttls()
-            s.login(SMTP_USER, SMTP_PASS)
-            s.send_message(msg)
-        log.info("sent reset email to %s", to)
+        deliver(to, subject, body)
+        log.info("sent email to %s: %s", to, subject)
         return True
     except Exception as exc:  # noqa: BLE001 — never leak SMTP errors to the client
-        log.error("SMTP send failed: %s", exc)
+        log.error("SMTP send to %s failed: %s", to, exc)
         return False
 
 # ---------------------------------------------------------------- helpers
@@ -2015,12 +2033,41 @@ async def api_content_js(request: Request):
 # ------------------------------------------------------- command line (admins)
 
 
+def email_test(to: str) -> int:
+    """`make email-test TO=…`: send one email now and say exactly what failed."""
+    if not email_configured():
+        print("Email isn't set up: fill in ACADEMY_SMTP_HOST, _USER and _PASS in .env, then make restart.",
+              file=sys.stderr)
+        return 1
+    print(f"Sending a test email from {SMTP_FROM} to {to} through {SMTP_HOST}:{SMTP_PORT} ...")
+    try:
+        deliver(to, "1991 Academy: test email",
+                "This is a test from 1991 Academy. Email works: invitations and password resets\n"
+                "will be sent from this address.")
+    except ssl.SSLCertVerificationError as e:
+        print(f"FAILED: the mail server's certificate isn't trusted ({getattr(e, 'verify_message', None) or e}). Ask the mail "
+              "administrator for the right server name, or for a certificate from a public authority.",
+              file=sys.stderr)
+        return 1
+    except smtplib.SMTPAuthenticationError:
+        print("FAILED: the mail server refused the user name or password.", file=sys.stderr)
+        return 1
+    except (OSError, smtplib.SMTPException) as e:
+        print(f"FAILED: {type(e).__name__}: {e}", file=sys.stderr)
+        return 1
+    print("Sent. Check that it arrived (and isn't in spam).")
+    return 0
+
+
 def cli(args: list) -> int:
     """python app.py admin add NAME [EMAIL] | admin remove NAME | admin list
 
     With EMAIL, a NAME that has no account yet gets one (an invitation): how
     the first admin starts, since there is no sign-up."""
-    usage = "usage: python app.py admin add NAME [EMAIL] | admin remove NAME | admin list"
+    usage = ("usage: python app.py admin add NAME [EMAIL] | admin remove NAME | admin list\n"
+             "       python app.py email-test ADDRESS")
+    if args[:1] == ["email-test"] and len(args) == 2:
+        return email_test(args[1])
     if args[:1] != ["admin"] or len(args) < 2:
         print(usage, file=sys.stderr)
         return 2
