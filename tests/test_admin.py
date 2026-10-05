@@ -19,8 +19,12 @@ import app  # noqa: E402
 
 
 def register(client, username, email, password="hunter2pw"):
-    r = client.post("/api/register", json={"username": username, "email": email, "password": password})
-    assert r.status_code == 201, r.text
+    """An account (there's no sign-up), signed in on `client`."""
+    with app.db() as conn:
+        app.create_account(conn, username, email, password)
+        conn.commit()
+    r = client.post("/api/login", json={"identifier": username, "password": password})
+    assert r.status_code == 200, r.text
     return r
 
 
@@ -159,6 +163,75 @@ def test_admin_writes_need_json(clients):
     assert admin.get("/api/admin/users/alice").status_code == 200
 
 
+# --------------------------------------------------------------- invitations
+
+def test_invite_students_and_they_join(clients):
+    admin, _ = clients
+    r = admin.post("/api/admin/invites", json={"students": [
+        {"email": "Anna.K@Example.com"},                         # username made from the email
+        {"email": "arman@example.com", "username": "arman_s"},
+        {"email": "alice@example.com"},                          # already has an account
+        {"email": "not-an-email"},
+        {"email": "x@example.com", "username": "<b>"},
+    ]})
+    assert r.status_code == 200
+    out = r.json()
+    assert out["sent"] is False                                  # no email here: the admin gets the links
+    ok = [x for x in out["results"] if "link" in x]
+    assert [(x["username"], x["email"]) for x in ok] == [("anna_k", "anna.k@example.com"), ("arman_s", "arman@example.com")]
+    errors = [x["error"] for x in out["results"] if "error" in x]
+    assert len(errors) == 3 and "already has an account" in errors[0]
+    listed = {u["username"]: u for u in admin.get("/api/admin/users?q=@example.com").json()["learners"]}
+    assert listed["arman_s"]["invited"] is True and listed["alice"]["invited"] is False
+    assert admin.get("/api/admin/overview").json()["invited"] == 2
+    # Arman opens his link, chooses a password and is in
+    with TestClient(app.app) as arman:
+        token = ok[1]["link"].split("welcome=")[1]
+        assert arman.post("/api/welcome", json={"token": token}).json() == {"username": "arman_s"}
+        assert arman.post("/api/reset-password", json={"token": token, "password": "armans-pass"}).status_code == 200
+        assert arman.get("/index.html").status_code == 200
+    assert admin.get("/api/admin/users/arman_s").json()["learner"]["invited"] is False
+    log = [(e["action"], e["target"]) for e in admin.get("/api/admin/log").json()["entries"]]
+    assert ("invite", "anna_k") in log and ("invite", "arman_s") in log
+
+
+def test_invitations_are_emailed_when_email_is_set_up(clients, sent_emails, monkeypatch):
+    admin, _ = clients
+    for k, v in (("SMTP_HOST", "smtp.example"), ("SMTP_USER", "u"), ("SMTP_PASS", "p")):
+        monkeypatch.setattr(app, k, v)
+    r = admin.post("/api/admin/invites", json={"students": [{"email": "anna@example.com"}]})
+    assert r.json()["sent"] is True and "welcome=" not in r.text  # the admin never sees the link
+    to, subject, body = sent_emails[0]
+    assert to == "anna@example.com" and "Your username: anna" in body and "welcome=" in body
+
+
+def test_resending_an_invitation(clients):
+    admin, _ = clients
+    admin.post("/api/admin/invites", json={"students": [{"email": "anna@example.com"}]})
+    out = admin.post("/api/admin/users/anna/reset-link", json={}).json()
+    assert out["invite"] is True and "welcome=" in out["link"]
+    out = admin.post("/api/admin/users/alice/reset-link", json={}).json()   # a student with a password
+    assert out["invite"] is False and "reset=" in out["link"]
+
+
+@pytest.mark.parametrize("body", [{}, {"students": []}, {"students": "x"}, {"students": ["x"]},
+                                  {"students": [{"email": "a@b.co"}] * 201}])
+def test_bad_invitations(clients, body):
+    admin, learner = clients
+    assert admin.post("/api/admin/invites", json=body).status_code == 400
+    assert learner.post("/api/admin/invites", json={"students": [{"email": "a@b.co"}]}).status_code == 403
+
+
+def test_the_first_admin_is_made_on_the_server(clients, capsys):
+    assert app.cli(["admin", "add", "newboss", "newboss@example.com"]) == 0
+    out = capsys.readouterr().out
+    assert "newboss is now an admin" in out and "welcome=" in out
+    with app.db() as conn:
+        row = conn.execute("SELECT is_admin, pass_hash FROM users WHERE username = 'newboss'").fetchone()
+    assert row["is_admin"] == 1 and row["pass_hash"] == app.INVITED
+    assert app.cli(["admin", "add", "ghost"]) == 1                      # no account, no email
+
+
 def test_admin_page_is_served_but_not_indexed(clients):
     admin, _ = clients
     r = admin.get("/admin.html")
@@ -244,7 +317,7 @@ def test_reset_link_with_email_goes_only_to_the_learner(clients, sent_emails, mo
     for k, v in (("SMTP_HOST", "smtp.example"), ("SMTP_USER", "u"), ("SMTP_PASS", "p")):
         monkeypatch.setattr(app, k, v)
     r = admin.post("/api/admin/users/alice/reset-link", json={})
-    assert r.json() == {"sent": True, "email": "alice@example.com"}
+    assert r.json() == {"sent": True, "email": "alice@example.com", "invite": False}
     assert "reset=" not in r.text
     assert sent_emails[0][0] == "alice@example.com" and "reset=" in sent_emails[0][2]
 

@@ -179,7 +179,13 @@ languages and its date.
 
 In `app.py`:
 
-- Rate limits: login 10/min·IP, register 5/10min·IP, reset 5/10min·IP.
+- **A closed school:** no sign-up; admins invite students (week-long links
+  to choose a password, stored hashed). Without a session only the sign-in
+  page, its scripts and styles, and the privacy policy are served: pages
+  redirect to sign-in, lessons (`js/data/`), course files, videos and the
+  leaderboard answer 401, and Caddy checks the session (`/api/auth-check`)
+  before serving a video. Course files and videos are cached privately.
+- Rate limits: login 10/min·IP, reset 5/10min·IP.
 - 300 KB request-body cap.
 - scrypt password hashing, HttpOnly SameSite=Lax session cookies (30 days),
   `Secure` + HSTS whenever `ACADEMY_SECURE_COOKIES` is on.
@@ -204,8 +210,8 @@ In `app.py`:
   the database, `.git`, `.env`, `deploy/`, `REVISION`, dotfiles and everything
   else 404, however the path is spelled. No directory listings, and the API
   docs are off in production.
-- **Search engines** (Google dorking): `X-Robots-Tag: noindex` on the API, the
-  account page and every course download, so only the lesson pages can show up
+- **Search engines** (Google dorking): `X-Robots-Tag: noindex` on every
+  response and `Disallow: /` in robots.txt; nothing of a closed school belongs
   in search results. No `server:` banner.
 - `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` on every
   response.

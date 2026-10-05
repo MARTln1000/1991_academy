@@ -269,6 +269,9 @@
       /* hosted on this server: the browser's own player */
       thumb.innerHTML =
         '<video src="' + esc(card.dataset.file) + '" controls autoplay playsinline preload="metadata"></video>';
+      /* start it from the click itself: browsers don't always honour autoplay
+         on a player added after one */
+      thumb.querySelector("video").play().catch(() => {});
     } else {
       thumb.innerHTML =
         '<iframe src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(card.dataset.video) + '?autoplay=1" ' +

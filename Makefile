@@ -156,9 +156,9 @@ auto-update-off: ## stop the automatic updates ('make update' still updates by h
 ##@ Admin panel
 
 # NAME, not USER: make would quietly use your login name for an unset $(USER).
-admin: ## make an account an admin: make admin NAME=<username>, then sign in and open /admin.html
-	@test -n "$(NAME)" || { echo "usage: make admin NAME=<username>  (the account must exist on the site)"; exit 2; }
-	$(COMPOSE) exec -T app python app.py admin add "$(NAME)"
+admin: ## make an account an admin: make admin NAME=<username> [EMAIL=… to create the account], then open /admin.html
+	@test -n "$(NAME)" || { echo "usage: make admin NAME=<username> [EMAIL=<email>, if the account doesn't exist yet]"; exit 2; }
+	$(COMPOSE) exec -T app python app.py admin add "$(NAME)" $(if $(EMAIL),"$(EMAIL)")
 
 admin-remove: ## take the admin rights away again: make admin-remove NAME=<username>
 	@test -n "$(NAME)" || { echo "usage: make admin-remove NAME=<username>"; exit 2; }

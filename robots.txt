@@ -1,4 +1,3 @@
-# 1991 Academy. The lesson pages are public; the API is not for crawlers.
-# (The account page and course downloads also send X-Robots-Tag: noindex.)
+# 1991 Academy is a closed school: everything needs signing in.
 User-agent: *
-Disallow: /api/
+Disallow: /

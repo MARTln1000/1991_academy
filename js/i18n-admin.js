@@ -90,6 +90,27 @@ I18N.extend({
   "Signed out of {0} device.": "Դուրս է հանվել {0} սարքից։",
   "Signed out of {0} devices.": "Դուրս է հանվել {0} սարքից։",
 
+  /* invitations */
+  "Invite students": "Հրավիրել ուսանողների",
+  "Only invited students can sign in. One per line: an email, and optionally a username after a comma (otherwise it is made from the email).":
+    "Մուտք գործել կարող են միայն հրավիրված ուսանողները։ Ամեն տողում՝ էլ. փոստ, և ցանկության դեպքում ստորակետից հետո՝ օգտանուն (հակառակ դեպքում այն կազմվում է էլ. փոստից)։",
+  "Invite": "Հրավիրել",
+  "Invited {0}. Each got an email with a link to choose a password.": "Հրավիրվեց՝ {0}։ Յուրաքանչյուրը ստացավ նամակ՝ գաղտնաբառ ընտրելու հղումով։",
+  "Invited {0}. Email isn't set up on this server, so send each student their link (valid for 7 days):":
+    "Հրավիրվեց՝ {0}։ Այս սերվերում էլ. փոստը կարգավորված չէ, ուստի յուրաքանչյուր ուսանողին ուղարկի՛ր իր հղումը (գործում է 7 օր)՝",
+  "Link": "Հղում",
+  "Copy all": "Պատճենել բոլորը",
+  "Not invited:": "Չհրավիրվեցին՝",
+  "invited": "հրավիրված",
+  "invited, not signed in yet": "հրավիրված, դեռ մուտք չի գործել",
+  "Resend the invitation": "Կրկին ուղարկել հրավերը",
+  "A new invitation is on its way to {0}.": "Նոր հրավերն ուղարկվում է {0} հասցեին։",
+  "Email isn't set up on this server, so give this invitation link to the student yourself. It works once, for 7 days:":
+    "Այս սերվերում էլ. փոստը կարգավորված չէ, ուստի այս հրավերի հղումը ուսանողին տո՛ւր ինքդ։ Այն աշխատում է մեկ անգամ, 7 օրվա ընթացքում՝",
+  "Invited a student": "Հրավիրեց ուսանողի",
+  "Username must be 3-20 characters: letters, digits, underscore.": "Օգտանունը՝ 3-20 նիշ. տառեր, թվեր, ընդգծում։",
+  "That doesn't look like an email address.": "Սա էլ. փոստի հասցե չի թվում։",
+
   /* lessons */
   "Edit any lesson, or add new ones to a module. Your text replaces the original for learners; course materials and exercises stay as they are. Saving without “Visible to learners” keeps it as a draft.":
     "Խմբագրի՛ր ցանկացած դաս կամ ավելացրու նորերը մոդուլում։ Քո տեքստը սովորողների համար փոխարինում է բնօրինակին. դասընթացի նյութերն ու վարժությունները մնում են անփոփոխ։ Առանց «Տեսանելի է սովորողներին» նշելու պահպանածը մնում է սևագիր։",

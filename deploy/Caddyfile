@@ -18,12 +18,16 @@
 	}
 	# The lesson videos (MEDIA_DIR, mounted at /srv/media), straight from
 	# disk: Caddy handles large files and the byte ranges a player seeks with.
-	# Only the file names the site uses; no folder listings.
+	# Only the file names the site uses; no folder listings. Only for signed-in
+	# students: Caddy asks the app first (the session cookie goes along).
 	handle_path /media/* {
+		forward_auth app:8735 {
+			uri /api/auth-check
+		}
 		@other not path_regexp ^/[A-Za-z0-9_-]{1,64}\.(mp4|webm|jpg|vtt)$
 		respond @other 404
 		header {
-			Cache-Control "public, max-age=86400"
+			Cache-Control "private, max-age=86400"
 			X-Content-Type-Options nosniff
 			X-Robots-Tag "noindex, nofollow"
 		}

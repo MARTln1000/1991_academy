@@ -36,8 +36,22 @@ def media(tmp_path, monkeypatch):
 
 @pytest.fixture
 def client(media):
+    """Signed in as a student: videos are for the school's students only."""
+    with app.db() as conn:
+        app.create_account(conn, "student", "student@example.com", "hunter2pw")
+        conn.commit()
     with TestClient(app.app) as c:
+        c.post("/api/login", json={"identifier": "student", "password": "hunter2pw"})
         yield c
+
+
+def test_videos_are_for_signed_in_students_only(client, media):
+    (media / f"{VID}.mp4").write_bytes(VIDEO)
+    assert client.get(f"/media/{VID}.mp4").status_code == 200
+    with TestClient(app.app) as visitor:
+        assert visitor.get(f"/media/{VID}.mp4").status_code == 401
+        assert visitor.get(f"/media/{VID}.mp4", headers={"Range": "bytes=0-99"}).status_code == 401
+        assert content(visitor)["media"] == {}
 
 
 def content(client):
@@ -52,7 +66,7 @@ def test_a_hosted_video_is_served_and_seekable(client, media, monkeypatch):
     assert r.status_code == 200 and r.content == VIDEO
     assert r.headers["content-type"] == "video/mp4"
     assert "content-encoding" not in r.headers            # never gzipped
-    assert r.headers["Cache-Control"] == "public, max-age=86400"
+    assert r.headers["Cache-Control"] == "private, max-age=86400"   # the student's browser only
     assert r.headers["X-Robots-Tag"] == "noindex, nofollow"
     # a player seeking: a byte range
     part = client.get(f"/media/{VID}.mp4", headers={"Range": "bytes=1000-1999", "Accept-Encoding": "gzip"})
@@ -95,9 +109,13 @@ def test_pages_learn_which_videos_are_hosted(client, media):
 
 def test_admins_see_what_is_hosted(client, media):
     (media / f"{VID}.mp4").write_bytes(VIDEO)
-    assert client.get("/api/admin/media").status_code == 401
-    client.post("/api/register", json={"username": "boss", "email": "boss@example.com", "password": "hunter2pw"})
+    with TestClient(app.app) as visitor:
+        assert visitor.get("/api/admin/media").status_code == 401
     assert client.get("/api/admin/media").status_code == 403
+    with app.db() as conn:
+        app.create_account(conn, "boss", "boss@example.com", "hunter2pw")
+        conn.commit()
+    client.post("/api/login", json={"identifier": "boss", "password": "hunter2pw"})
     assert app.cli(["admin", "add", "boss"]) == 0
     d = client.get("/api/admin/media").json()
     assert d["media"][VID]["video"] == f"/media/{VID}.mp4" and d["sizes"][VID] == len(VIDEO)

@@ -31,8 +31,8 @@ Environment:
                    (set ONLY behind a trusted reverse proxy)
 
 API:
-    POST /api/register            {username, email, password}
     POST /api/login               {identifier, password}
+    POST /api/welcome             {token} -> {username}  (an invitation link's account)
     POST /api/logout
     GET  /api/me
     GET  /api/state               -> {"data": {...}|null, "updated": ts|null}
@@ -41,14 +41,19 @@ API:
     POST /api/leaderboard-optin   {"optIn": bool}
     POST /api/change-password     {currentPassword, newPassword}
     POST /api/forgot-password     {email}            (always 200; emails a reset link)
-    POST /api/reset-password      {token, password}
+    POST /api/reset-password      {token, password}  (also: an invited student's first password)
     POST /api/delete-account      {password}
     GET  /api/health
+    GET  /api/auth-check          204 when signed in, else 401 (Caddy asks it before serving videos)
     GET  /api/content.js          lessons and announcements added in the admin panel,
                                   and the lesson videos hosted here (ACADEMY_MEDIA)
 
+Accounts are by invitation only: there is no sign-up. Admins invite students;
+the first admin is made on the server (`python app.py admin add NAME EMAIL`).
+
 Admin (accounts with users.is_admin; `python app.py admin add NAME` grants it):
     GET  /api/admin/overview      site statistics
+    POST /api/admin/invites       {students: [{email, username?}]} -> accounts + welcome links
     GET  /api/admin/users[?q=&sort=created|active|xp|name&offset=]
     GET  /api/admin/users/NAME    one learner, with their progress
     POST /api/admin/users/NAME/reset-link | sign-out | delete
@@ -78,11 +83,12 @@ from collections import Counter, defaultdict, deque
 from contextlib import asynccontextmanager, contextmanager
 from email.message import EmailMessage
 from pathlib import Path
+from urllib.parse import quote
 
 import nh3
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
@@ -120,6 +126,10 @@ TRUST_PROXY = os.environ.get("ACADEMY_TRUST_PROXY", "0") == "1"
 SESSION_TTL = 30 * 86400          # 30 days
 MAX_BODY = 300_000                # bytes, hard cap for any request body
 RESET_TTL = 3600                  # password-reset links live 1 hour
+INVITE_TTL = 7 * 86400            # invitations (welcome links) live a week
+# pass_hash of an invited account whose student hasn't chosen a password yet:
+# no password matches it, so nobody can sign in to it until they do.
+INVITED = "!"
 SWEEP_INTERVAL = 3600             # expired sessions / reset tokens, hourly
 # Ceiling for the leaderboard XP snapshot. The whole curriculum is worth a few
 # thousand XP, so anything past this is a corrupt or forged blob. Clamping also
@@ -424,6 +434,9 @@ def hash_password(password: str, salt: bytes) -> str:
 
 def verify_password(row, password: str) -> bool:
     """Constant-time check of a plaintext password against a user row."""
+    if row["pass_hash"] == INVITED:      # no password chosen yet: nothing matches
+        burn_password_time(password)
+        return False
     return hmac.compare_digest(
         row["pass_hash"], hash_password(password, bytes.fromhex(row["salt"]))
     )
@@ -478,6 +491,10 @@ def send_email(to: str, subject: str, body: str) -> bool:
 
 def err(message: str, status: int = 400) -> JSONResponse:
     return JSONResponse({"error": message}, status_code=status)
+
+
+class Invalid(ValueError):
+    """Input to send back with its message: a lesson, an announcement, an invitation."""
 
 
 def public_user(row) -> dict:
@@ -671,9 +688,30 @@ async def unhandled_error(request: Request, exc: Exception):
     return JSONResponse({"error": "Something went wrong on our end."}, status_code=500)
 
 
-@app.middleware("http")
-async def guard(request: Request, call_next):
-    path = request.url.path
+# 1991 Academy is a closed school: only its students (accounts an admin
+# invited) see anything. Without a session a visitor reaches the sign-in page
+# and what it needs: its scripts and styles, and the privacy policy. Lessons
+# (js/data/), course files (assets/), videos (media/) and every other page
+# need one. API endpoints check the session themselves.
+PUBLIC_PATHS = {"/account.html", "/privacy.html", "/robots.txt"}
+
+
+def public_path(path: str) -> bool:
+    if path in PUBLIC_PATHS or path.startswith("/css/"):
+        return True
+    return path.startswith("/js/") and not path.startswith("/js/data/")
+
+
+def session_valid(token) -> bool:
+    if not token:
+        return False
+    with db() as conn:
+        row = conn.execute("SELECT created FROM sessions WHERE token = ?", (token,)).fetchone()
+    return row is not None and time.time() - row["created"] <= SESSION_TTL
+
+
+def gate(request: Request, path: str):
+    """The response that stops this request, or None to let it through."""
     if path.startswith("/media/"):
         if not MEDIA_PATH_RE.match(path) or not MEDIA_DIR.is_dir():
             return err("not found", 404)
@@ -692,9 +730,24 @@ async def guard(request: Request, call_next):
     cl = request.headers.get("content-length")
     if cl and cl.isdigit() and int(cl) > MAX_BODY:
         return err("Request too large.", 413)
+    return None
+
+
+@app.middleware("http")
+async def guard(request: Request, call_next):
+    path = request.url.path
+    response = gate(request, path)
+    if response is None and not path.startswith("/api/") and not public_path(path):
+        if not await run_in_threadpool(session_valid, session_token(request)):
+            if path == "/" or path.endswith(".html"):
+                # a page: to the sign-in page, and back here afterwards
+                response = RedirectResponse("/account.html?next=" + quote(path, safe="/"), status_code=303)
+            else:
+                response = err("Sign in first.", 401)
 
     t0 = time.time()
-    response = await call_next(request)
+    if response is None:
+        response = await call_next(request)
     ms = int((time.time() - t0) * 1000)
 
     if DEBUG or path.startswith("/api/"):
@@ -703,7 +756,8 @@ async def guard(request: Request, call_next):
         # the exercise notebooks change with the exercises: always revalidate
         response.headers["Cache-Control"] = "no-cache"
     elif path.startswith(("/assets/", "/media/")):
-        response.headers["Cache-Control"] = "public, max-age=86400"
+        # private: only the student's own browser keeps a copy, never a proxy
+        response.headers["Cache-Control"] = "private, max-age=86400"
     else:
         response.headers["Cache-Control"] = "no-cache"
 
@@ -713,11 +767,8 @@ async def guard(request: Request, call_next):
     response.headers["Content-Security-Policy"] = CSP
     if SECURE_COOKIES:  # only meaningful (and only sent) over HTTPS in production
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # Search engines index the pages people read, nothing else: not the API,
-    # not the account and admin pages (password-reset links land on the
-    # former), and not the course downloads or videos, so "site: filetype:pdf"-style searches find nothing.
-    if path.startswith(("/api/", "/assets/", "/media/")) or path in ("/account.html", "/admin.html"):
-        response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    # A closed school: search engines index nothing (robots.txt says so too).
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
 
     if path.startswith("/api/"):
         log.info("%s %s %s %dms", request.method, path, response.status_code, ms)
@@ -726,55 +777,32 @@ async def guard(request: Request, call_next):
 # ---------------------------------------------------------------- auth
 
 
-def _register(username: str, email: str, password: str):
-    with db() as conn:
-        exists = conn.execute(
-            "SELECT 1 FROM users WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE",
-            (username, email),
-        ).fetchone()
-        if exists:
-            return None, None
-        salt = secrets.token_bytes(16)
-        try:
-            conn.execute(
-                "INSERT INTO users (username, email, pass_hash, salt, created) VALUES (?, ?, ?, ?, ?)",
-                (username, email, hash_password(password, salt), salt.hex(), time.time()),
-            )
-            conn.commit()
-        except sqlite3.IntegrityError:
-            # Lost the race against a concurrent signup for the same name.
-            return None, None
-        row = conn.execute(
-            "SELECT * FROM users WHERE username = ? COLLATE NOCASE", (username,)
-        ).fetchone()
-        return row, new_session(conn, row["id"])
-
-
-@app.post("/api/register")
-async def api_register(request: Request):
-    if rate_limited(request, "register", 5, 600):
-        return err("Too many sign-up attempts — try again in a few minutes.", 429)
-    body = await json_body(request)
-    if body is None:
-        return err("invalid request body")
-    username = str(body.get("username", "")).strip()
-    email = str(body.get("email", "")).strip().lower()
-    password = str(body.get("password", ""))
-
+def create_account(conn, username: str, email: str, password: str | None = None) -> int:
+    """A new account (its id), or Invalid. There is no sign-up: admins invite
+    students, so without a password this is an invitation, which nobody can
+    sign in to until the student chooses a password with the welcome link.
+    The caller commits."""
     if not USERNAME_RE.match(username):
-        return err("Username must be 3-20 characters: letters, digits, underscore.")
+        raise Invalid("Username must be 3-20 characters: letters, digits, underscore.")
     if len(email) > MAX_EMAIL or not EMAIL_RE.match(email):
-        return err("That doesn't look like an email address.")
-    if len(password) < 8:
-        return err("Password must be at least 8 characters.")
-
-    row, token = await run_in_threadpool(_register, username, email, password)
-    if row is None:
-        return err("That username or email is already taken.", 409)
-    response = JSONResponse({"user": public_user(row)}, status_code=201)
-    set_session_cookie(response, token)
-    log.info("register user=%s", username)
-    return response
+        raise Invalid("That doesn't look like an email address.")
+    if conn.execute("SELECT 1 FROM users WHERE username = ? COLLATE NOCASE", (username,)).fetchone():
+        raise Invalid(f"The username {username} is taken.")
+    if conn.execute("SELECT 1 FROM users WHERE email = ? COLLATE NOCASE", (email,)).fetchone():
+        raise Invalid(f"{email} already has an account.")
+    if password is None:
+        pass_hash, salt = INVITED, ""
+    else:
+        raw_salt = secrets.token_bytes(16)
+        pass_hash, salt = hash_password(password, raw_salt), raw_salt.hex()
+    try:
+        cur = conn.execute(
+            "INSERT INTO users (username, email, pass_hash, salt, created) VALUES (?, ?, ?, ?, ?)",
+            (username, email, pass_hash, salt, time.time()),
+        )
+    except sqlite3.IntegrityError:            # a concurrent invite for the same name
+        raise Invalid(f"The username {username} or {email} is taken.") from None
+    return cur.lastrowid
 
 
 def _login(identifier: str, password: str):
@@ -991,6 +1019,8 @@ def _leaderboard(token, period: str):
 @app.get("/api/leaderboard")
 async def api_leaderboard(request: Request):
     period = "week" if request.query_params.get("period") == "week" else "all"
+    if not await run_in_threadpool(session_valid, session_token(request)):
+        return err("not signed in", 401)
     return await run_in_threadpool(_leaderboard, session_token(request), period)
 
 
@@ -1058,9 +1088,11 @@ async def api_change_password(request: Request):
     return {"ok": True}
 
 
-def new_reset_link(conn, user_id: int) -> str:
-    """A fresh one-hour password-reset link for the user, replacing any older
-    one. Only the token's hash is stored. The caller commits."""
+def new_reset_link(conn, user_id: int, welcome: bool = False) -> str:
+    """A fresh link to set the account's password, replacing any older one:
+    a one-hour password reset, or with welcome=True a week-long invitation
+    (account.html?welcome=…). Only the token's hash is stored. The caller
+    commits."""
     token = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     now = time.time()
@@ -1068,9 +1100,19 @@ def new_reset_link(conn, user_id: int) -> str:
     conn.execute(
         "INSERT INTO password_resets (token_hash, user_id, created, expires) "
         "VALUES (?, ?, ?, ?)",
-        (token_hash, user_id, now, now + RESET_TTL),
+        (token_hash, user_id, now, now + (INVITE_TTL if welcome else RESET_TTL)),
     )
-    return f"{BASE_URL}/account.html?reset={token}"
+    return f"{BASE_URL}/account.html?{'welcome' if welcome else 'reset'}={token}"
+
+
+def invitation_email(username: str, link: str) -> tuple[str, str]:
+    return (
+        "Your 1991 Academy account",
+        "You've been invited to 1991 Academy, the online school run by 1991 Unit.\n\n"
+        f"Your username: {username}\n\n"
+        f"Choose your password here (the link works for 7 days):\n{link}\n\n"
+        "Questions? Write to ai.1991@mil.am.",
+    )
 
 
 def _forgot_password(email: str):
@@ -1114,10 +1156,14 @@ async def api_forgot_password(request: Request):
 
 
 def _reset_password(token: str, new: str):
+    """(user row, session token or None), or None for a bad link. A student
+    accepting an invitation is signed in at once; after a password reset every
+    session ends and the owner signs in again."""
     token_hash = hashlib.sha256(token.encode()).hexdigest()
     with db() as conn:
         row = conn.execute(
-            "SELECT * FROM password_resets WHERE token_hash = ?", (token_hash,)
+            "SELECT r.*, u.pass_hash AS old_hash FROM password_resets r "
+            "JOIN users u ON u.id = r.user_id WHERE r.token_hash = ?", (token_hash,)
         ).fetchone()
         if row is None or row["expires"] < time.time():
             return None
@@ -1129,7 +1175,33 @@ def _reset_password(token: str, new: str):
         conn.execute("DELETE FROM password_resets WHERE user_id = ?", (row["user_id"],))
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["user_id"],))  # force re-login
         conn.commit()
-        return row["user_id"]
+        session = new_session(conn, row["user_id"]) if row["old_hash"] == INVITED else None
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (row["user_id"],)).fetchone()
+        return user, session
+
+
+def _welcome(token: str):
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    with db() as conn:
+        row = conn.execute(
+            "SELECT u.username, r.expires FROM password_resets r JOIN users u ON u.id = r.user_id "
+            "WHERE r.token_hash = ?", (token_hash,)
+        ).fetchone()
+    return row["username"] if row and row["expires"] >= time.time() else None
+
+
+@app.post("/api/welcome")
+async def api_welcome(request: Request):
+    """Whose invitation (or reset) link this is: the page shows the username."""
+    if rate_limited(request, "reset", 10, 600):
+        return err("Too many attempts — try again later.", 429)
+    body = await json_body(request)
+    if body is None:
+        return err("invalid request body")
+    username = await run_in_threadpool(_welcome, str(body.get("token", "")))
+    if username is None:
+        return err("This link is invalid or has expired. Ask for a new one.", 400)
+    return {"username": username}
 
 
 @app.post("/api/reset-password")
@@ -1143,11 +1215,16 @@ async def api_reset_password(request: Request):
     new = str(body.get("password", ""))
     if len(new) < 8:
         return err("Password must be at least 8 characters.")
-    user_id = await run_in_threadpool(_reset_password, token, new)
-    if user_id is None:
+    out = await run_in_threadpool(_reset_password, token, new)
+    if out is None:
         return err("This reset link is invalid or has expired.", 400)
-    log.info("reset-password user_id=%s", user_id)
-    return {"ok": True}
+    user, session = out
+    log.info("%s user=%s", "welcome" if session else "reset-password", user["username"])
+    if session is None:
+        return {"ok": True}
+    response = JSONResponse({"ok": True, "user": public_user(user)})
+    set_session_cookie(response, session)
+    return response
 
 
 def delete_user_rows(conn, uid: int):
@@ -1293,6 +1370,7 @@ def learner_summary(row, wk: str) -> dict:
         "weekXp": week_xp(row, wk),
         "optIn": bool(row["leaderboard_opt_in"]),
         "admin": bool(row["is_admin"]),
+        "invited": row["pass_hash"] == INVITED,    # hasn't chosen a password yet
     }
 
 
@@ -1329,6 +1407,7 @@ def _overview(conn, _admin):
 
     return {
         "learners": one("SELECT COUNT(*) FROM users"),
+        "invited": one("SELECT COUNT(*) FROM users WHERE pass_hash = ?", INVITED),
         "admins": one("SELECT COUNT(*) FROM users WHERE is_admin = 1"),
         "new7": one("SELECT COUNT(*) FROM users WHERE created >= ?", now - 7 * day),
         "new30": one("SELECT COUNT(*) FROM users WHERE created >= ?", now - 30 * day),
@@ -1420,11 +1499,14 @@ async def api_admin_user(request: Request, username: str):
 
 
 def _learner_reset_link(conn, admin, username: str):
+    """A reset link, or for a student who hasn't accepted the invitation yet,
+    a new invitation."""
     row = find_learner(conn, username)
-    link = new_reset_link(conn, row["id"])
-    audit(conn, admin["username"], "reset-link", row["username"])
+    invited = row["pass_hash"] == INVITED
+    link = new_reset_link(conn, row["id"], welcome=invited)
+    audit(conn, admin["username"], "invite" if invited else "reset-link", row["username"])
     conn.commit()
-    return row["email"], link
+    return row["email"], link, row["username"], invited
 
 
 @app.post("/api/admin/users/{username}/reset-link")
@@ -1432,19 +1514,89 @@ async def api_admin_reset_link(request: Request, username: str):
     out = await admin_call(request, _learner_reset_link, username)
     if isinstance(out, JSONResponse):
         return out
-    email, link = out
+    email, link, username, invited = out
     if not email_configured():
         # Nothing can send it, so the admin passes it on. With email set up,
         # the link goes only to the learner: an admin can't take an account.
-        return {"sent": False, "link": link}
-    return JSONResponse({"sent": True, "email": email}, background=BackgroundTask(
-        send_email,
-        email,
+        return {"sent": False, "link": link, "invite": invited}
+    subject, text = invitation_email(username, link) if invited else (
         "Set a new 1991 Academy password",
         "An administrator of 1991 Academy sent you a link to set a new password.\n\n"
         f"Set a new password (link valid for 1 hour):\n{link}\n\n"
         "If you didn't ask for this, ignore this email — your password is unchanged.",
-    ))
+    )
+    return JSONResponse({"sent": True, "email": email, "invite": invited},
+                        background=BackgroundTask(send_email, email, subject, text))
+
+
+MAX_INVITES = 200   # per request
+
+
+def username_from(conn, email: str) -> str:
+    """A free username made from an email address: anna.k@x.am -> anna_k."""
+    base = re.sub(r"[^A-Za-z0-9_]", "_", email.split("@")[0])[:16].strip("_") or "student"
+    base = base if len(base) >= 3 else (base + "___")[:3]
+    name, n = base, 1
+    while conn.execute("SELECT 1 FROM users WHERE username = ? COLLATE NOCASE", (name,)).fetchone():
+        n += 1
+        name = f"{base}{n}"
+    return name
+
+
+def _invite(conn, admin, students: list):
+    results = []
+    for s in students:
+        email = s["email"]
+        try:
+            username = s["username"] or username_from(conn, email)
+            uid = create_account(conn, username, email)
+        except Invalid as e:
+            results.append({"email": email, "username": s["username"], "error": str(e)})
+            continue
+        link = new_reset_link(conn, uid, welcome=True)
+        audit(conn, admin["username"], "invite", username)
+        results.append({"email": email, "username": username, "link": link})
+    conn.commit()
+    return results
+
+
+def send_invitations(invited: list):
+    """[(email, username, link)], one email each."""
+    for email, username, link in invited:
+        send_email(email, *invitation_email(username, link))
+
+
+@app.post("/api/admin/invites")
+async def api_admin_invites(request: Request):
+    """Accounts for new students, each with a week-long link to choose a
+    password: emailed when email is set up, otherwise returned for the admin
+    to hand out."""
+    body = await json_body(request)
+    raw = body.get("students") if body else None
+    if not isinstance(raw, list) or not raw:
+        return err("invalid request body")
+    if len(raw) > MAX_INVITES:
+        return err(f"At most {MAX_INVITES} students at a time.")
+    students = []
+    for item in raw:
+        if not isinstance(item, dict):
+            return err("invalid request body")
+        students.append({
+            "email": str(item.get("email", "")).strip().lower(),
+            "username": str(item.get("username") or "").strip(),
+        })
+    results = await admin_call(request, _invite, students)
+    if isinstance(results, JSONResponse):
+        return results
+    # (a copy: the links come out of the admin's answer below)
+    invited = [(r["email"], r["username"], r["link"]) for r in results if "link" in r]
+    if not email_configured():
+        return {"sent": False, "results": results}
+    # sent only to the students: the admin doesn't see the links
+    for r in results:
+        r.pop("link", None)
+    return JSONResponse({"sent": True, "results": results},
+                        background=BackgroundTask(send_invitations, invited))
 
 
 def _learner_sign_out(conn, admin, username: str):
@@ -1503,10 +1655,6 @@ def clean_html(html: str) -> str:
         url_schemes={"http", "https", "mailto"},
         link_rel="noopener noreferrer",
     )
-
-
-class Invalid(ValueError):
-    """A lesson or announcement the admin panel should be told to fix."""
 
 
 def _text(obj: dict, key: str, limit: int, label: str, required: bool = False) -> str:
@@ -1831,7 +1979,12 @@ async def api_admin_media(request: Request):
 
 # --- what every page loads: published lessons, active announcements, hosted videos
 
-def _public_content():
+def _public_content(signed_in: bool):
+    if not signed_in:          # the sign-in page: just the announcements
+        with db() as conn:
+            rows = conn.execute("SELECT * FROM announcements WHERE active = 1 ORDER BY created DESC")
+            return {"lessons": [], "media": {}, "announcements": [
+                {"id": r["id"], "text": r["text"], "text_hy": r["text_hy"], "level": r["level"]} for r in rows]}
     with db() as conn:
         lessons = [
             {"id": r["id"], "track": r["track"], "module": r["module"], "after": r["after"],
@@ -1846,11 +1999,13 @@ def _public_content():
 
 
 @app.get("/api/content.js")
-async def api_content_js():
+async def api_content_js(request: Request):
     """A script, so pages get it before they render (js/custom-content.js
     applies it). json.dumps escapes every non-ASCII character and quote, so
-    the data can only ever be a JavaScript value."""
-    content = await run_in_threadpool(_public_content)
+    the data can only ever be a JavaScript value. Lessons and videos only for
+    a signed-in student; the sign-in page gets the announcements."""
+    signed_in = await run_in_threadpool(session_valid, session_token(request))
+    content = await run_in_threadpool(_public_content, signed_in)
     return Response(
         "window.ACADEMY_CUSTOM = " + json.dumps(content, separators=(",", ":")) + ";\n",
         media_type="application/javascript",
@@ -1861,8 +2016,11 @@ async def api_content_js():
 
 
 def cli(args: list) -> int:
-    """python app.py admin add NAME | admin remove NAME | admin list"""
-    usage = "usage: python app.py admin add NAME | admin remove NAME | admin list"
+    """python app.py admin add NAME [EMAIL] | admin remove NAME | admin list
+
+    With EMAIL, a NAME that has no account yet gets one (an invitation): how
+    the first admin starts, since there is no sign-up."""
+    usage = "usage: python app.py admin add NAME [EMAIL] | admin remove NAME | admin list"
     if args[:1] != ["admin"] or len(args) < 2:
         print(usage, file=sys.stderr)
         return 2
@@ -1877,25 +2035,44 @@ def cli(args: list) -> int:
             if not rows:
                 print("No admins yet. Make one with: make admin NAME=<username>")
             return 0
-        if len(args) != 3 or args[1] not in ("add", "remove"):
+        if not (len(args) == 3 or (len(args) == 4 and args[1] == "add")) or args[1] not in ("add", "remove"):
             print(usage, file=sys.stderr)
             return 2
         row = conn.execute(
             "SELECT id, username FROM users WHERE username = ? COLLATE NOCASE", (args[2],)
         ).fetchone()
+        welcome = None
+        if row is None and len(args) == 4:
+            try:
+                uid = create_account(conn, args[2], args[3].strip().lower())
+            except Invalid as e:
+                print(e, file=sys.stderr)
+                return 1
+            welcome = new_reset_link(conn, uid, welcome=True)
+            row = conn.execute("SELECT id, username FROM users WHERE id = ?", (uid,)).fetchone()
         if row is None:
-            print(f"No account named {args[2]!r}. Create it on the site first, then run this again.",
-                  file=sys.stderr)
+            print(f"No account named {args[2]!r}. To create it, give an email too: "
+                  f"make admin NAME={args[2]} EMAIL=...", file=sys.stderr)
             return 1
         add = args[1] == "add"
         conn.execute("UPDATE users SET is_admin = ? WHERE id = ?", (int(add), row["id"]))
         audit(conn, "(server)", "admin-add" if add else "admin-remove", row["username"])
         conn.commit()
     print(f"{row['username']} is {'now an admin: sign in and open /admin.html' if add else 'no longer an admin'}.")
+    if welcome:
+        print(f"The account is new: open this link to choose its password (valid for 7 days):\n{welcome}")
     return 0
 
 
 # ---------------------------------------------------------------- health
+
+
+@app.get("/api/auth-check")
+async def api_auth_check(request: Request):
+    """Caddy asks this (forward_auth) before serving a video itself."""
+    if await run_in_threadpool(session_valid, session_token(request)):
+        return Response(status_code=204)
+    return err("Sign in first.", 401)
 
 
 @app.get("/api/health")

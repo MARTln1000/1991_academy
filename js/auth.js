@@ -206,6 +206,9 @@ const Auth = (() => {
   /* ---------- Nav ---------- */
 
   function updateNav() {
+    /* Signed out, only the sign-in and privacy pages are reachable: hide the
+       links to everything else (css/components.css, body.signed-out). */
+    document.body.classList.toggle("signed-out", !user && !offline);
     const label = user ? "👤 " + user.username : (typeof t === "function" ? t("Sign in") : "Sign in");
     document.querySelectorAll("[data-account]").forEach((el) => {
       el.textContent = label;
@@ -263,17 +266,6 @@ const Auth = (() => {
     isOffline: () => offline,
     lastSyncedAt: () => lastSyncedAt,
 
-    async register(username, email, password) {
-      const out = await api("/api/register", {
-        method: "POST",
-        body: JSON.stringify({ username, email, password }),
-      });
-      user = out.user;
-      await reconcile(user);
-      updateNav();
-      return user;
-    },
-
     async login(identifier, password) {
       const out = await api("/api/login", {
         method: "POST",
@@ -310,11 +302,18 @@ const Auth = (() => {
       });
     },
 
+    /* Also an invited student's first password: then the answer carries the
+       account, and they are signed in. */
     async resetPassword(token, password) {
-      await api("/api/reset-password", {
+      return api("/api/reset-password", {
         method: "POST",
         body: JSON.stringify({ token, password }),
       });
+    },
+
+    /* Whose invitation (or reset) link this is: {username}. */
+    welcome(token) {
+      return api("/api/welcome", { method: "POST", body: JSON.stringify({ token }) });
     },
 
     async deleteAccount(password) {

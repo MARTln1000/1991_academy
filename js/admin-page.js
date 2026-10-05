@@ -146,7 +146,7 @@
     route();
     window.scrollTo({ top: 0 });
   });
-  route();
+  /* (the first route() is at the very end: views use constants defined below) */
 
   /* ============================================================ Overview */
 
@@ -181,6 +181,7 @@
     const chips =
       '<div class="hero-stats admin-chips">' +
       chip(num(s.learners), t("learners with an account")) +
+      (s.invited ? chip(num(s.invited), t("invited, not signed in yet")) : "") +
       chip(num(s.new7), t("new this week")) +
       chip(num(s.active7), t("active this week")) +
       chip(num(s.active30), t("active in 30 days")) +
@@ -244,9 +245,83 @@
   const learnerQuery = { q: "", sort: "created", offset: 0 };
   const SORTS = [["created", "Newest first"], ["active", "Recently active"], ["xp", "Most XP"], ["name", "Name"]];
 
+  /* "anna@x.am" or "anna@x.am, anna_k" per line -> [{email, username}] */
+  function parseStudents(text) {
+    return text.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
+      const parts = line.split(/[,;\t ]+/).filter(Boolean);
+      const email = parts.find((p) => p.includes("@")) || parts[0] || "";
+      const username = parts.find((p) => p !== email) || "";
+      return { email, username };
+    });
+  }
+
+  function inviteCard() {
+    return card(
+      "<h3>✉️ " + t("Invite students") + "</h3>" +
+      '<p class="admin-muted">' + t("Only invited students can sign in. One per line: an email, and optionally a username after a comma (otherwise it is made from the email).") + "</p>" +
+      '<form data-invite-form>' +
+      '<textarea class="admin-input" name="students" rows="4" placeholder="anna.karapetyan@example.com&#10;arman@example.com, arman_s"></textarea>' +
+      '<div class="dash-actions"><button class="btn btn-primary" type="submit">' + t("Invite") + "</button></div>" +
+      '<p class="form-error" data-msg></p><div data-invite-out></div></form>',
+      "admin-invite");
+  }
+
+  function bindInvite(el, onDone) {
+    const form = el.querySelector("[data-invite-form]");
+    const msg = form.querySelector("[data-msg]");
+    const out = form.querySelector("[data-invite-out]");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      msg.textContent = "";
+      out.innerHTML = "";
+      const students = parseStudents(form.students.value);
+      if (!students.length) return;
+      const btn = form.querySelector("button[type=submit]");
+      btn.disabled = true;
+      try {
+        const res = await send("POST", "/api/admin/invites", { students });
+        const ok = res.results.filter((r) => !r.error);
+        const bad = res.results.filter((r) => r.error);
+        msg.style.color = ok.length ? "var(--success)" : "";
+        msg.textContent = res.sent
+          ? t("Invited {0}. Each got an email with a link to choose a password.", ok.length)
+          : t("Invited {0}. Email isn't set up on this server, so send each student their link (valid for 7 days):", ok.length);
+        out.innerHTML =
+          (!res.sent && ok.length
+            ? '<div class="table-wrap"><table class="admin-table"><thead><tr><th>' + t("Learner") + "</th><th>" + t("Email") +
+              "</th><th>" + t("Link") + "</th></tr></thead><tbody>" +
+              ok.map((r) => "<tr><td>" + esc(r.username) + "</td><td>" + esc(r.email) + '</td><td><input class="admin-input" readonly value="' + esc(r.link) + '" /></td></tr>').join("") +
+              '</tbody></table></div><div class="dash-actions"><button class="btn" type="button" data-copy-all>' + t("Copy all") + "</button></div>"
+            : "") +
+          (bad.length
+            ? '<p class="form-error">' + t("Not invited:") + "</p><ul class=\"admin-list\">" +
+              bad.map((r) => "<li>" + esc(r.email || "?") + " — " + esc(t(r.error)) + "</li>").join("") + "</ul>"
+            : "");
+        const copy = out.querySelector("[data-copy-all]");
+        if (copy) {
+          copy.addEventListener("click", async () => {
+            const text = ok.map((r) => r.username + "\t" + r.email + "\t" + r.link).join("\n");
+            try {
+              await navigator.clipboard.writeText(text);
+              toast(t("Copied."));
+            } catch { /* clipboard blocked: the links are on screen */ }
+          });
+        }
+        if (ok.length) {
+          form.students.value = bad.map((r) => r.email + (r.username ? ", " + r.username : "")).join("\n");
+          onDone();
+        }
+      } catch (err) {
+        msg.style.color = "";
+        msg.textContent = err.message;
+      }
+      btn.disabled = false;
+    });
+  }
+
   async function viewLearners() {
     return {
-      html: card(
+      html: inviteCard() + card(
         '<div class="admin-toolbar">' +
         '<input class="admin-input" type="search" data-q placeholder="' + esc(t("Search by name or email")) + '" value="' + esc(learnerQuery.q) + '" />' +
         '<select class="admin-input" data-sort aria-label="' + esc(t("Sort")) + '">' +
@@ -263,6 +338,7 @@
           list.innerHTML = renderLearners(d);
         }
         const reload = () => load().catch((e) => (list.innerHTML = '<p class="form-error">' + esc(e.message) + "</p>"));
+        bindInvite(el, reload);
         el.querySelector("[data-q]").addEventListener("input", (e) => {
           clearTimeout(timer);
           timer = setTimeout(() => {
@@ -292,7 +368,8 @@
     const rows = d.learners
       .map((u) =>
         '<tr><td><a href="#learner/' + encodeURIComponent(u.username) + '">' + esc(u.username) + "</a>" +
-        (u.admin ? " " + badge("admin", t("admin")) : "") + "</td>" +
+        (u.admin ? " " + badge("admin", t("admin")) : "") +
+        (u.invited ? " " + badge("draft", t("invited")) : "") + "</td>" +
         "<td>" + esc(u.email) + "</td><td>" + fmtDate(u.created) + "</td><td>" + fmtDate(u.lastActive) + "</td>" +
         "<td>" + num(u.xp) + "</td><td>" + num(u.lessons) + "</td></tr>")
       .join("");
@@ -327,7 +404,9 @@
 
     const head =
       '<div class="profile-head"><div class="avatar">' + esc(u.username[0].toUpperCase()) + "</div><div>" +
-      "<h2>" + esc(u.username) + " " + (u.admin ? badge("admin", t("admin")) : "") + (u.optIn ? badge("info", t("on the leaderboard")) : "") + "</h2>" +
+      "<h2>" + esc(u.username) + " " + (u.admin ? badge("admin", t("admin")) : "") +
+      (u.invited ? badge("draft", t("invited, not signed in yet")) : "") +
+      (u.optIn ? badge("info", t("on the leaderboard")) : "") + "</h2>" +
       '<p class="admin-muted">' + esc(u.email) + "</p></div></div>" +
       '<div class="hero-stats admin-chips">' +
       chip(num(u.xp) + " XP", t("in total")) +
@@ -349,7 +428,7 @@
     const actions =
       "<h3>" + t("Account") + "</h3>" +
       '<div class="dash-actions">' +
-      '<button class="btn" data-reset>' + t("Send a password-reset link") + "</button>" +
+      '<button class="btn" data-reset>' + (u.invited ? t("Resend the invitation") : t("Send a password-reset link")) + "</button>" +
       '<button class="btn" data-signout' + (self ? " disabled" : "") + ">" + t("Sign out on every device") + "</button>" +
       '<button class="btn btn-danger" data-del-open' + (self || u.admin ? " disabled" : "") + ">" + t("Delete account") + "</button>" +
       "</div>" +
@@ -425,10 +504,12 @@
             const box = el.querySelector("[data-reset-out]");
             if (out.sent) {
               box.innerHTML = "";
-              ok(t("A reset link is on its way to {0}.", out.email));
+              ok(out.invite ? t("A new invitation is on its way to {0}.", out.email) : t("A reset link is on its way to {0}.", out.email));
             } else {
               box.innerHTML =
-                '<div class="admin-confirm"><p>' + t("Email isn't set up on this server, so give this link to the learner yourself. It works once, for one hour:") + "</p>" +
+                '<div class="admin-confirm"><p>' + (out.invite
+                  ? t("Email isn't set up on this server, so give this invitation link to the student yourself. It works once, for 7 days:")
+                  : t("Email isn't set up on this server, so give this link to the learner yourself. It works once, for one hour:")) + "</p>" +
                 '<div class="admin-toolbar"><input class="admin-input" readonly value="' + esc(out.link) + '" />' +
                 '<button class="btn" type="button" data-copy>' + t("Copy") + "</button></div></div>";
               box.querySelector("[data-copy]").addEventListener("click", async () => {
@@ -1053,6 +1134,7 @@
   /* ============================================================ Activity log */
 
   const ACTIONS = {
+    "invite": "Invited a student",
     "reset-link": "Sent a password-reset link",
     "sign-out": "Signed out on every device",
     "delete-account": "Deleted an account",
@@ -1081,7 +1163,7 @@
       if (e.action.startsWith("lesson-") && (e.action !== "lesson-delete" || builtin[e.target])) {
         return '<a href="#lesson/' + encodeURIComponent(e.target) + '">' + esc(e.target) + "</a>";
       }
-      if (["reset-link", "sign-out", "admin-add", "admin-remove"].includes(e.action)) {
+      if (["invite", "reset-link", "sign-out", "admin-add", "admin-remove"].includes(e.action)) {
         return '<a href="#learner/' + encodeURIComponent(e.target) + '">' + esc(e.target) + "</a>";
       }
       return esc(e.target);
@@ -1106,4 +1188,6 @@
         rows + "</tbody></table></div>"),
     };
   }
+
+  route();
 })();

@@ -39,40 +39,85 @@ def sent_emails(monkeypatch):
 
 
 def register(client, username="alice", email="alice@example.com", password="hunter2pw"):
-    return client.post("/api/register", json={"username": username, "email": email, "password": password})
+    """An account, signed in on `client`; returns the sign-in response. There
+    is no sign-up (the school creates accounts), so it is made directly."""
+    with app.db() as conn:
+        app.create_account(conn, username, email, password)
+        conn.commit()
+    return client.post("/api/login", json={"identifier": username, "password": password})
 
 
-# ----------------------------------------------------------------- registration
+# --------------------------------------------- accounts: by invitation only
 
-def test_register_and_me(client):
+def test_there_is_no_sign_up(client):
+    r = client.post("/api/register", json={"username": "eve", "email": "eve@example.com", "password": "longenough1"})
+    assert r.status_code in (404, 405)
+    with app.db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+
+
+def test_signed_in_and_me(client):
     r = register(client)
-    assert r.status_code == 201
-    assert r.json()["user"]["username"] == "alice"
+    assert r.status_code == 200 and r.json()["user"]["username"] == "alice"
     me = client.get("/api/me")
     assert me.status_code == 200
     assert me.json()["user"]["email"] == "alice@example.com"
 
 
-def test_register_duplicate_is_409(client):
+def test_usernames_and_emails_are_unique_whatever_the_case(client):
     register(client)
-    r = register(client, email="other@example.com")  # same username
-    assert r.status_code == 409
+    with app.db() as conn:
+        for username, email in (("ALICE", "other@example.com"), ("bob", "Alice@Example.com")):
+            with pytest.raises(app.Invalid):
+                app.create_account(conn, username, email)
 
 
-@pytest.mark.parametrize("body", [
-    {"username": "ab", "email": "a@b.co", "password": "longenough1"},   # username too short
-    {"username": "okname", "email": "nope", "password": "longenough1"},  # bad email
-    {"username": "okname", "email": "a@b.co", "password": "short"},      # password too short
+@pytest.mark.parametrize("username,email", [
+    ("ab", "a@b.co"),                                       # username too short
+    ("okname", "nope"),                                     # bad email
     # markup, SQL and header injection never get stored
-    {"username": "x' OR '1'='1", "email": "a@b.co", "password": "longenough1"},
-    {"username": "<b>bold</b>", "email": "a@b.co", "password": "longenough1"},
-    {"username": "okname", "email": "<img/src=x/onerror=alert(1)>@b.co", "password": "longenough1"},
-    {"username": "okname", "email": "a\"onmouseover=\"x@b.co", "password": "longenough1"},
-    {"username": "okname", "email": "a@b.co\r\nBcc:x@evil.co", "password": "longenough1"},
-    {"username": "okname", "email": "a" * 250 + "@b.co", "password": "longenough1"},
+    ("x' OR '1'='1", "a@b.co"),
+    ("<b>bold</b>", "a@b.co"),
+    ("okname", "<img/src=x/onerror=alert(1)>@b.co"),
+    ("okname", "a\"onmouseover=\"x@b.co"),
+    ("okname", "a@b.co\r\nBcc:x@evil.co"),
+    ("okname", "a" * 250 + "@b.co"),
 ])
-def test_register_validation(client, body):
-    assert client.post("/api/register", json=body).status_code == 400
+def test_account_validation(client, username, email):
+    with app.db() as conn:
+        with pytest.raises(app.Invalid):
+            app.create_account(conn, username, email)
+        assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+
+
+def test_an_invited_student_chooses_a_password_and_is_signed_in(client):
+    with app.db() as conn:
+        uid = app.create_account(conn, "anna", "anna@example.com")
+        link = app.new_reset_link(conn, uid, welcome=True)
+        conn.commit()
+    assert "/account.html?welcome=" in link
+    token = link.split("welcome=")[1]
+    # no password yet: nothing signs in, not even an empty one
+    for pw in ("", "!", "anything123"):
+        assert client.post("/api/login", json={"identifier": "anna", "password": pw}).status_code in (400, 401)
+    assert client.post("/api/welcome", json={"token": token}).json() == {"username": "anna"}
+    assert client.post("/api/welcome", json={"token": "nope"}).status_code == 400
+    r = client.post("/api/reset-password", json={"token": token, "password": "annas-password"})
+    assert r.status_code == 200 and r.json()["user"]["username"] == "anna"
+    assert client.get("/api/me").status_code == 200                     # signed in at once
+    assert client.post("/api/reset-password", json={"token": token, "password": "again12345"}).status_code == 400
+    client.post("/api/logout", json={})
+    assert client.post("/api/login", json={"identifier": "anna", "password": "annas-password"}).status_code == 200
+
+
+def test_an_invitation_expires_after_a_week(client):
+    with app.db() as conn:
+        uid = app.create_account(conn, "anna", "anna@example.com")
+        token = app.new_reset_link(conn, uid, welcome=True).split("welcome=")[1]
+        conn.execute("UPDATE password_resets SET expires = ?", (time.time() - 1,))
+        conn.commit()
+    assert client.post("/api/welcome", json={"token": token}).status_code == 400
+    assert client.post("/api/reset-password", json={"token": token, "password": "annas-password"}).status_code == 400
 
 
 # ----------------------------------------------------------------------- login
@@ -316,10 +361,10 @@ def test_delete_account(client):
     client.put("/api/state", json={"data": {"1991_academy:xp:v1": '{"total": 10}'}})
     assert client.post("/api/delete-account", json={"password": "WRONG"}).status_code == 403
     assert client.post("/api/delete-account", json={"password": "hunter2pw"}).status_code == 200
-    # session gone, login impossible, username freed for re-registration
+    # session gone, login impossible, username free for a new account
     assert client.get("/api/me").status_code == 401
     assert client.post("/api/login", json={"identifier": "alice", "password": "hunter2pw"}).status_code == 401
-    assert register(client).status_code == 201
+    assert register(client).status_code == 200
 
 
 # ------------------------------------------------------------------ rate limit
@@ -427,6 +472,7 @@ def test_non_web_files_are_not_served(client, path):
     "/assets/courses/ml/HW/1/car.csv",
 ])
 def test_site_files_are_served(client, path):
+    register(client)
     assert client.get(path).status_code == 200
 
 
@@ -445,11 +491,12 @@ def test_notebooks_are_always_revalidated(client, monkeypatch):
     """The exercise notebooks change with the exercises; other course files are
     cached for a day. (Debug mode sends no-store everywhere, so turn it off.)"""
     monkeypatch.setattr(app, "DEBUG", False)
+    register(client)
     notebook = client.get("/assets/colab/en/lab-two-sum.ipynb")
     assert notebook.status_code == 200 and notebook.headers["Cache-Control"] == "no-cache"
     assert json.loads(notebook.content)["cells"]
     pdf = client.get("/assets/courses/math/Homeworks/Homework%201.pdf")
-    assert pdf.headers["Cache-Control"] == "public, max-age=86400"
+    assert pdf.headers["Cache-Control"] == "private, max-age=86400"   # the student's browser only
 
 
 def test_security_headers_include_csp(client):
@@ -508,7 +555,7 @@ def test_sql_injection_is_stored_as_plain_text(client):
 
 @pytest.mark.parametrize("body", ["[]", "[1, 2]", "42", '"text"', "null", "[" * 50_000 + "]" * 50_000])
 def test_non_object_json_is_a_400_not_a_crash(client, body):
-    for path in ("/api/login", "/api/register", "/api/forgot-password"):
+    for path in ("/api/login", "/api/forgot-password", "/api/reset-password", "/api/welcome"):
         r = client.post(path, content=body, headers={"Content-Type": "application/json"})
         assert r.status_code == 400, (path, body[:10], r.status_code)
 
@@ -542,21 +589,76 @@ def test_api_has_no_cors(client):
 def test_robots_txt(client):
     r = client.get("/robots.txt")
     assert r.status_code == 200
-    assert "Disallow: /api/" in r.text
+    assert "Disallow: /\n" in r.text           # a closed school: nothing to index
 
 
-@pytest.mark.parametrize("path,indexed", [
-    ("/", True), ("/index.html", True), ("/tracks/web.html", True), ("/privacy.html", True),
-    ("/account.html", False),
-    ("/assets/courses/ml/HW/1/HW1.ipynb", False),
-    ("/assets/courses/math/Homeworks/Homework%201.pdf", False),
-    ("/assets/colab/en/lab-two-sum.ipynb", False),
-    ("/api/health", False),
+@pytest.mark.parametrize("path", [
+    "/", "/index.html", "/tracks/web.html", "/privacy.html", "/account.html",
+    "/assets/courses/math/Homeworks/Homework%201.pdf", "/assets/colab/en/lab-two-sum.ipynb", "/api/health",
 ])
-def test_search_engines_index_only_the_pages(client, path, indexed):
+def test_search_engines_index_nothing(client, path):
+    register(client)
     r = client.get(path)
     assert r.status_code == 200, path
-    assert ("X-Robots-Tag" not in r.headers) == indexed, path
+    assert r.headers["X-Robots-Tag"] == "noindex, nofollow", path
+
+
+# ------------------------------------------------ a closed school: who sees what
+
+PRIVATE_PAGES = ["/", "/index.html", "/lab.html", "/missions.html", "/practice.html", "/admin.html",
+                 "/tracks/web.html", "/tracks/math.html"]
+PRIVATE_FILES = ["/js/data/web.js", "/js/data/i18n-hy-web.js", "/js/data/lab.js", "/assets/colab/en/lab-two-sum.ipynb",
+                 "/assets/courses/ml/HW/1/knn.py", "/assets/courses/math/Homeworks/Homework%201.pdf"]
+PUBLIC_FILES = ["/account.html", "/privacy.html", "/robots.txt", "/css/tokens.css", "/js/common.js",
+                "/js/i18n.js", "/js/auth.js", "/js/account-page.js", "/js/custom-content.js"]
+
+
+def test_visitors_see_only_the_sign_in_page(client):
+    for path in PRIVATE_PAGES:
+        r = client.get(path, follow_redirects=False)
+        assert r.status_code == 303, path
+        assert r.headers["location"] == "/account.html?next=" + path, path
+    for path in PRIVATE_FILES:
+        assert client.get(path).status_code == 401, path      # lessons and course files too
+    for path in PUBLIC_FILES:
+        assert client.get(path).status_code == 200, path
+    assert client.get("/api/leaderboard").status_code == 401
+    assert client.get("/api/auth-check").status_code == 401
+
+
+def test_a_forged_or_expired_session_is_a_visitor(client):
+    client.cookies.set("msession", "f" * 64)
+    assert client.get("/index.html", follow_redirects=False).status_code == 303
+    client.cookies.clear()
+    register(client)
+    assert client.get("/index.html").status_code == 200
+    with app.db() as conn:
+        conn.execute("UPDATE sessions SET created = ?", (time.time() - app.SESSION_TTL - 1,))
+        conn.commit()
+    assert client.get("/index.html", follow_redirects=False).status_code == 303
+    assert client.get("/js/data/web.js").status_code == 401
+
+
+def test_signing_out_closes_the_site_again(client):
+    register(client)
+    assert client.get("/tracks/web.html").status_code == 200
+    assert client.get("/api/auth-check").status_code == 204
+    client.post("/api/logout", json={})
+    assert client.get("/tracks/web.html", follow_redirects=False).status_code == 303
+    assert client.get("/api/auth-check").status_code == 401
+
+
+def test_the_sign_in_page_gets_announcements_but_no_lessons(client):
+    with TestClient(app.app) as admin:
+        register(admin, "boss", "boss@example.com")
+        assert app.cli(["admin", "add", "boss"]) == 0
+        admin.put("/api/admin/lessons/web-2-9", json={
+            "track": "web", "module": "web-m2", "published": True, "title": "Secret lesson", "minutes": 5,
+            "content": "<p>for students only</p>"})
+        admin.post("/api/admin/announcements", json={"text": "Exams on Monday"})
+        assert "for students only" in admin.get("/api/content.js").text
+    text = client.get("/api/content.js").text
+    assert "Exams on Monday" in text and "for students only" not in text
 
 
 @pytest.mark.parametrize("path", [
@@ -596,12 +698,6 @@ def test_course_notebooks_carry_no_author_account_data():
 
 # ----------------------------------------------------------------- hygiene
 
-def test_case_insensitive_username_is_rejected(client):
-    register(client)
-    r = register(client, username="ALICE", email="other@example.com")
-    assert r.status_code == 409
-
-
 def test_sweep_removes_expired_sessions_and_tokens(client):
     register(client)
     assert client.get("/api/me").status_code == 200
@@ -635,6 +731,7 @@ def test_schema_is_ready_without_calling_init_db(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "DB_PATH", str(tmp_path / "lifespan.db"))
     app._BUCKETS.clear()
     with TestClient(app.app) as c:           # entering runs the lifespan
-        assert c.post("/api/register", json={
-            "username": "bob", "email": "bob@example.com", "password": "hunter2pw"
-        }).status_code == 201
+        # no account yet, but the tables are there: a clean 401, not a 500
+        assert c.post("/api/login", json={"identifier": "bob", "password": "hunter2pw"}).status_code == 401
+        with app.db() as conn:
+            assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0

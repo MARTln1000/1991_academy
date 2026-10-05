@@ -1,8 +1,10 @@
 /* ============================================
    1991 Academy — Account page
-   Sign in / create account when logged out,
-   profile + security controls when logged in,
-   and the password-reset landing (?reset=TOKEN).
+   Sign in when logged out (there is no sign-up:
+   the school invites its students), profile +
+   security controls when logged in, the
+   password-reset landing (?reset=TOKEN) and the
+   invitation landing (?welcome=TOKEN).
    ============================================ */
 
 (async function () {
@@ -207,37 +209,83 @@
     });
   }
 
-  /* ---------- Logged out: sign in / register / forgot ---------- */
+  /* ---------- Invitation landing (?welcome=TOKEN, from the invitation) ---------- */
+
+  async function renderWelcome(token) {
+    let username;
+    try {
+      username = (await Auth.welcome(token)).username;
+    } catch (err) {
+      root.innerHTML =
+        '<div class="practice-card practice-done"><div class="p-big">⌛</div>' +
+        "<h2>" + t("This invitation link has expired") + "</h2>" +
+        "<p>" + t("Ask your instructor for a new one, or write to {0}.", '<a href="mailto:ai.1991@mil.am">ai.1991@mil.am</a>') + "</p></div>";
+      return;
+    }
+    root.innerHTML =
+      '<div class="auth-grid auth-grid-single">' +
+      '<form class="form-card" data-form="welcome">' +
+      "<h2>" + t("Welcome to 1991 Academy") + "</h2>" +
+      '<p class="f-sub">' + t("Your username is {0}. Choose a password to finish setting up your account.", "<strong>" + esc(username) + "</strong>") + "</p>" +
+      '<input type="hidden" name="username" autocomplete="username" value="' + esc(username) + '" />' +
+      '<div class="field"><label for="wl-pw">' + t("Password (min 8 characters)") + "</label>" +
+      '<input id="wl-pw" name="password" type="password" autocomplete="new-password" minlength="8" required /></div>' +
+      '<div class="field"><label for="wl-pw2">' + t("Confirm new password") + "</label>" +
+      '<input id="wl-pw2" name="confirm" type="password" autocomplete="new-password" minlength="8" required /></div>' +
+      '<button class="btn btn-primary" type="submit">' + t("Start learning") + "</button>" +
+      '<p class="f-sub form-privacy">' + t("What we store and why:") + ' <a href="privacy.html">' + t("Privacy Policy") + "</a></p>" +
+      '<p class="form-error" data-error></p></form></div>';
+
+    const form = root.querySelector("[data-form=welcome]");
+    const errEl = form.querySelector("[data-error]");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errEl.textContent = "";
+      const f = new FormData(form);
+      if (f.get("password") !== f.get("confirm")) {
+        errEl.textContent = t("Passwords don't match.");
+        return;
+      }
+      const btn = form.querySelector("button");
+      btn.disabled = true;
+      try {
+        await Auth.resetPassword(token, f.get("password"));   /* signs the student in */
+        history.replaceState(null, "", location.pathname);
+        location.href = "index.html";
+      } catch (err) {
+        errEl.textContent = t(err.message);
+        btn.disabled = false;
+      }
+    });
+  }
+
+  /* ---------- Signed out: sign in / forgot password ----------
+     There is no sign-up: the school creates its students' accounts. */
+
+  /* Where to go after signing in: the page that sent the visitor here
+     (?next=/tracks/dl.html), if it is one of this site's. */
+  function nextPage() {
+    const next = new URLSearchParams(location.search).get("next") || "";
+    return /^\/(?!\/)[A-Za-z0-9_\-\/.]*$/.test(next) && !next.includes("..") ? next : "index.html";
+  }
 
   function renderForms() {
     root.innerHTML =
-      '<h1 style="font-size:1.8rem; margin-bottom:8px">' + t("Your progress, everywhere") + "</h1>" +
-      '<p class="section-sub">' + t("Create a free account and your XP, streak, completed lessons and mission codes follow you to any device. All guest progress stays on this device only.") + "</p>" +
-      '<div class="auth-grid">' +
+      '<h1 style="font-size:1.8rem; margin-bottom:8px">' + t("1991 Academy") + "</h1>" +
+      '<p class="section-sub">' + t("The online school of 1991 Unit. Sign in with the account your school created for you.") + "</p>" +
+      '<div class="auth-grid auth-grid-single">' +
 
       '<form class="form-card" data-form="login">' +
       "<h2>" + t("Sign in") + "</h2>" +
-      '<p class="f-sub">' + t("Welcome back — your streak missed you.") + "</p>" +
       '<div class="field"><label for="li-id">' + t("Username or email") + "</label>" +
       '<input id="li-id" name="identifier" autocomplete="username" required /></div>' +
       '<div class="field"><label for="li-pw">' + t("Password") + "</label>" +
       '<input id="li-pw" name="password" type="password" autocomplete="current-password" required /></div>' +
       '<button class="btn btn-primary" type="submit">' + t("Sign in") + "</button>" +
       '<button type="button" class="link-btn" data-forgot-open>' + t("Forgot your password?") + "</button>" +
-      '<p class="form-error" data-error></p></form>' +
-
-      '<form class="form-card" data-form="register">' +
-      "<h2>" + t("Create account") + "</h2>" +
-      '<p class="f-sub">' + t("Free forever. Your current progress on this device comes with you.") + "</p>" +
-      '<div class="field"><label for="re-un">' + t("Username") + "</label>" +
-      '<input id="re-un" name="username" autocomplete="username" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" title="3-20 characters: letters, digits, underscore" required /></div>' +
-      '<div class="field"><label for="re-em">' + t("Email") + "</label>" +
-      '<input id="re-em" name="email" type="email" autocomplete="email" required /></div>' +
-      '<div class="field"><label for="re-pw">' + t("Password (min 8 characters)") + "</label>" +
-      '<input id="re-pw" name="password" type="password" autocomplete="new-password" minlength="8" required /></div>' +
-      '<button class="btn btn-primary" type="submit">' + t("Create account") + "</button>" +
-      '<p class="f-sub form-privacy">' + t("What we store and why:") + ' <a href="privacy.html">' + t("Privacy Policy") + "</a></p>" +
-      '<p class="form-error" data-error></p></form>' +
+      '<p class="form-error" data-error></p>' +
+      '<p class="f-sub form-privacy">' + t("No account? Accounts are only for the school's students: ask your instructor, or write to {0}.", '<a href="mailto:ai.1991@mil.am">ai.1991@mil.am</a>') + "</p>" +
+      "</form>" +
       "</div>" +
 
       /* forgot-password panel, revealed by the link */
@@ -251,26 +299,21 @@
       '<button class="btn" type="button" data-forgot-cancel>' + t("Cancel") + "</button>" +
       "</div><p class=\"form-error\" data-fg-msg></p></form>";
 
-    root.querySelectorAll("form[data-form=login], form[data-form=register]").forEach((form) => {
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const errEl = form.querySelector("[data-error]");
-        const btn = form.querySelector("button[type=submit], button.btn-primary");
-        errEl.textContent = "";
-        btn.disabled = true;
-        const f = new FormData(form);
-        try {
-          if (form.dataset.form === "login") {
-            await Auth.login(f.get("identifier").trim(), f.get("password"));
-          } else {
-            await Auth.register(f.get("username").trim(), f.get("email").trim(), f.get("password"));
-          }
-          location.href = "index.html";
-        } catch (err) {
-          errEl.textContent = err.message;
-          btn.disabled = false;
-        }
-      });
+    const form = root.querySelector("form[data-form=login]");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errEl = form.querySelector("[data-error]");
+      const btn = form.querySelector("button[type=submit]");
+      errEl.textContent = "";
+      btn.disabled = true;
+      const f = new FormData(form);
+      try {
+        await Auth.login(f.get("identifier").trim(), f.get("password"));
+        location.href = nextPage();
+      } catch (err) {
+        errEl.textContent = t(err.message);
+        btn.disabled = false;
+      }
     });
 
     /* forgot-password reveal + submit */
@@ -299,8 +342,9 @@
   }
 
   function render() {
-    const resetToken = new URLSearchParams(location.search).get("reset");
-    if (resetToken) return renderReset(resetToken);
+    const params = new URLSearchParams(location.search);
+    if (params.get("welcome")) return renderWelcome(params.get("welcome"));
+    if (params.get("reset")) return renderReset(params.get("reset"));
     if (Auth.isOffline()) return renderOffline();
     if (Auth.current()) return renderProfile();
     renderForms();
@@ -316,6 +360,7 @@
     renderStreakPill();
     XP.renderPill();
     const typing = root.contains(document.activeElement) && document.activeElement.matches("input");
-    if (!typing && !new URLSearchParams(location.search).get("reset") && Auth.current()) render();
+    const params = new URLSearchParams(location.search);
+    if (!typing && !params.get("reset") && !params.get("welcome") && Auth.current()) render();
   });
 })();

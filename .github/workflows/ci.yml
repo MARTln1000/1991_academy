@@ -67,16 +67,34 @@ jobs:
           assert h["ok"] is True and h["revision"] == sys.argv[2], h
           assert not h["debug"] and h["secure_cookies"] and h["trust_proxy"], h' \
             "$health" "$(git rev-parse HEAD)"
-          # the frontend is served: pages, and files from inside its folders
-          for path in / /tracks/dl.html /js/common.js /css/tokens.css "/assets/courses/math/Homeworks/Homework%201.pdf" /assets/colab/en/lab-two-sum.ipynb; do
-            curl -fsS -o /dev/null "http://127.0.0.1:8735$path" || { echo "::error::$path is not served"; exit 1; }
+          # a closed school: a visitor gets the sign-in page and nothing else
+          out=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://127.0.0.1:8735/tracks/dl.html)
+          [ "$out" = "303 http://127.0.0.1:8735/account.html?next=/tracks/dl.html" ] || { echo "::error::a visitor got '$out' for a lesson page"; exit 1; }
+          for path in /js/data/dl.js /assets/colab/en/lab-two-sum.ipynb /media/ehvWj3Ir7yA.mp4; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8735$path")
+            [ "$code" = 401 ] || { echo "::error::a visitor got $code for $path, expected 401"; exit 1; }
           done
-          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8735/app.py)
+          curl -fsS -o /dev/null http://127.0.0.1:8735/account.html || { echo "::error::the sign-in page is not served"; exit 1; }
+          # the first admin, as on a new server: an invitation from the command line,
+          # accepted with its link (which signs in)
+          token=$(docker compose exec -T app python app.py admin add ci_admin ci@example.com | grep -o 'welcome=[A-Za-z0-9_-]*' | cut -d= -f2)
+          [ -n "$token" ] || { echo "::error::make admin printed no invitation link"; exit 1; }
+          session=$(curl -fsS -D - -o /dev/null -H 'Content-Type: application/json' \
+            -d "{\"token\": \"$token\", \"password\": \"ci-password-123\"}" http://127.0.0.1:8735/api/reset-password \
+            | sed -n 's/^[Ss]et-[Cc]ookie: msession=\([^;]*\).*/\1/p')
+          [ -n "$session" ] || { echo "::error::accepting the invitation didn't sign in"; exit 1; }
+          echo "SESSION=$session" >> "$GITHUB_ENV"
+          C="Cookie: msession=$session"
+          # signed in, the frontend is served: pages, and files from inside its folders
+          for path in / /tracks/dl.html /admin.html /js/common.js /js/data/dl.js /css/tokens.css "/assets/courses/math/Homeworks/Homework%201.pdf" /assets/colab/en/lab-two-sum.ipynb; do
+            curl -fsS -o /dev/null -H "$C" "http://127.0.0.1:8735$path" || { echo "::error::$path is not served"; exit 1; }
+          done
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "$C" http://127.0.0.1:8735/app.py)
           [ "$code" = 404 ] || { echo "/app.py answered $code, expected 404"; exit 1; }
           # a hosted lesson video: served, seekable, and listed for the pages
-          code=$(curl -s -o /dev/null -w '%{http_code}' -r 1000-1999 http://127.0.0.1:8735/media/ehvWj3Ir7yA.mp4)
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "$C" -r 1000-1999 http://127.0.0.1:8735/media/ehvWj3Ir7yA.mp4)
           [ "$code" = 206 ] || { echo "::error::a byte range of a video answered $code, expected 206"; exit 1; }
-          curl -fsS http://127.0.0.1:8735/api/content.js | grep -q '"ehvWj3Ir7yA"' || { echo "::error::the hosted video isn't listed"; exit 1; }
+          curl -fsS -H "$C" http://127.0.0.1:8735/api/content.js | grep -q '"ehvWj3Ir7yA"' || { echo "::error::the hosted video isn't listed"; exit 1; }
           # the app's own user can read every file and enter every folder of the site
           blocked=$(docker compose exec -T app find /app \( ! -readable -o -type d ! -executable \) -print)
           [ -z "$blocked" ] || { echo "::error::unreadable for the app: $(echo "$blocked" | head -5 | tr '\n' ' ')"; exit 1; }
@@ -91,9 +109,12 @@ jobs:
           export DOMAIN=localhost
           docker compose run --rm --no-deps -T caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
           docker compose up -d --wait
-          for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsSk -o /dev/null https://localhost/ && break; sleep 2; done
-          curl -fsSk -o /dev/null https://localhost/ || { echo "::error::https://localhost/ is not served through Caddy"; exit 1; }
-          headers=$(curl -sSkI https://localhost/)
+          C="Cookie: msession=$SESSION"
+          for i in 1 2 3 4 5 6 7 8 9 10; do curl -fsSk -o /dev/null -H "$C" https://localhost/ && break; sleep 2; done
+          curl -fsSk -o /dev/null -H "$C" https://localhost/ || { echo "::error::https://localhost/ is not served through Caddy"; exit 1; }
+          code=$(curl -sk -o /dev/null -w '%{http_code}' https://localhost/)
+          [ "$code" = 303 ] || { echo "::error::a visitor got $code for / through Caddy, expected the sign-in redirect"; exit 1; }
+          headers=$(curl -sSkI -H "$C" https://localhost/)
           echo "$headers"
           echo "$headers" | grep -qi '^strict-transport-security:' || { echo "::error::no HSTS header"; exit 1; }
           echo "$headers" | grep -qi '^content-security-policy:' || { echo "::error::no CSP header"; exit 1; }
@@ -102,11 +123,13 @@ jobs:
           [ "$code" = 404 ] || { echo "::error::/api/health answered $code through Caddy, expected 404"; exit 1; }
           code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/)
           [ "$code" = 308 ] || { echo "::error::http:// answered $code, expected a redirect to https://"; exit 1; }
-          # Caddy serves the videos itself: byte ranges, and nothing but media files
-          out=$(curl -sk -o /dev/null -w '%{http_code} %{content_type}' -r 1000-1999 https://localhost/media/ehvWj3Ir7yA.mp4)
+          # Caddy serves the videos itself, to students only: byte ranges, and nothing but media files
+          out=$(curl -sk -o /dev/null -w '%{http_code} %{content_type}' -H "$C" -r 1000-1999 https://localhost/media/ehvWj3Ir7yA.mp4)
           [ "$out" = "206 video/mp4" ] || { echo "::error::a video through Caddy answered '$out'"; exit 1; }
+          code=$(curl -sk -o /dev/null -w '%{http_code}' https://localhost/media/ehvWj3Ir7yA.mp4)
+          [ "$code" = 401 ] || { echo "::error::a visitor got $code for a video through Caddy, expected 401"; exit 1; }
           for path in /media/ /media/.hidden /media/x.exe; do
-            code=$(curl -sk -o /dev/null -w '%{http_code}' "https://localhost$path")
+            code=$(curl -sk -o /dev/null -w '%{http_code}' -H "$C" "https://localhost$path")
             [ "$code" = 404 ] || { echo "::error::$path answered $code through Caddy, expected 404"; exit 1; }
           done
       - name: Container log

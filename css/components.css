@@ -777,6 +777,12 @@
   .xp-pill { padding: 6px 9px; font-size: 0.8rem; }
 }
 
+/* Signed out (a closed school): the sign-in and privacy pages show no links
+   to the pages that need an account. */
+.signed-out .nav-link:not([data-account]),
+.signed-out .xp-pill,
+.signed-out .streak-pill { display: none; }
+
 /* ---------- Announcements (posted in the admin panel; js/custom-content.js) ---------- */
 .announcements { border-bottom: 1px solid var(--border); background: var(--accent-soft); }
 .announcement-row {

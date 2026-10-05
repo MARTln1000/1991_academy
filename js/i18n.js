@@ -47,7 +47,7 @@ const I18N = (() => {
     "Privacy Policy": "Գաղտնիության քաղաքականություն",
     "What we store and why:": "Ինչ ենք պահում և ինչու՝",
     "footer.left": "1991 Academy — կառուցված սովորելու հաճույքի համար։",
-    "footer.right": "Առաջընթացը պահվում է քո դիտարկիչում։ Զրոյացնելու համար մաքրի՛ր կայքի տվյալները։",
+    "footer.right": "Առաջընթացդ պահվում է քո հաշվում։",
     /* dashboard */
     "/ {0} XP today": "/ {0} XP այսօր",
     "daily goal: {0} XP · change": "օրական նպատակ՝ {0} XP · փոխել",
@@ -251,6 +251,23 @@ const I18N = (() => {
     "This week": "Այս շաբաթ",
     "All time": "Ամբողջ ժամանակ",
     "No XP earned this week yet — be the first.": "Այս շաբաթ դեռ XP չի վաստակվել — եղի՛ր առաջինը։",
+    /* sign-in page of a closed school: invitations instead of sign-up */
+    "1991 Academy": "1991 Academy",
+    "The online school of 1991 Unit. Sign in with the account your school created for you.": "1991 Ստորաբաժանման առցանց դպրոցը։ Մուտք գործի՛ր այն հաշվով, որը քեզ համար ստեղծել է դպրոցը։",
+    "No account? Accounts are only for the school's students: ask your instructor, or write to {0}.": "Հաշիվ չունե՞ս։ Հաշիվները միայն դպրոցի ուսանողների համար են. դիմի՛ր դասավանդողիդ կամ գրի՛ր {0} հասցեին։",
+    "Welcome to 1991 Academy": "Բարի գալուստ 1991 Academy",
+    "Your username is {0}. Choose a password to finish setting up your account.": "Քո օգտանունն է՝ {0}։ Ընտրի՛ր գաղտնաբառ՝ հաշիվդ կարգավորելն ավարտելու համար։",
+    "Start learning": "Սկսել սովորել",
+    "This invitation link has expired": "Հրավերի այս հղումը ժամկետանց է",
+    "Ask your instructor for a new one, or write to {0}.": "Նորը խնդրի՛ր դասավանդողիդ կամ գրի՛ր {0} հասցեին։",
+    /* messages from the server */
+    "Wrong credentials.": "Սխալ օգտանուն կամ գաղտնաբառ։",
+    "This reset link is invalid or has expired.": "Այս հղումն անվավեր է կամ ժամկետանց։",
+    "This link is invalid or has expired. Ask for a new one.": "Այս հղումն անվավեր է կամ ժամկետանց։ Խնդրի՛ր նորը։",
+    "Password must be at least 8 characters.": "Գաղտնաբառը պետք է լինի առնվազն 8 նիշ։",
+    "Too many login attempts — wait a minute.": "Չափից շատ փորձեր — սպասի՛ր մեկ րոպե։",
+    "Too many attempts — try again later.": "Չափից շատ փորձեր — փորձի՛ր ավելի ուշ։",
+    "not signed in": "մուտք գործած չես",
     /* admin link in the nav, announcement banner */
     "Admin": "Ադմին",
     "Dismiss": "Փակել",
