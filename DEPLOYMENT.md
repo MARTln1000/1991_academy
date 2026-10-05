@@ -129,6 +129,8 @@ server {
     # ssl_certificate ... (certbot --nginx fills these in)
     client_max_body_size 1m;
     server_tokens off;            # no nginx version in headers and error pages
+    # (the app serves the lesson videos at /media too; to let nginx serve them
+    # itself: location /media/ { alias /path/to/MEDIA_DIR/; })
     # the deployed commit and config flags: `make status` asks the app directly
     location = /api/health { return 404; }
     location / {
@@ -235,6 +237,12 @@ In the Docker setup:
 - The caddy container is locked down like the app: read-only filesystem,
   all Linux capabilities dropped except binding ports 80/443, no new
   privileges. Both have a process limit.
+- Lesson videos (`media/`, or `MEDIA_DIR` in `.env`) are mounted read-only
+  into both containers. Caddy serves `/media/<name>.mp4|webm|jpg|vtt`
+  straight from disk, with byte ranges for seeking, and nothing else from
+  that folder (no listings, no hidden files). The app serves the same paths
+  when there is no Caddy, never gzipped. `/api/content.js` lists the hosted
+  videos, so pages play them instead of YouTube's.
 - Caddy answers `/api/health` with 404 from the internet (`make status` and
   the healthcheck reach the app directly) and sends no `Server`/`Via` header.
 - The container sandbox (§2): read-only code, no capabilities, non-root.

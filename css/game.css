@@ -575,12 +575,24 @@
 }
 .video-card:hover .video-thumb img { opacity: 1; }
 
-.video-thumb iframe {
+.video-thumb iframe,
+.video-thumb video {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   border: 0;
+}
+.video-thumb video { background: #000; }
+/* a hosted video without a poster image */
+.video-thumb-blank {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 2.4rem;
+  background: var(--brand-gradient);
+  opacity: 0.55;
 }
 
 .video-play {

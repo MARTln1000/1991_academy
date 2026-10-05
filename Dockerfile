@@ -59,6 +59,7 @@ RUN printf '%s\n' "$REVISION" > REVISION
 ENV ACADEMY_HOST=0.0.0.0 \
     PORT=8735 \
     ACADEMY_DB=/data/academy.db \
+    ACADEMY_MEDIA=/media \
     ACADEMY_DEBUG=0
 
 USER academy

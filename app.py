@@ -23,6 +23,7 @@ Environment:
     ACADEMY_HOST   bind address                     (default 0.0.0.0 — reachable on
                    your LAN; in Docker, compose publishes it on 127.0.0.1 only)
     ACADEMY_DB     SQLite path                      (default ./1991_academy.db)
+    ACADEMY_MEDIA  folder of hosted lesson videos   (default ./media)
     ACADEMY_DEBUG  1 = dev mode: no-store caching   (default 1)
     ACADEMY_SECURE_COOKIES  1 = Secure (HTTPS-only) session cookie
                    (default: on unless ACADEMY_DEBUG=1)
@@ -43,7 +44,8 @@ API:
     POST /api/reset-password      {token, password}
     POST /api/delete-account      {password}
     GET  /api/health
-    GET  /api/content.js          lessons and announcements added in the admin panel
+    GET  /api/content.js          lessons and announcements added in the admin panel,
+                                  and the lesson videos hosted here (ACADEMY_MEDIA)
 
 Admin (accounts with users.is_admin; `python app.py admin add NAME` grants it):
     GET  /api/admin/overview      site statistics
@@ -53,6 +55,7 @@ Admin (accounts with users.is_admin; `python app.py admin add NAME` grants it):
     GET  /api/admin/lessons       PUT|DELETE /api/admin/lessons/ID   POST .../ID/preview
     GET  /api/admin/announcements POST /api/admin/announcements  PUT|DELETE .../ID
     GET  /api/admin/log           what admins changed
+    GET  /api/admin/media         which lesson videos are hosted here
 
 Email (password reset) env, all optional — unset ⇒ links are logged not sent:
     ACADEMY_SMTP_HOST / _PORT / _USER / _PASS / _FROM,  ACADEMY_BASE_URL
@@ -98,6 +101,11 @@ PORT = int(os.environ.get("PORT", 8735))
 # port on 127.0.0.1 only, so just Caddy and the host itself can reach it.
 HOST = os.environ.get("ACADEMY_HOST", "0.0.0.0")
 DB_PATH = os.environ.get("ACADEMY_DB", str(ROOT / "1991_academy.db"))
+# The lesson videos hosted here instead of streamed from YouTube, named after
+# the lecture's YouTube id: <id>.mp4 (or .webm), with an optional <id>.jpg
+# poster. Not in git or the image; docker-compose.yml mounts MEDIA_DIR here.
+# README.md → "Lesson videos".
+MEDIA_DIR = Path(os.environ.get("ACADEMY_MEDIA", str(ROOT / "media")))
 DEBUG = os.environ.get("ACADEMY_DEBUG", "1") == "1"
 
 # Mark the session cookie Secure (HTTPS-only) in production. Defaults to the
@@ -184,6 +192,11 @@ STATIC_TREES = {
     "tracks": {".html"},
     "assets": ANY_EXTENSION,
 }
+
+
+# /media/<name>.<ext>: one flat folder of videos, posters and subtitles.
+MEDIA_PATH_RE = re.compile(r"^/media/[A-Za-z0-9_-]{1,64}\.(?:mp4|webm|jpg|vtt)$")
+YOUTUBE_FILE_RE = re.compile(r"^([A-Za-z0-9_-]{11})\.(mp4|webm|jpg)$")
 
 
 def static_allowed(path: str) -> bool:
@@ -638,7 +651,18 @@ CSP = "; ".join([
 # nginx nor the Caddy config in DEPLOYMENT.md compresses proxied responses by
 # default. Safe against BREACH: no secret is ever reflected into a response
 # body (the session lives in an HttpOnly cookie).
-app.add_middleware(GZipMiddleware, minimum_size=1024)
+class GZipExceptMedia(GZipMiddleware):
+    """Videos are compressed already, and gzip would break the byte ranges a
+    player asks for when it seeks."""
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"].startswith("/media/"):
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+
+app.add_middleware(GZipExceptMedia, minimum_size=1024)
 
 
 @app.exception_handler(Exception)
@@ -650,7 +674,10 @@ async def unhandled_error(request: Request, exc: Exception):
 @app.middleware("http")
 async def guard(request: Request, call_next):
     path = request.url.path
-    if not path.startswith("/api/") and not static_allowed(path):
+    if path.startswith("/media/"):
+        if not MEDIA_PATH_RE.match(path) or not MEDIA_DIR.is_dir():
+            return err("not found", 404)
+    elif not path.startswith("/api/") and not static_allowed(path):
         return err("not found", 404)
     # Cross-site request forgery: a form or <img> on another site can only send
     # form or text bodies. A JSON body from another origin needs a CORS
@@ -675,7 +702,7 @@ async def guard(request: Request, call_next):
     elif path.startswith("/assets/colab/"):
         # the exercise notebooks change with the exercises: always revalidate
         response.headers["Cache-Control"] = "no-cache"
-    elif path.startswith("/assets/"):
+    elif path.startswith(("/assets/", "/media/")):
         response.headers["Cache-Control"] = "public, max-age=86400"
     else:
         response.headers["Cache-Control"] = "no-cache"
@@ -688,8 +715,8 @@ async def guard(request: Request, call_next):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     # Search engines index the pages people read, nothing else: not the API,
     # not the account and admin pages (password-reset links land on the
-    # former), and not the course downloads, so "site: filetype:pdf"-style searches find nothing.
-    if path.startswith(("/api/", "/assets/")) or path in ("/account.html", "/admin.html"):
+    # former), and not the course downloads or videos, so "site: filetype:pdf"-style searches find nothing.
+    if path.startswith(("/api/", "/assets/", "/media/")) or path in ("/account.html", "/admin.html"):
         response.headers["X-Robots-Tag"] = "noindex, nofollow"
 
     if path.startswith("/api/"):
@@ -1765,7 +1792,44 @@ async def api_admin_log(request: Request):
     return await admin_call(request, _admin_log)
 
 
-# --- what every page loads: published lessons and active announcements
+# --- lesson videos hosted here
+
+def hosted_media() -> dict:
+    """The lesson videos in MEDIA_DIR, by YouTube id:
+    {id: {"video": "/media/<id>.mp4", "poster": "/media/<id>.jpg" or None}}.
+    The pages play these instead of the YouTube embed."""
+    try:
+        names = sorted(os.listdir(MEDIA_DIR))
+    except OSError:
+        return {}
+    files = {}
+    for name in names:
+        m = YOUTUBE_FILE_RE.match(name)
+        if m and (MEDIA_DIR / name).is_file():
+            files.setdefault(m.group(1), {})[m.group(2)] = "/media/" + name
+    return {
+        vid: {"video": kinds.get("mp4") or kinds["webm"], "poster": kinds.get("jpg")}
+        for vid, kinds in files.items() if "mp4" in kinds or "webm" in kinds
+    }
+
+
+def _admin_media(_conn, _admin):
+    media = hosted_media()
+    sizes = {}
+    for vid, f in media.items():
+        try:
+            sizes[vid] = (MEDIA_DIR / f["video"].rsplit("/", 1)[1]).stat().st_size
+        except OSError:
+            sizes[vid] = None
+    return {"media": media, "sizes": sizes}
+
+
+@app.get("/api/admin/media")
+async def api_admin_media(request: Request):
+    return await admin_call(request, _admin_media)
+
+
+# --- what every page loads: published lessons, active announcements, hosted videos
 
 def _public_content():
     with db() as conn:
@@ -1778,7 +1842,7 @@ def _public_content():
             {"id": r["id"], "text": r["text"], "text_hy": r["text_hy"], "level": r["level"]}
             for r in conn.execute("SELECT * FROM announcements WHERE active = 1 ORDER BY created DESC")
         ]
-    return {"lessons": lessons, "announcements": announcements}
+    return {"lessons": lessons, "announcements": announcements, "media": hosted_media()}
 
 
 @app.get("/api/content.js")
@@ -1847,6 +1911,11 @@ async def api_health():
         "version": VERSION,
         "revision": REVISION,
     }
+
+# Lesson videos. On a server with Caddy, Caddy serves /media itself (faster);
+# this covers your own computer and an external web server. StaticFiles
+# answers byte-range requests, so the player can seek.
+app.mount("/media", StaticFiles(directory=str(MEDIA_DIR), check_dir=False), name="media")
 
 # static site LAST so /api/* wins (the guard middleware has already restricted
 # which paths can reach it)

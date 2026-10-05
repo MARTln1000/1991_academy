@@ -9,6 +9,8 @@
 .env
 .env.*
 backups/
+# the lesson videos: mounted at run time, never sent to a build (tens of GB)
+media/
 .venv/
 **/__pycache__/
 **/*.py[cod]

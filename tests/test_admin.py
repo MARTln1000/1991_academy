@@ -110,7 +110,8 @@ def test_only_admins_reach_the_admin_api(clients):
             assert learner.request(method, path, json=body).status_code == 403, path
     # ...and the learner's attempts changed nothing
     assert admin.get("/api/admin/users/alice").status_code == 200
-    assert content_js(admin) == {"lessons": [], "announcements": []}
+    published = content_js(admin)
+    assert published["lessons"] == [] and published["announcements"] == []
 
 
 def test_me_says_who_is_an_admin(clients):

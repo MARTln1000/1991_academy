@@ -162,6 +162,15 @@ I18N.extend({
   "The original lesson is back.": "Բնօրինակ դասը վերադարձավ։",
   "Lesson deleted.": "Դասը ջնջվեց։",
 
+  "Lesson videos": "Դասերի տեսանյութեր",
+  "{0} of {1} lesson videos are hosted on this server; the others play from YouTube.":
+    "Դասերի {1} տեսանյութից {0}-ը պահվում է այս սերվերում. մնացածը միանում են YouTube-ից։",
+  "Show every video": "Ցույց տալ բոլոր տեսանյութերը",
+  "Video": "Տեսանյութ",
+  "Lesson": "Դաս",
+  "Here": "Այստեղ",
+  "To host one: {0}, then {1} (README.md → Lesson videos).": "Մեկը այստեղ պահելու համար՝ {0}, ապա {1} (README.md → Lesson videos)։",
+
   /* announcements */
   "New announcement": "Նոր հայտարարություն",
   "Edit announcement": "Խմբագրել հայտարարությունը",

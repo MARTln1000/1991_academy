@@ -43,6 +43,8 @@ services:
       ACADEMY_BASE_URL: https://${DOMAIN:-localhost}
     volumes:
       - data:/data
+      # The lesson videos (README.md → "Lesson videos"), read-only.
+      - ${MEDIA_DIR:-./media}:/media:ro
     ports:
       # Loopback only: for `make status` on a server, and the site itself on
       # your own computer. Never publish it on 0.0.0.0: Docker's published
@@ -75,6 +77,7 @@ services:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data       # the HTTPS certificates: keep this volume
       - caddy-config:/config
+      - ${MEDIA_DIR:-./media}:/srv/media:ro   # the lesson videos, served by Caddy itself
     # The internet's way in, so locked down like the app: it writes only its
     # two volumes, and of root's powers keeps just binding ports 80 and 443.
     read_only: true

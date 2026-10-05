@@ -12,11 +12,14 @@
 PYTHON := .venv/bin/python
 VENV   := .venv/.installed
 
-# make reads only the DOMAIN and PROXY lines of .env, so an SMTP password
+# make reads only the DOMAIN, PROXY and MEDIA_DIR lines of .env, so an SMTP password
 # containing $ or # elsewhere in the file can't confuse it.
-env_value = $(shell sed -n 's/^$(1)=//p' .env 2>/dev/null | tail -n 1 | tr -d '\r" ')
+# (Spaces are trimmed only at the ends: a drive can be called "My Passport".)
+env_value = $(shell sed -n 's/^$(1)=//p' .env 2>/dev/null | tail -n 1 | tr -d '\r"' | sed 's/^ *//; s/ *$$//')
 DOMAIN := $(call env_value,DOMAIN)
 PROXY  := $(call env_value,PROXY)
+# Where the lesson videos are (README.md → "Lesson videos"): e.g. a USB drive.
+MEDIA  := $(or $(call env_value,MEDIA_DIR),media)
 
 ifeq ($(DOMAIN),)
   WHERE    := this computer
@@ -40,7 +43,7 @@ endif
 export REVISION := $(shell sha=$$(git rev-parse HEAD 2>/dev/null) && { git diff --quiet HEAD 2>/dev/null && echo $$sha || echo $$sha-dirty; })
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev test notebooks up down restart restart-caddy prune-images check-caddy refresh logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
+.PHONY: video media-upload help install dev test notebooks up down restart restart-caddy prune-images check-caddy refresh logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
 
 help: ## list these commands
 	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 5)} /^[a-z][a-z-]*:.*## / {printf "  make %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -163,6 +166,17 @@ admin-remove: ## take the admin rights away again: make admin-remove NAME=<usern
 
 admins: ## list the admin accounts
 	$(COMPOSE) exec -T app python app.py admin list
+
+##@ Lesson videos (README.md → "Lesson videos")
+
+video: ## prepare a lecture for the site: make video SRC="Lecture 5.mp4" ID=<its YouTube id>  (into MEDIA_DIR, default media/; needs ffmpeg)
+	@test -n "$(SRC)" && test -n "$(ID)" || { echo 'usage: make video SRC="Lecture 5.mp4" ID=<YouTube id>'; exit 2; }
+	@sh tools/encode-video.sh "$(SRC)" "$(ID)" "$(MEDIA)"
+
+media-upload: ## copy the videos (MEDIA_DIR, default media/) to a server: make media-upload TO=root@SERVER (resumes, only what's new)
+	@test -n "$(TO)" || { echo "usage: make media-upload TO=root@SERVER  [DIR=folder on the server, default 1991_academy/media]"; exit 2; }
+	@# --chmod: readable by the containers, whatever the files' modes are here
+	rsync -av --partial --progress --exclude '.*' --chmod=D755,F644 "$(MEDIA)/" "$(TO):$(or $(DIR),1991_academy/media)/"
 
 ##@ Database (Docker)
 

@@ -2,8 +2,9 @@
    1991 Academy — content from the admin panel
    api/content.js (loaded just before this file)
    sets window.ACADEMY_CUSTOM: the published
-   lessons and the active announcements. This
-   file merges the lessons into the track data,
+   lessons, the active announcements and the
+   lesson videos hosted on this server. This
+   file merges them into the track data,
    so load it AFTER the data files and the
    Armenian packs, and BEFORE the page's own
    script. Every page loads it, for the banner.
@@ -64,6 +65,21 @@ const CustomContent = (() => {
     return unplaced;
   }
 
+  /* Lesson videos hosted on this server (media/<YouTube id>.mp4): the player
+     uses our copy, so a lesson still works if the video leaves YouTube. */
+  function applyMedia(tracks, media) {
+    for (const track of Object.values(tracks))
+      for (const mod of track.modules)
+        for (const lesson of mod.lessons)
+          for (const v of lesson.videos || []) {
+            const hosted = media[v.id];
+            if (hosted) {
+              v.file = hosted.video;
+              v.poster = hosted.poster || null;
+            }
+          }
+  }
+
   /* ---------- Announcements ----------
      A banner under the navigation bar. Plain text only. A learner who
      closes one doesn't see it again on this device. */
@@ -111,13 +127,16 @@ const CustomContent = (() => {
     else document.body.prepend(box);
   }
 
-  return { applyLessons, dropBlankHy, showAnnouncements };
+  return { applyLessons, applyMedia, dropBlankHy, showAnnouncements };
 })();
 
 (function () {
   const C = window.ACADEMY_CUSTOM;
   if (!C) return; /* no server behind this page (static copy, file://), or the admin panel */
   const M = window.ACADEMY_1991;
-  if (M && M.tracks) CustomContent.applyLessons(M.tracks, C.lessons || []);
+  if (M && M.tracks) {
+    CustomContent.applyLessons(M.tracks, C.lessons || []);
+    CustomContent.applyMedia(M.tracks, C.media || {});
+  }
   CustomContent.showAnnouncements(C.announcements || []);
 })();

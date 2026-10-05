@@ -20,5 +20,8 @@ __pycache__/
 # Database snapshots from `make backup`: real accounts, same as the .db
 backups/
 
+# Lesson videos (README.md → "Lesson videos"): tens of GB, never in git
+media/
+
 # macOS
 .DS_Store

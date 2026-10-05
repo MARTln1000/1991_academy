@@ -159,6 +159,8 @@ This part is for whoever puts the site on the internet.
 - A server running **Ubuntu 24.04** (any Linux that runs Docker works) that
   you can SSH into as root. 1 vCPU and 1 GB of RAM is plenty.
 - A domain, and access to its DNS settings.
+- Disk: 20 GB for the site; add 80–100 GB if the lesson videos are hosted
+  here (see "Lesson videos").
 - Optional, from the site owner: SMTP credentials for password-reset emails,
   and a database export (`academy-export.db.gz`, see step 6) if existing
   accounts should move over.
@@ -259,6 +261,7 @@ them on the live site directly.
 | `make update` | On a server: `git pull`, rebuild, restart. Not needed with automatic updates on |
 | `make auto-update-on` / `-off` | On a server: install every new commit on `master` by itself, within 5 minutes (backup first, rollback if it fails), and security updates weekly. Log: `backups/auto-update.log` |
 | `make refresh` | Security updates now: the newest Caddy and Python base images, rebuilt and restarted |
+| `make video SRC=… ID=…` / `make media-upload TO=…` | Prepare a lecture video / copy `media/` to a server (see "Lesson videos") |
 | `git checkout <commit> && make up` | Roll back to an earlier version (`git log --oneline` lists them). `git checkout master && make update` returns to the latest |
 | `make logs` | Requests, sign-ins, errors, certificate renewals (Ctrl-C stops watching) |
 | `make status` | Containers, health, `revision` (the commit that is live; `-dirty` = built with uncommitted changes), and whether automatic updates are on |
@@ -306,7 +309,9 @@ builds the image on every push and smoke-tests it, including a backup.
 │   └── ci.yml            CI: API tests + Docker image smoke test on every push
 ├── deploy/               Caddyfile (HTTPS proxy), backup.sh (make backup), auto-update.sh (make auto-update-on)
 ├── assets/colab/         The Colab notebooks, en/ and hy/ (generated: `make notebooks`)
-├── tools/                build_notebooks.py (`make notebooks`) + site_data.js: the Colab notebooks; release.sh (`make release`)
+├── tools/                build_notebooks.py (`make notebooks`) + site_data.js: the Colab notebooks; release.sh (`make release`);
+│                         encode-video.sh (`make video`)
+├── media/                Lesson videos hosted here, <YouTube id>.mp4 + .jpg (not in git; see "Lesson videos")
 ├── tests/                API tests; test_notebooks.py runs every Colab notebook, with the
 │                         reference solutions in content/solutions/ and with its starter code
 ├── index.html            Dashboard: goal ring, level, tracks, missions, badges
@@ -372,6 +377,43 @@ builds the image on every push and smoke-tests it, including a backup.
 ## Add a mission
 
 Append an object to `js/data/missions.js`: `id`, `title`, `icon`, `tracks`, `prereqs` (lesson ids that unlock it), `xp`, `blurb`, `brief` (HTML), its Python `fnName`, `starter` code and `tests` (a script calling `__check(name, actual, expected)`), and `hints`; add a reference solution to `tests/content/solutions/<id>.py`. Then `make notebooks` writes its Colab notebook, and `make test` checks that the solution passes and the starter doesn't. Lock logic, the Colab steps and scoring are automatic.
+
+## Lesson videos
+
+The lessons' videos are FAST Foundation's lectures on YouTube. A copy of a
+lecture can be kept on the site's own server instead: the lesson then plays
+that copy, and keeps working if the video is ever removed from YouTube.
+Lectures without a copy still play from YouTube, so this can be done one
+lecture at a time.
+
+1. **Prepare** the lecture file (needs ffmpeg: `brew install ffmpeg`):
+   ```bash
+   make video SRC="Lecture 05 - CNNs.mp4" ID=ehvWj3Ir7yA
+   ```
+   `ID` is the lecture's YouTube id, the 11 characters after `watch?v=`
+   (the admin panel lists them: Lessons → Lesson videos). This writes
+   `media/<ID>.mp4` (at most 720p, about 400–700 MB per hour) and a poster,
+   `media/<ID>.jpg`.
+2. **Upload** to the server: `make media-upload TO=root@SERVER`. It sends only
+   new files and resumes after a dropped connection. Nothing needs a
+   restart: pages use a new file at once.
+3. **Check** in the admin panel: Lessons → Lesson videos shows which lectures
+   are hosted and which still come from YouTube.
+
+Short on disk space? Keep them on a USB drive: put
+`MEDIA_DIR=/Volumes/<drive name>/1991-media` in `.env`, and `make video`
+writes there and `make media-upload` sends from there (the originals can stay
+on the drive too). On the server the videos are in `media/` next to the code,
+or wherever `MEDIA_DIR` in `.env` points (e.g. a bigger disk). They are never in git, in
+the Docker image or in `make backup` (the database only): keep the original
+files somewhere else as well. Caddy serves them straight from disk.
+
+**Size it:** about 100 hours of lectures take about 50 GB, so give the server
+80–100 GB of disk, and enough traffic for about 0.5 GB per hour watched.
+
+**Only FAST Foundation's own lectures, with their permission.** Ask FAST for
+the original files (better quality than a download from YouTube, which
+YouTube's terms don't allow). Videos by other channels stay YouTube links.
 
 ## Add a video to a lesson
 

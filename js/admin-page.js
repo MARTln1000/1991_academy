@@ -494,8 +494,42 @@
     return rec.published ? badge("new", t("new")) : badge("draft", t("new · draft"));
   }
 
+  /* Which lesson videos this server hosts (media/<YouTube id>.mp4) and which
+     still play from YouTube: to check that an upload arrived. */
+  function videosCard(tracks, media) {
+    const seen = new Set();
+    const rows = [];
+    for (const tid of M.order)
+      for (const mod of tracks[tid].modules)
+        for (const l of mod.lessons)
+          for (const v of l.videos || []) {
+            if (seen.has(v.id)) continue;
+            seen.add(v.id);
+            rows.push({ v, lesson: l, track: tracks[tid], hosted: media.media[v.id], size: media.sizes[v.id] });
+          }
+    const hosted = rows.filter((r) => r.hosted).length;
+    const mb = (bytes) => (bytes == null ? "" : Math.round(bytes / 1048576) + " MB");
+    return card(
+      "<h3>🎬 " + t("Lesson videos") + "</h3>" +
+      "<p>" + t("{0} of {1} lesson videos are hosted on this server; the others play from YouTube.", hosted, rows.length) + "</p>" +
+      '<details><summary class="admin-muted">' + t("Show every video") + "</summary>" +
+      '<div class="table-wrap"><table class="admin-table"><thead><tr><th>' + t("Video") + "</th><th>" + t("Lesson") +
+      "</th><th>YouTube id</th><th>" + t("Here") + "</th></tr></thead><tbody>" +
+      rows.map((r) =>
+        "<tr><td>" + esc(r.v.title) + ' <span class="admin-muted">' + esc(r.v.channel || "") + "</span></td>" +
+        '<td><a href="#lesson/' + encodeURIComponent(r.lesson.id) + '">' + esc(L(r.lesson, "title")) + "</a></td>" +
+        "<td><code>" + esc(r.v.id) + "</code></td>" +
+        "<td>" + (r.hosted ? "✅ " + mb(r.size) : "—") + "</td></tr>").join("") +
+      "</tbody></table></div></details>" +
+      '<p class="admin-hint">' + t("To host one: {0}, then {1} (README.md → Lesson videos).",
+        "<code>make video SRC=… ID=&lt;YouTube id&gt;</code>", "<code>make media-upload TO=root@SERVER</code>") + "</p>");
+  }
+
   async function viewLessons() {
-    const recs = (await api("/api/admin/lessons")).lessons;
+    const [recs, media] = await Promise.all([
+      api("/api/admin/lessons").then((d) => d.lessons),
+      api("/api/admin/media"),
+    ]);
     const byId = Object.fromEntries(recs.map((r) => [r.id, r]));
     const shown = liveTracks(recs); /* drafts too, to show where they go */
 
@@ -534,7 +568,7 @@
       html:
         '<p class="admin-muted admin-note">' +
         t("Edit any lesson, or add new ones to a module. Your text replaces the original for learners; course materials and exercises stay as they are. Saving without “Visible to learners” keeps it as a draft.") +
-        "</p>" + tracksHtml + unplaced,
+        "</p>" + videosCard(shown.tracks, media) + tracksHtml + unplaced,
     };
   }
 

@@ -183,8 +183,10 @@
         lesson.videos
           .map(
             (v) =>
-              '<div class="video-card" data-video="' + v.id + '" role="button" tabindex="0" aria-label="Play: ' + esc(v.title) + '">' +
-              '<div class="video-thumb"><img loading="lazy" decoding="async" width="480" height="360" src="https://i.ytimg.com/vi/' + v.id + '/hqdefault.jpg" alt="" />' +
+              /* v.file: our own copy (js/custom-content.js), else YouTube's */
+              '<div class="video-card" data-video="' + esc(v.id) + '"' + (v.file ? ' data-file="' + esc(v.file) + '"' : "") +
+              ' role="button" tabindex="0" aria-label="Play: ' + esc(v.title) + '">' +
+              '<div class="video-thumb">' + videoThumb(v) +
               '<span class="video-play">▶</span></div>' +
               '<div class="video-meta"><strong>' + esc(v.title) + "</strong><span>" + esc(v.channel) + " · " + esc(v.length) + "</span></div></div>"
           )
@@ -251,12 +253,27 @@
     renderStreakPill();
   }
 
+  /* The card's picture: our poster, a plain frame if a hosted video has none,
+     or YouTube's thumbnail. */
+  function videoThumb(v) {
+    if (v.file && !v.poster) return '<span class="video-thumb-blank" aria-hidden="true">🎬</span>';
+    const src = v.file ? v.poster : "https://i.ytimg.com/vi/" + encodeURIComponent(v.id) + "/hqdefault.jpg";
+    return '<img loading="lazy" decoding="async" width="480" height="360" src="' + esc(src) + '" alt="" />';
+  }
+
   function playVideo(card) {
     if (!card || card.classList.contains("playing")) return false;
     card.classList.add("playing");
-    card.querySelector(".video-thumb").innerHTML =
-      '<iframe src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(card.dataset.video) + '?autoplay=1" ' +
-      'title="Video lesson" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+    const thumb = card.querySelector(".video-thumb");
+    if (card.dataset.file) {
+      /* hosted on this server: the browser's own player */
+      thumb.innerHTML =
+        '<video src="' + esc(card.dataset.file) + '" controls autoplay playsinline preload="metadata"></video>';
+    } else {
+      thumb.innerHTML =
+        '<iframe src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(card.dataset.video) + '?autoplay=1" ' +
+        'title="Video lesson" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+    }
     return true;
   }
 

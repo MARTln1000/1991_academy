@@ -53,6 +53,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - name: A lesson video to serve (media/, mounted into both containers)
+        run: mkdir -p media && head -c 300000 /dev/urandom > media/ehvWj3Ir7yA.mp4
       - name: Build and start the app container (docker-compose.yml)
         run: REVISION=$(git rev-parse HEAD) docker compose up -d --build --wait app
       - name: Smoke test
@@ -71,6 +73,10 @@ jobs:
           done
           code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8735/app.py)
           [ "$code" = 404 ] || { echo "/app.py answered $code, expected 404"; exit 1; }
+          # a hosted lesson video: served, seekable, and listed for the pages
+          code=$(curl -s -o /dev/null -w '%{http_code}' -r 1000-1999 http://127.0.0.1:8735/media/ehvWj3Ir7yA.mp4)
+          [ "$code" = 206 ] || { echo "::error::a byte range of a video answered $code, expected 206"; exit 1; }
+          curl -fsS http://127.0.0.1:8735/api/content.js | grep -q '"ehvWj3Ir7yA"' || { echo "::error::the hosted video isn't listed"; exit 1; }
           # the app's own user can read every file and enter every folder of the site
           blocked=$(docker compose exec -T app find /app \( ! -readable -o -type d ! -executable \) -print)
           [ -z "$blocked" ] || { echo "::error::unreadable for the app: $(echo "$blocked" | head -5 | tr '\n' ' ')"; exit 1; }
@@ -96,6 +102,13 @@ jobs:
           [ "$code" = 404 ] || { echo "::error::/api/health answered $code through Caddy, expected 404"; exit 1; }
           code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost/)
           [ "$code" = 308 ] || { echo "::error::http:// answered $code, expected a redirect to https://"; exit 1; }
+          # Caddy serves the videos itself: byte ranges, and nothing but media files
+          out=$(curl -sk -o /dev/null -w '%{http_code} %{content_type}' -r 1000-1999 https://localhost/media/ehvWj3Ir7yA.mp4)
+          [ "$out" = "206 video/mp4" ] || { echo "::error::a video through Caddy answered '$out'"; exit 1; }
+          for path in /media/ /media/.hidden /media/x.exe; do
+            code=$(curl -sk -o /dev/null -w '%{http_code}' "https://localhost$path")
+            [ "$code" = 404 ] || { echo "::error::$path answered $code through Caddy, expected 404"; exit 1; }
+          done
       - name: Container log
         if: always()
         run: docker compose logs

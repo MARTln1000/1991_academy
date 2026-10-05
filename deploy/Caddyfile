@@ -13,12 +13,30 @@
 	# /api/health reports the deployed commit and config flags. `make status`,
 	# CI and the container healthcheck reach the app directly on port 8735;
 	# the internet doesn't need it.
-	respond /api/health 404
-	reverse_proxy app:8735 {
-		# While the app restarts during an update (a few seconds), hold each
-		# request and retry, so visitors see a short pause instead of a 502.
-		# Only requests that never reached the app are retried.
-		lb_try_duration 20s
-		lb_try_interval 250ms
+	handle /api/health {
+		respond 404
+	}
+	# The lesson videos (MEDIA_DIR, mounted at /srv/media), straight from
+	# disk: Caddy handles large files and the byte ranges a player seeks with.
+	# Only the file names the site uses; no folder listings.
+	handle_path /media/* {
+		@other not path_regexp ^/[A-Za-z0-9_-]{1,64}\.(mp4|webm|jpg|vtt)$
+		respond @other 404
+		header {
+			Cache-Control "public, max-age=86400"
+			X-Content-Type-Options nosniff
+			X-Robots-Tag "noindex, nofollow"
+		}
+		root * /srv/media
+		file_server
+	}
+	handle {
+		reverse_proxy app:8735 {
+			# While the app restarts during an update (a few seconds), hold each
+			# request and retry, so visitors see a short pause instead of a 502.
+			# Only requests that never reached the app are retried.
+			lb_try_duration 20s
+			lb_try_interval 250ms
+		}
 	}
 }
