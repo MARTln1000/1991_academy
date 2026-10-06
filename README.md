@@ -89,9 +89,14 @@ template has the lines for `ai.1991@mil.am`; the password goes only in `.env`
 on the server). Port 587 (STARTTLS) or 465 (TLS), and the mail server's
 certificate must be valid: it is checked, so the password can't be
 intercepted. After `make restart`, `make email-test TO=you@example.com` sends
-one test email and says exactly what failed, if anything. Without these
-settings nothing is emailed: the admin panel shows invitation and reset
-links to hand out, and "forgot password" links go to the log (`make logs`). The
+one test email and says exactly what failed, if anything (and warns if links
+would point to `localhost`: set `DOMAIN`). Invitations are sent while you
+wait, and the panel lists who got an email and who didn't, and why; a
+failed one is sent again with "Resend the invitation". The emails are in
+English and Armenian, plain text plus HTML. Without these settings nothing is
+emailed: the admin panel shows invitation and reset links to hand out, and a
+"forgot password" request sends nothing (the panel's "Send a password-reset
+link" gives the link instead). Links never go to the production log. The
 leaderboard has **This week / All time** tabs — the weekly league resets every
 ISO week (server rebases each user's weekly baseline on their first sync of a
 new week).

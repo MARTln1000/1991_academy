@@ -30,12 +30,6 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-@pytest.fixture
-def sent_emails(monkeypatch):
-    """Capture outbound email instead of sending it; return the recorded list."""
-    box = []
-    monkeypatch.setattr(app, "send_email", lambda to, subject, body: box.append((to, subject, body)) or True)
-    return box
 
 
 def register(client, username="alice", email="alice@example.com", password="hunter2pw"):

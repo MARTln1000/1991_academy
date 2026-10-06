@@ -190,7 +190,12 @@ In `app.py`:
   passwords in 15 minutes per account (from any address: pauses that
   account's sign-in for 15 minutes); 20 invalid or expired links per 10
   minutes per address. Reset emails: 3 an hour per address, 10 requests per
-  10 minutes per address.
+  10 minutes per address. Invitation emails: 300 an hour per admin; links
+  sent to one student: 5 an hour.
+- Invitation and reset links: 32 random bytes, stored only as a SHA-256
+  hash, one live link per account, used up in the same statement that checks
+  them (two submissions at once can't both succeed), expiring after 7 days
+  (invitations) or 1 hour (resets). Never written to the production log.
 - Admin endpoints check the admin's rights before they read the request,
   so others learn nothing about what they would accept.
 - 300 KB request-body cap.

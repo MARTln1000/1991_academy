@@ -102,6 +102,16 @@ I18N.extend({
   "Copy all": "Պատճենել բոլորը",
   "Not invited:": "Չհրավիրվեցին՝",
   "Nobody was invited.": "Ոչ ոք չհրավիրվեց։",
+  "Sending the invitations…": "Հրավերներն ուղարկվում են…",
+  "Invited {0}, but only {1} of the emails could be sent.": "Հրավիրվեց՝ {0}, բայց նամակներից միայն {1}-ը հնարավոր եղավ ուղարկել։",
+  "These accounts were created, but their email wasn't sent. Fix the problem, then use “Resend the invitation” on each:":
+    "Այս հաշիվները ստեղծվեցին, բայց նամակները չուղարկվեցին։ Շտկի՛ր խնդիրը, ապա յուրաքանչյուրի համար սեղմի՛ր «Կրկին ուղարկել հրավերը»՝",
+  "The mail server refused this address.": "Փոստային սերվերը մերժեց այս հասցեն։",
+  "The mail server refused the site's mailbox login (ACADEMY_SMTP_USER / _PASS).": "Փոստային սերվերը մերժեց կայքի փոստարկղի մուտքը (ACADEMY_SMTP_USER / _PASS)։",
+  "The mail server's certificate isn't trusted.": "Փոստային սերվերի վկայականը վստահելի չէ։",
+  "The mail server couldn't be reached.": "Փոստային սերվերին հնարավոր չեղավ միանալ։",
+  "The mail server didn't accept the email.": "Փոստային սերվերը չընդունեց նամակը։",
+  "This student was sent several links in the last hour. Wait before sending another.": "Վերջին ժամում այս ուսանողին արդեն մի քանի հղում է ուղարկվել։ Սպասի՛ր՝ նորն ուղարկելուց առաջ։",
   "Already invited? To send a new link, open the student below and click “Resend the invitation”.":
     "Արդեն հրավիրվա՞ծ է։ Նոր հղում ուղարկելու համար բացի՛ր ուսանողին ստորև և սեղմի՛ր «Կրկին ուղարկել հրավերը»։",
   "invited": "հրավիրված",

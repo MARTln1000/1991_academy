@@ -74,7 +74,7 @@ def test_port_465_is_encrypted_from_the_start(mail, monkeypatch):
 def test_a_failure_is_logged_never_raised_to_the_request(mail, caplog):
     mail.fail_with = smtplib.SMTPAuthenticationError(535, b"bad")
     assert app.send_email("anna@example.com", "Hi", "Body") is False
-    assert "SMTP send to anna@example.com failed" in caplog.text
+    assert "SMTP connection failed" in caplog.text
 
 
 @pytest.mark.parametrize("error,says", [

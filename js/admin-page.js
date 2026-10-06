@@ -278,17 +278,28 @@
       if (!students.length) return;
       const btn = form.querySelector("button[type=submit]");
       btn.disabled = true;
+      msg.style.color = "";
+      msg.textContent = t("Sending the invitations…");   /* a big class takes a few seconds */
       try {
         const res = await send("POST", "/api/admin/invites", { students });
         const ok = res.results.filter((r) => !r.error);
         const bad = res.results.filter((r) => r.error);
-        msg.style.color = ok.length ? "var(--success)" : "";
+        const emailed = ok.filter((r) => r.emailed);
+        const unsent = ok.filter((r) => r.emailError);
+        msg.style.color = ok.length && !unsent.length ? "var(--success)" : "";
         msg.textContent = !ok.length
           ? t("Nobody was invited.")
-          : res.sent
-            ? t("Invited {0}. Each got an email with a link to choose a password.", ok.length)
-            : t("Invited {0}. Email isn't set up on this server, so send each student their link (valid for 7 days):", ok.length);
+          : !res.sent
+            ? t("Invited {0}. Email isn't set up on this server, so send each student their link (valid for 7 days):", ok.length)
+            : !unsent.length
+              ? t("Invited {0}. Each got an email with a link to choose a password.", ok.length)
+              : t("Invited {0}, but only {1} of the emails could be sent.", ok.length, emailed.length);
         out.innerHTML =
+          (res.warning ? '<p class="form-error">⚠️ ' + esc(t(res.warning)) + "</p>" : "") +
+          (unsent.length
+            ? '<p class="form-error">' + t("These accounts were created, but their email wasn't sent. Fix the problem, then use “Resend the invitation” on each:") + "</p>" +
+              '<ul class="admin-list">' + unsent.map((r) => "<li>" + esc(r.username) + " (" + esc(r.email) + ") — " + esc(t(r.emailError)) + "</li>").join("") + "</ul>"
+            : "") +
           (!res.sent && ok.length
             ? '<div class="table-wrap"><table class="admin-table"><thead><tr><th>' + t("Learner") + "</th><th>" + t("Email") +
               "</th><th>" + t("Link") + "</th></tr></thead><tbody>" +
@@ -508,7 +519,7 @@
             const out = await send("POST", userPath(u.username) + "/reset-link");
             const box = el.querySelector("[data-reset-out]");
             if (out.sent) {
-              box.innerHTML = "";
+              box.innerHTML = out.warning ? '<p class="form-error">⚠️ ' + esc(t(out.warning)) + "</p>" : "";
               ok(out.invite ? t("A new invitation is on its way to {0}.", out.email) : t("A reset link is on its way to {0}.", out.email));
             } else {
               box.innerHTML =

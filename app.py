@@ -67,8 +67,10 @@ Email (password reset) env, all optional — unset ⇒ links are logged not sent
 """
 
 import asyncio
+import email.utils
 import hashlib
 import hmac
+import html
 import json
 import logging
 import math
@@ -465,19 +467,32 @@ def email_configured() -> bool:
     return bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
 
 
-def deliver(to: str, subject: str, body: str) -> None:
-    """Send a plaintext email through the configured mailbox, or raise.
+def build_message(to: str, subject: str, text: str, html_body: str | None = None) -> EmailMessage:
+    """A complete email: plain text, plus an HTML version when given (whose
+    values the caller has escaped). Date and Message-ID are set here: mail
+    servers and spam filters expect them, and smtplib adds neither."""
+    msg = EmailMessage()
+    msg["From"] = SMTP_FROM
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg["Date"] = email.utils.formatdate(usegmt=True)
+    domain = email.utils.parseaddr(SMTP_FROM)[1].rpartition("@")[2] or "1991.academy"
+    msg["Message-ID"] = email.utils.make_msgid(domain=domain)
+    msg.set_content(text)
+    if html_body is not None:
+        msg.add_alternative(html_body, subtype="html")
+    return msg
+
+
+@contextmanager
+def smtp_session():
+    """A signed-in connection to the configured mailbox.
 
     The connection is encrypted before the password is sent, and the mail
     server's certificate is checked against the trusted authorities: an
     unchecked one would hand the mailbox password to whoever sits in between.
     Port 465 is encrypted from the start; any other port (587) upgrades with
-    STARTTLS."""
-    msg = EmailMessage()
-    msg["From"] = SMTP_FROM
-    msg["To"] = to
-    msg["Subject"] = subject
-    msg.set_content(body)
+    STARTTLS. Every network step times out after 20 seconds."""
     context = ssl.create_default_context()
     if SMTP_PORT == 465:
         server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20, context=context)
@@ -487,22 +502,63 @@ def deliver(to: str, subject: str, body: str) -> None:
         if SMTP_PORT != 465:
             s.starttls(context=context)
         s.login(SMTP_USER, SMTP_PASS)
-        s.send_message(msg)
+        yield s
 
 
-def send_email(to: str, subject: str, body: str) -> bool:
-    """Send a plaintext email. If SMTP isn't configured, log the body instead
-    (so local dev / reset links stay testable) and report False."""
-    if not email_configured():
-        log.warning("SMTP not configured — email to %s NOT sent. Contents:\n%s", to, body)
-        return False
+def deliver(to: str, subject: str, text: str, html_body: str | None = None) -> None:
+    """Send one email now, or raise."""
+    with smtp_session() as s:
+        s.send_message(build_message(to, subject, text, html_body))
+
+
+def email_failure(exc: Exception) -> str:
+    """What went wrong, in words an admin can act on (no server internals)."""
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        return "The mail server refused this address."
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        return "The mail server refused the site's mailbox login (ACADEMY_SMTP_USER / _PASS)."
+    if isinstance(exc, ssl.SSLCertVerificationError):
+        return "The mail server's certificate isn't trusted."
+    if isinstance(exc, (OSError, smtplib.SMTPServerDisconnected)):
+        return "The mail server couldn't be reached."
+    return "The mail server didn't accept the email."
+
+
+def deliver_all(messages: list) -> list:
+    """Send [(to, subject, text, html)] over one connection. Returns, per
+    message, None when the mail server accepted it, or what went wrong. One
+    refused address doesn't stop the others."""
+    results = []
     try:
-        deliver(to, subject, body)
-        log.info("sent email to %s: %s", to, subject)
-        return True
-    except Exception as exc:  # noqa: BLE001 — never leak SMTP errors to the client
-        log.error("SMTP send to %s failed: %s", to, exc)
+        with smtp_session() as s:
+            for to, subject, text, html_body in messages:
+                try:
+                    s.send_message(build_message(to, subject, text, html_body))
+                    results.append(None)
+                    log.info("sent email to %s: %s", to, subject)
+                except (smtplib.SMTPException, OSError) as exc:
+                    log.error("SMTP send to %s failed: %s", to, exc)
+                    results.append(email_failure(exc))
+    except Exception as exc:  # noqa: BLE001 — connecting or signing in failed: none sent
+        log.error("SMTP connection failed: %s", exc)
+        reason = email_failure(exc)
+        results += [reason] * (len(messages) - len(results))
+    return results
+
+
+def send_email(to: str, subject: str, text: str, html_body: str | None = None) -> bool:
+    """Send an email, reporting success. Without email set up nothing is
+    sent; in debug mode the text (with its link) goes to the log so local
+    development stays testable, but never in production: a log must not hold
+    working sign-in links."""
+    if not email_configured():
+        if DEBUG:
+            log.warning("SMTP not configured — email to %s NOT sent. Contents:\n%s", to, text)
+        else:
+            log.warning("email to %s not sent: email isn't set up (ACADEMY_SMTP_* in .env)", to)
         return False
+    return deliver_all([(to, subject, text, html_body)])[0] is None
+
 
 # ---------------------------------------------------------------- helpers
 
@@ -657,6 +713,8 @@ async def lifespan(_app: FastAPI):
     # gunicorn deployment can never come up against an un-migrated database.
     await run_in_threadpool(init_db)
     await run_in_threadpool(sweep_expired)
+    if not DEBUG and links_warning():
+        log.warning("%s Invitation and reset links will be useless: set DOMAIN in .env.", links_warning())
 
     async def sweeper():
         while True:
@@ -1160,14 +1218,72 @@ def new_reset_link(conn, user_id: int, welcome: bool = False) -> str:
     return f"{BASE_URL}/account.html?{'welcome' if welcome else 'reset'}={token}"
 
 
-def invitation_email(username: str, link: str) -> tuple[str, str]:
-    return (
-        "Your 1991 Academy account",
-        "You've been invited to 1991 Academy, the online school run by 1991 Unit.\n\n"
-        f"Your username: {username}\n\n"
-        f"Choose your password here (the link works for 7 days):\n{link}\n\n"
-        "Questions? Write to ai.1991@mil.am.",
+SUPPORT_EMAIL = "ai.1991@mil.am"
+
+
+def account_email(kind: str, username: str, link: str) -> tuple[str, str, str]:
+    """(subject, text, html) of an invitation (kind="invite") or a password
+    reset ("reset"), in English and Armenian: the student's language isn't
+    known yet. Every value in the HTML is escaped."""
+    if kind == "invite":
+        subject = "Your 1991 Academy account · Քո 1991 Academy հաշիվը"
+        parts = [
+            ("You've been invited to 1991 Academy, the online school of 1991 Unit.",
+             "Choose your password here. The link works once, for 7 days:",
+             "Choose your password",
+             "If you weren't expecting this, you can ignore this email."),
+            ("Քեզ հրավիրել են 1991 Academy՝ 1991 Ստորաբաժանման առցանց դպրոց։",
+             "Ընտրի՛ր գաղտնաբառդ այստեղ։ Հղումը գործում է մեկ անգամ, 7 օր՝",
+             "Ընտրել գաղտնաբառ",
+             "Եթե սա չէիր սպասում, պարզապես անտեսի՛ր այս նամակը։"),
+        ]
+    else:
+        subject = "Set a new 1991 Academy password · Նոր գաղտնաբառ 1991 Academy-ում"
+        parts = [
+            ("A new password was requested for your 1991 Academy account.",
+             "Choose a new password here. The link works once, for 1 hour:",
+             "Choose a new password",
+             "If this wasn't you, ignore this email: your password stays the same."),
+            ("Քո 1991 Academy հաշվի համար նոր գաղտնաբառ է խնդրվել։",
+             "Ընտրի՛ր նոր գաղտնաբառ այստեղ։ Հղումը գործում է մեկ անգամ, 1 ժամ՝",
+             "Ընտրել նոր գաղտնաբառ",
+             "Եթե դա դու չէիր, անտեսի՛ր այս նամակը. գաղտնաբառդ չի փոխվի։"),
+        ]
+    user_label = ("Your username", "Քո օգտանունը")
+    help_line = (f"Questions? Write to {SUPPORT_EMAIL}.", f"Հարցերի համար գրի՛ր {SUPPORT_EMAIL} հասցեին։")
+    text = "\n\n---\n\n".join(
+        f"{intro}\n\n{user_label[i]}: {username}\n\n{lead}\n{link}\n\n{ignore}\n{help_line[i]}"
+        for i, (intro, lead, _button, ignore) in enumerate(parts)
     )
+    e = html.escape
+    blocks = "".join(
+        f'<div lang="{lang}" style="padding:24px 0;{"border-top:1px solid #e3e6ee;" if i else ""}">'
+        f"<p style=\"margin:0 0 14px\">{e(intro)}</p>"
+        f'<p style="margin:0 0 18px">{e(user_label[i])}: <strong>{e(username)}</strong></p>'
+        f'<p style="margin:0 0 22px"><a href="{e(link, quote=True)}" style="display:inline-block;padding:12px 22px;'
+        f'border-radius:10px;background:#6366f1;color:#ffffff;text-decoration:none;font-weight:600">{e(button)}</a></p>'
+        f'<p style="margin:0 0 6px;font-size:13px;color:#55607a">{e(lead)}<br>'
+        f'<a href="{e(link, quote=True)}" style="color:#4f46e5;word-break:break-all">{e(link)}</a></p>'
+        f'<p style="margin:14px 0 0;font-size:13px;color:#55607a">{e(ignore)} {e(help_line[i])}</p></div>'
+        for i, ((intro, lead, button, ignore), lang) in enumerate(zip(parts, ("en", "hy"), strict=True))
+    )
+    page = (
+        '<!doctype html><html><body style="margin:0;padding:24px;background:#f6f7fb;'
+        'font-family:-apple-system,Segoe UI,Roboto,Noto Sans Armenian,Arial,sans-serif;color:#101527;line-height:1.5">'
+        '<div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;padding:8px 28px">'
+        '<p style="margin:24px 0 0;font-size:18px;font-weight:700">1991 Academy</p>'
+        f"{blocks}</div></body></html>"
+    )
+    return subject, text, page
+
+
+def links_warning() -> str | None:
+    """Links that only work on this computer: a server whose ACADEMY_BASE_URL
+    (DOMAIN in .env) isn't set would email students useless links."""
+    host = BASE_URL.split("://", 1)[-1].split("/", 1)[0].split(":")[0]
+    if host in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+        return f"These links start with {BASE_URL}, which works only on the computer running the site."
+    return None
 
 
 def _forgot_password(email: str):
@@ -1180,7 +1296,7 @@ def _forgot_password(email: str):
             return None
         link = new_reset_link(conn, row["id"])
         conn.commit()
-    return link
+    return row["username"], link
 
 
 @app.post("/api/forgot-password")
@@ -1199,20 +1315,14 @@ async def api_forgot_password(request: Request):
         log.warning("reset-email-paused email=%s", email)
         return JSONResponse({"ok": True})
     sent.append(now)
-    link = await run_in_threadpool(_forgot_password, email)
-    if not link:
+    found = await run_in_threadpool(_forgot_password, email)
+    if not found:
         return JSONResponse({"ok": True})
     # Hand the SMTP round-trip to a background task: awaiting it here would make
     # a registered address answer seconds slower than an unregistered one, which
     # is the email-enumeration leak the generic response exists to prevent.
     return JSONResponse({"ok": True}, background=BackgroundTask(
-        send_email,
-        email,
-        "Reset your 1991 Academy password",
-        "Someone asked to reset the password for your 1991 Academy account.\n\n"
-        f"Set a new password (link valid for 1 hour):\n{link}\n\n"
-        "If this wasn't you, ignore this email — your password is unchanged.",
-    ))
+        send_email, email, *account_email("reset", *found)))
 
 
 def _reset_password(token: str, new: str):
@@ -1220,23 +1330,26 @@ def _reset_password(token: str, new: str):
     accepting an invitation is signed in at once; after a password reset every
     session ends and the owner signs in again."""
     token_hash = hashlib.sha256(token.encode()).hexdigest()
+    salt = secrets.token_bytes(16)
+    new_hash = hash_password(new, salt)          # the slow part, before taking the write lock
     with db() as conn:
+        # Using the link and checking it are one statement: of two
+        # submissions arriving together, only one gets the row.
         row = conn.execute(
-            "SELECT r.*, u.pass_hash AS old_hash FROM password_resets r "
-            "JOIN users u ON u.id = r.user_id WHERE r.token_hash = ?", (token_hash,)
+            "DELETE FROM password_resets WHERE token_hash = ? AND expires >= ? RETURNING user_id",
+            (token_hash, time.time()),
         ).fetchone()
-        if row is None or row["expires"] < time.time():
+        if row is None:
+            conn.rollback()
             return None
-        salt = secrets.token_bytes(16)
-        conn.execute(
-            "UPDATE users SET pass_hash = ?, salt = ? WHERE id = ?",
-            (hash_password(new, salt), salt.hex(), row["user_id"]),
-        )
-        conn.execute("DELETE FROM password_resets WHERE user_id = ?", (row["user_id"],))
-        conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["user_id"],))  # force re-login
+        uid = row["user_id"]
+        was_invited = conn.execute("SELECT pass_hash FROM users WHERE id = ?", (uid,)).fetchone()[0] == INVITED
+        conn.execute("UPDATE users SET pass_hash = ?, salt = ? WHERE id = ?", (new_hash, salt.hex(), uid))
+        conn.execute("DELETE FROM password_resets WHERE user_id = ?", (uid,))
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))  # force re-login
         conn.commit()
-        session = new_session(conn, row["user_id"]) if row["old_hash"] == INVITED else None
-        user = conn.execute("SELECT * FROM users WHERE id = ?", (row["user_id"],)).fetchone()
+        session = new_session(conn, uid) if was_invited else None
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
         return user, session
 
 
@@ -1586,22 +1699,28 @@ def _learner_reset_link(conn, admin, username: str):
 
 @app.post("/api/admin/users/{username}/reset-link")
 async def api_admin_reset_link(request: Request, username: str):
+    if denied := await admin_gate(request):
+        return denied
+    sent, now = _recent(account_key("resend", username), RESENDS_WINDOW)
+    if len(sent) >= RESENDS_PER_STUDENT:
+        return err("This student was sent several links in the last hour. Wait before sending another.", 429)
     out = await admin_call(request, _learner_reset_link, username)
+    if not isinstance(out, JSONResponse):
+        sent.append(now)
     if isinstance(out, JSONResponse):
         return out
     email, link, username, invited = out
+    warning = links_warning()
     if not email_configured():
         # Nothing can send it, so the admin passes it on. With email set up,
         # the link goes only to the learner: an admin can't take an account.
-        return {"sent": False, "link": link, "invite": invited}
-    subject, text = invitation_email(username, link) if invited else (
-        "Set a new 1991 Academy password",
-        "An administrator of 1991 Academy sent you a link to set a new password.\n\n"
-        f"Set a new password (link valid for 1 hour):\n{link}\n\n"
-        "If you didn't ask for this, ignore this email — your password is unchanged.",
-    )
-    return JSONResponse({"sent": True, "email": email, "invite": invited},
-                        background=BackgroundTask(send_email, email, subject, text))
+        return {"sent": False, "link": link, "invite": invited, "warning": warning}
+    # Sent while the admin waits, so the panel says what really happened.
+    error = (await run_in_threadpool(
+        deliver_all, [(email, *account_email("invite" if invited else "reset", username, link))]))[0]
+    if error:
+        return JSONResponse({"sent": False, "email": email, "invite": invited, "error": error}, status_code=502)
+    return {"sent": True, "email": email, "invite": invited, "warning": warning}
 
 
 MAX_INVITES = 200   # per request
@@ -1635,10 +1754,18 @@ def _invite(conn, admin, students: list):
     return results
 
 
-def send_invitations(invited: list):
-    """[(email, username, link)], one email each."""
-    for email, username, link in invited:
-        send_email(email, *invitation_email(username, link))
+RESENDS_PER_STUDENT, RESENDS_WINDOW = 5, 3600        # links an admin sends one student
+INVITE_EMAILS_PER_HOUR = 300                          # invitation emails per admin
+
+
+def send_invitations(invited: list) -> list:
+    """[(email, username, link)] -> per invitation None (the mail server took
+    it) or what went wrong."""
+    return deliver_all([(email, *account_email("invite", username, link)) for email, username, link in invited])
+
+
+def _admin_name(conn, admin):
+    return admin["username"]
 
 
 @app.post("/api/admin/invites")
@@ -1662,18 +1789,33 @@ async def api_admin_invites(request: Request):
             "email": str(item.get("email", "")).strip().lower(),
             "username": str(item.get("username") or "").strip(),
         })
+    admin = await admin_call(request, _admin_name)
+    if isinstance(admin, JSONResponse):
+        return admin
+    # one admin account can't turn the school's mailbox into a spam cannon
+    budget, now = _recent(account_key("invite-emails", admin), 3600)
+    if email_configured() and len(budget) + len(students) > INVITE_EMAILS_PER_HOUR:
+        return err(f"One admin can send at most {INVITE_EMAILS_PER_HOUR} invitations an hour. "
+                   "Invite the rest later.", 429)
     results = await admin_call(request, _invite, students)
     if isinstance(results, JSONResponse):
         return results
-    # (a copy: the links come out of the admin's answer below)
-    invited = [(r["email"], r["username"], r["link"]) for r in results if "link" in r]
+    warning = links_warning()
     if not email_configured():
-        return {"sent": False, "results": results}
-    # sent only to the students: the admin doesn't see the links
-    for r in results:
-        r.pop("link", None)
-    return JSONResponse({"sent": True, "results": results},
-                        background=BackgroundTask(send_invitations, invited))
+        return {"sent": False, "results": results, "warning": warning}
+    invited = [r for r in results if "link" in r]
+    budget.extend([now] * len(invited))
+    # Sent now, while the admin waits (one connection for all of them), so the
+    # panel shows who really got an email. The accounts exist either way: a
+    # failed one can be sent again with "Resend the invitation".
+    outcomes = await run_in_threadpool(send_invitations, [(r["email"], r["username"], r["link"]) for r in invited])
+    for r, failure in zip(invited, outcomes, strict=True):
+        del r["link"]                   # the link goes only to the student
+        if failure:
+            r["emailError"] = failure
+        else:
+            r["emailed"] = True
+    return {"sent": True, "results": results, "warning": warning}
 
 
 def _learner_sign_out(conn, admin, username: str):
@@ -2105,6 +2247,9 @@ def email_test(to: str) -> int:
               file=sys.stderr)
         return 1
     print(f"Sending a test email from {SMTP_FROM} to {to} through {SMTP_HOST}:{SMTP_PORT} ...")
+    print(f"Links in invitations will start with {BASE_URL}")
+    if links_warning():
+        print("WARNING: " + links_warning() + " Set DOMAIN in .env on the server.")
     try:
         deliver(to, "1991 Academy: test email",
                 "This is a test from 1991 Academy. Email works: invitations and password resets\n"

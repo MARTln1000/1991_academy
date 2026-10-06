@@ -41,11 +41,6 @@ def clients(tmp_path, monkeypatch):
         yield admin, learner
 
 
-@pytest.fixture
-def sent_emails(monkeypatch):
-    box = []
-    monkeypatch.setattr(app, "send_email", lambda to, subject, body: box.append((to, subject, body)) or True)
-    return box
 
 
 def add_users(names, created=None):
@@ -217,8 +212,9 @@ def test_invitations_are_emailed_when_email_is_set_up(clients, sent_emails, monk
         monkeypatch.setattr(app, k, v)
     r = admin.post("/api/admin/invites", json={"students": [{"email": "anna@example.com"}]})
     assert r.json()["sent"] is True and "welcome=" not in r.text  # the admin never sees the link
-    to, subject, body = sent_emails[0]
+    to, subject, body, html = sent_emails[0]
     assert to == "anna@example.com" and "Your username: anna" in body and "welcome=" in body
+    assert r.json()["results"][0]["emailed"] is True
 
 
 def test_resending_an_invitation(clients):
@@ -333,7 +329,7 @@ def test_reset_link_with_email_goes_only_to_the_learner(clients, sent_emails, mo
     for k, v in (("SMTP_HOST", "smtp.example"), ("SMTP_USER", "u"), ("SMTP_PASS", "p")):
         monkeypatch.setattr(app, k, v)
     r = admin.post("/api/admin/users/alice/reset-link", json={})
-    assert r.json() == {"sent": True, "email": "alice@example.com", "invite": False}
+    assert {k: v for k, v in r.json().items() if k != "warning"} == {"sent": True, "email": "alice@example.com", "invite": False}
     assert "reset=" not in r.text
     assert sent_emails[0][0] == "alice@example.com" and "reset=" in sent_emails[0][2]
 
