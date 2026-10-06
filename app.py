@@ -601,12 +601,10 @@ def client_ip(request: Request) -> str:
     return request.client.host if request.client else "?"
 
 
-def rate_limited(request: Request, bucket: str, limit: int, window_s: int) -> bool:
-    """Sliding-window limiter, per client IP. True = over the limit."""
-    ip = client_ip(request)
-    key = f"{ip}:{bucket}"
+def _recent(key: str, window_s: int):
+    """The timestamps under `key` within the window (a sliding window)."""
     now = time.time()
-    # The dict grew one entry per distinct IP forever; drop idle ones when it
+    # The dict grew one entry per distinct key forever; drop idle ones when it
     # gets large rather than letting a long-lived process leak them.
     if len(_BUCKETS) > _BUCKET_CAP:
         for k in [k for k, dq in _BUCKETS.items() if not dq or dq[-1] < now - 3600]:
@@ -614,11 +612,41 @@ def rate_limited(request: Request, bucket: str, limit: int, window_s: int) -> bo
     dq = _BUCKETS[key]
     while dq and dq[0] < now - window_s:
         dq.popleft()
+    return dq, now
+
+
+def failures(request: Request, bucket: str, window_s: int):
+    """This address's recent failures in `bucket`. Only failures count: a
+    classroom shares one public address, and thirty students signing in or
+    accepting their invitations at once must not lock each other out."""
+    return _recent(f"{client_ip(request)}:{bucket}", window_s)
+
+
+IP_LOGIN_FAILS = 10          # wrong passwords per minute per address
+IP_TOKEN_FAILS = 20          # invalid or expired links per 10 minutes per address
+
+
+def rate_limited(request: Request, bucket: str, limit: int, window_s: int) -> bool:
+    """Sliding-window limiter, per client IP. True = over the limit."""
+    ip = client_ip(request)
+    dq, now = _recent(f"{ip}:{bucket}", window_s)
     if len(dq) >= limit:
         log.warning("rate-limit ip=%s bucket=%s", ip, bucket)
         return True
     dq.append(now)
     return False
+
+
+# Per account rather than per IP: an attacker with many addresses gets around
+# the IP limits, but not these. 20 wrong passwords in 15 minutes pause that
+# account's sign-in for 15 minutes; 3 reset emails an hour per address stop
+# anyone from flooding a student's inbox.
+LOGIN_FAILS, LOGIN_FAIL_WINDOW = 20, 900
+RESETS_PER_EMAIL, RESET_EMAIL_WINDOW = 3, 3600
+
+
+def account_key(kind: str, name: str) -> str:
+    return f"{kind}:{name.strip().lower()[:254]}"
 
 # ---------------------------------------------------------------- app
 
@@ -839,7 +867,9 @@ def _login(identifier: str, password: str):
 
 @app.post("/api/login")
 async def api_login(request: Request):
-    if rate_limited(request, "login", 10, 60):
+    ip_fails, _ = failures(request, "login-fail", 60)
+    if len(ip_fails) >= IP_LOGIN_FAILS:
+        log.warning("rate-limit ip=%s bucket=login-fail", client_ip(request))
         return err("Too many login attempts — wait a minute.", 429)
     body = await json_body(request)
     if body is None:
@@ -849,10 +879,17 @@ async def api_login(request: Request):
     if not identifier or not password:
         return err("Enter your username/email and password.")
 
+    fails, now = _recent(account_key("login-fail", identifier), LOGIN_FAIL_WINDOW)
+    if len(fails) >= LOGIN_FAILS:
+        log.warning("login-paused identifier=%s", identifier[:64])
+        return err("Too many wrong passwords for this account — wait 15 minutes.", 429)
     row, token = await run_in_threadpool(_login, identifier, password)
     if row is None:
-        log.info("login-failed identifier=%s", identifier)
+        fails.append(now)        # unknown names count too: no difference to probe
+        ip_fails.append(now)
+        log.info("login-failed identifier=%s", identifier[:64])
         return err("Wrong credentials.", 401)
+    fails.clear()
     response = JSONResponse({"user": public_user(row)})
     set_session_cookie(response, token)
     log.info("login user=%s", row["username"])
@@ -1148,7 +1185,7 @@ def _forgot_password(email: str):
 
 @app.post("/api/forgot-password")
 async def api_forgot_password(request: Request):
-    if rate_limited(request, "forgot", 5, 600):
+    if rate_limited(request, "forgot", 10, 600):
         return err("Too many reset requests — try again later.", 429)
     body = await json_body(request)
     if body is None:
@@ -1157,6 +1194,11 @@ async def api_forgot_password(request: Request):
     # ALWAYS return the same response — never reveal whether an email is registered.
     if not EMAIL_RE.match(email):
         return JSONResponse({"ok": True})
+    sent, now = _recent(account_key("reset-email", email), RESET_EMAIL_WINDOW)
+    if len(sent) >= RESETS_PER_EMAIL:
+        log.warning("reset-email-paused email=%s", email)
+        return JSONResponse({"ok": True})
+    sent.append(now)
     link = await run_in_threadpool(_forgot_password, email)
     if not link:
         return JSONResponse({"ok": True})
@@ -1211,20 +1253,23 @@ def _welcome(token: str):
 @app.post("/api/welcome")
 async def api_welcome(request: Request):
     """Whose invitation (or reset) link this is: the page shows the username."""
-    if rate_limited(request, "reset", 10, 600):
+    bad, now = failures(request, "token-fail", 600)
+    if len(bad) >= IP_TOKEN_FAILS:
         return err("Too many attempts — try again later.", 429)
     body = await json_body(request)
     if body is None:
         return err("invalid request body")
     username = await run_in_threadpool(_welcome, str(body.get("token", "")))
     if username is None:
+        bad.append(now)
         return err("This link is invalid or has expired. Ask for a new one.", 400)
     return {"username": username}
 
 
 @app.post("/api/reset-password")
 async def api_reset_password(request: Request):
-    if rate_limited(request, "reset", 10, 600):
+    bad, now = failures(request, "token-fail", 600)
+    if len(bad) >= IP_TOKEN_FAILS:
         return err("Too many attempts — try again later.", 429)
     body = await json_body(request)
     if body is None:
@@ -1235,6 +1280,7 @@ async def api_reset_password(request: Request):
         return err("Password must be at least 8 characters.")
     out = await run_in_threadpool(_reset_password, token, new)
     if out is None:
+        bad.append(now)
         return err("This reset link is invalid or has expired.", 400)
     user, session = out
     log.info("%s user=%s", "welcome" if session else "reset-password", user["username"])
@@ -1316,6 +1362,17 @@ async def admin_call(request: Request, fn, *args):
         return await run_in_threadpool(_as_admin, session_token(request), fn, *args)
     except AdminError as e:
         return err(e.message, e.status)
+
+
+async def admin_gate(request: Request):
+    """The 401/403 for anyone but an admin, or None. Endpoints that read a
+    body check this first, so a non-admin learns nothing about what they would
+    accept."""
+    try:
+        await run_in_threadpool(_as_admin, session_token(request), lambda conn, admin: None)
+    except AdminError as e:
+        return err(e.message, e.status)
+    return None
 
 
 def audit(conn, admin_name: str, action: str, target: str | None = None, detail: str | None = None):
@@ -1589,6 +1646,8 @@ async def api_admin_invites(request: Request):
     """Accounts for new students, each with a week-long link to choose a
     password: emailed when email is set up, otherwise returned for the admin
     to hand out."""
+    if denied := await admin_gate(request):
+        return denied
     body = await json_body(request)
     raw = body.get("students") if body else None
     if not isinstance(raw, list) or not raw:
@@ -1817,6 +1876,8 @@ def _lesson_save(conn, admin, lesson_id: str, rec: dict):
 
 @app.put("/api/admin/lessons/{lesson_id}")
 async def api_admin_lesson_save(request: Request, lesson_id: str):
+    if denied := await admin_gate(request):
+        return denied
     body = await json_body(request)
     if body is None:
         return err("invalid request body")
@@ -1835,6 +1896,8 @@ def _lesson_preview(_conn, _admin, rec: dict):
 async def api_admin_lesson_preview(request: Request, lesson_id: str):
     """The lesson exactly as saving it would store it (checked and sanitized),
     without saving anything."""
+    if denied := await admin_gate(request):
+        return denied
     body = await json_body(request)
     if body is None:
         return err("invalid request body")
@@ -1919,6 +1982,8 @@ def _announcement_delete(conn, admin, aid: int):
 
 
 async def announcement_body(request: Request):
+    if denied := await admin_gate(request):
+        return None, denied
     body = await json_body(request)
     if body is None:
         return None, err("invalid request body")

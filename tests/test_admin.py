@@ -110,12 +110,28 @@ def test_only_admins_reach_the_admin_api(clients):
             assert admin.get(path).status_code == 200, path
         for method, path in ADMIN_WRITES:
             body = lesson() if "lessons" in path else {"text": "hi"}
-            assert anonymous.request(method, path, json=body).status_code in (401, 400), path
+            assert anonymous.request(method, path, json=body).status_code == 401, path
             assert learner.request(method, path, json=body).status_code == 403, path
     # ...and the learner's attempts changed nothing
     assert admin.get("/api/admin/users/alice").status_code == 200
     published = content_js(admin)
     assert published["lessons"] == [] and published["announcements"] == []
+
+
+@pytest.mark.parametrize("method,path,body", [
+    ("PUT", "/api/admin/lessons/web-2-9", {"nonsense": True}),
+    ("POST", "/api/admin/lessons/web-2-9/preview", {"nonsense": True}),
+    ("POST", "/api/admin/announcements", {"level": "<b>"}),
+    ("PUT", "/api/admin/announcements/1", {}),
+    ("POST", "/api/admin/invites", {"students": "x"}),
+])
+def test_non_admins_learn_nothing_from_bad_input(clients, method, path, body):
+    """Checked before the body is read: a non-admin gets 403 (401 signed
+    out), never a validation message about what an admin may send."""
+    _, learner = clients
+    assert learner.request(method, path, json=body).status_code == 403
+    with TestClient(app.app) as anonymous:
+        assert anonymous.request(method, path, json=body).status_code == 401
 
 
 def test_me_says_who_is_an_admin(clients):
@@ -477,6 +493,13 @@ def test_announcements(clients):
 
 
 # ---------------------------------------------------------------- the page
+
+def test_every_sign_in_page_string_has_an_armenian_translation():
+    page = (ROOT / "js" / "account-page.js").read_text(encoding="utf-8")
+    keys = set(re.findall(r'\bt\(\s*"((?:[^"\\]|\\.)*)"', page))
+    translated = (ROOT / "js" / "i18n.js").read_text(encoding="utf-8")
+    assert len(keys) > 40 and sorted(k for k in keys if '"%s":' % k not in translated) == []
+
 
 def test_every_admin_panel_string_has_an_armenian_translation():
     page = (ROOT / "js" / "admin-page.js").read_text(encoding="utf-8")

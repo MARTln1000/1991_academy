@@ -185,7 +185,14 @@ In `app.py`:
   redirect to sign-in, lessons (`js/data/`), course files, videos and the
   leaderboard answer 401, and Caddy checks the session (`/api/auth-check`)
   before serving a video. Course files and videos are cached privately.
-- Rate limits: login 10/min·IP, reset 5/10min·IP.
+- Limits that count **failures only**, so a classroom behind one address
+  is never locked out: 10 wrong passwords a minute per address; 20 wrong
+  passwords in 15 minutes per account (from any address: pauses that
+  account's sign-in for 15 minutes); 20 invalid or expired links per 10
+  minutes per address. Reset emails: 3 an hour per address, 10 requests per
+  10 minutes per address.
+- Admin endpoints check the admin's rights before they read the request,
+  so others learn nothing about what they would accept.
 - 300 KB request-body cap.
 - scrypt password hashing, HttpOnly SameSite=Lax session cookies (30 days),
   `Secure` + HSTS whenever `ACADEMY_SECURE_COOKIES` is on.

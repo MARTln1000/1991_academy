@@ -407,6 +407,64 @@ def test_session_cookie_flags(client):
     assert "secure" not in setc
 
 
+def test_guessing_one_account_from_many_addresses_is_paused(client, monkeypatch):
+    """IP limits don't stop an attacker with many addresses; the per-account
+    count does. A correct password before the pause clears the count."""
+    monkeypatch.setattr(app, "TRUST_PROXY", True)
+    register(client)
+    client.post("/api/logout", json={})
+    def attempt(i, password="WRONG-password"):
+        return client.post("/api/login", json={"identifier": "Alice", "password": password},
+                           headers={"X-Forwarded-For": f"10.0.{i // 250}.{i % 250}"}).status_code
+    assert [attempt(i) for i in range(5)] == [401] * 5
+    assert attempt(5, "hunter2pw") == 200                           # clears the count
+    client.post("/api/logout", json={})
+    codes = [attempt(100 + i) for i in range(app.LOGIN_FAILS + 1)]
+    assert codes[:app.LOGIN_FAILS] == [401] * app.LOGIN_FAILS and codes[-1] == 429
+    assert attempt(200, "hunter2pw") == 429                         # paused even with the right one
+    r = client.post("/api/login", json={"identifier": "alice", "password": "x"}, headers={"X-Forwarded-For": "9.9.9.9"})
+    assert r.status_code == 429 and "wait 15 minutes" in r.json()["error"]
+    # other accounts are unaffected
+    with app.db() as conn:
+        app.create_account(conn, "bob", "bob@example.com", "bobs-password")
+        conn.commit()
+    assert client.post("/api/login", json={"identifier": "bob", "password": "bobs-password"},
+                       headers={"X-Forwarded-For": "8.8.8.8"}).status_code == 200
+
+
+def test_reset_emails_to_one_address_are_capped(client, sent_emails, monkeypatch):
+    monkeypatch.setattr(app, "TRUST_PROXY", True)
+    register(client)
+    for i in range(app.RESETS_PER_EMAIL + 3):
+        r = client.post("/api/forgot-password", json={"email": "alice@example.com"},
+                        headers={"X-Forwarded-For": f"10.1.0.{i}"})
+        assert r.json() == {"ok": True}                              # the same answer every time
+    assert len(sent_emails) == app.RESETS_PER_EMAIL
+
+
+def test_a_classroom_behind_one_address_is_not_locked_out(client):
+    """Thirty students on one school network sign in, or accept their
+    invitations, at the same time: only failures count toward the limits."""
+    links = []
+    with app.db() as conn:
+        for i in range(30):
+            app.create_account(conn, f"pupil{i}", f"pupil{i}@example.com", "pupil-password")
+            uid = app.create_account(conn, f"newbie{i}", f"newbie{i}@example.com")
+            links.append(app.new_reset_link(conn, uid, welcome=True).split("welcome=")[1])
+        conn.commit()
+    for i in range(30):
+        assert client.post("/api/login", json={"identifier": f"pupil{i}", "password": "pupil-password"}).status_code == 200
+    for token in links:
+        assert client.post("/api/welcome", json={"token": token}).status_code == 200
+        assert client.post("/api/reset-password", json={"token": token, "password": "newbie-pass"}).status_code == 200
+
+
+def test_guessing_links_is_limited_per_address(client):
+    codes = [client.post("/api/welcome", json={"token": f"guess-{i}"}).status_code for i in range(app.IP_TOKEN_FAILS + 2)]
+    assert codes[:app.IP_TOKEN_FAILS] == [400] * app.IP_TOKEN_FAILS and codes[-1] == 429
+    assert client.post("/api/reset-password", json={"token": "guess", "password": "longenough1"}).status_code == 429
+
+
 def test_rate_limit_per_proxy_ip(client, monkeypatch):
     """With trust-proxy on, distinct X-Forwarded-For IPs get independent buckets."""
     monkeypatch.setattr(app, "TRUST_PROXY", True)

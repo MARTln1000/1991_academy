@@ -699,3 +699,75 @@
   .dash-actions { justify-content: center; }
   .match-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- Signed out: sign in, invitation, new password (js/account-page.js) ---------- */
+.auth-center { max-width: 440px; margin: 0 auto; padding: 8px 0 24px; }
+.auth-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 22px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+}
+.auth-card { padding: 32px; }
+.auth-card + .auth-card { margin-top: 16px; }
+.auth-title { font-size: 1.55rem; line-height: 1.25; margin: 0 0 6px; }
+.auth-card .btn-block { width: 100%; justify-content: center; padding: 13px 20px; margin-top: 4px; }
+.auth-card .btn-block:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+.auth-card .link-btn { display: block; margin: 12px auto 0; text-align: center; }
+.auth-card .form-error:empty { min-height: 0; margin: 0; }
+
+/* whose account this is */
+.auth-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 4px 0 22px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+.auth-identity .avatar { width: 44px; height: 44px; font-size: 1.2rem; flex: none; }
+.auth-identity span { display: block; font-size: 0.78rem; color: var(--text-muted); }
+.auth-identity strong { font-size: 1.05rem; overflow-wrap: anywhere; }
+
+/* password with show/hide */
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 72px; }
+.pw-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pw-toggle:hover { background: var(--accent-soft); }
+
+/* the live checklist under a new password */
+.pw-rules { list-style: none; margin: -4px 0 20px; padding: 0; display: grid; gap: 6px; font-size: 0.85rem; color: var(--text-muted); }
+.pw-rules li::before { content: "○"; display: inline-block; width: 1.5em; color: var(--text-faint); }
+.pw-rules li.ok { color: var(--success); }
+.pw-rules li.ok::before { content: "✓"; color: var(--success); }
+
+.auth-message { text-align: center; }
+.auth-message p { color: var(--text-muted); margin: 6px 0 20px; }
+.auth-icon { font-size: 2.6rem; margin-bottom: 6px; }
+.auth-foot { margin-top: 18px; text-align: center; font-size: 0.84rem; line-height: 1.7; color: var(--text-muted); }
+.auth-foot a { color: var(--accent); }
+
+@media (max-width: 520px) {
+  .auth-card { padding: 24px 20px; }
+  .auth-title { font-size: 1.35rem; }
+}

@@ -32,51 +32,6 @@
       "</div>";
   }
 
-  /* ---------- Password reset landing (from the emailed link) ---------- */
-
-  function renderReset(token) {
-    root.innerHTML =
-      '<div class="auth-grid auth-grid-single">' +
-      '<form class="form-card" data-form="reset">' +
-      "<h2>" + t("Set a new password") + "</h2>" +
-      '<p class="f-sub">' + t("Choose a new password for your account.") + "</p>" +
-      '<div class="field"><label for="rs-pw">' + t("New password (min 8 characters)") + "</label>" +
-      '<input id="rs-pw" name="password" type="password" autocomplete="new-password" minlength="8" required /></div>' +
-      '<div class="field"><label for="rs-pw2">' + t("Confirm new password") + "</label>" +
-      '<input id="rs-pw2" name="confirm" type="password" autocomplete="new-password" minlength="8" required /></div>' +
-      '<button class="btn btn-primary" type="submit">' + t("Save new password") + "</button>" +
-      '<p class="form-error" data-error></p></form></div>';
-
-    const form = root.querySelector("[data-form=reset]");
-    const errEl = form.querySelector("[data-error]");
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      errEl.style.color = "";
-      errEl.textContent = "";
-      const f = new FormData(form);
-      if (f.get("password") !== f.get("confirm")) {
-        errEl.textContent = t("Passwords don't match.");
-        return;
-      }
-      const btn = form.querySelector("button");
-      btn.disabled = true;
-      try {
-        await Auth.resetPassword(token, f.get("password"));
-        // The token is spent; drop it from the URL so it stops living in
-        // browser history (and in anything the learner bookmarks or shares).
-        history.replaceState(null, "", location.pathname);
-        root.innerHTML =
-          '<div class="practice-card practice-done"><div class="p-big">✓</div>' +
-          "<h2>" + t("Password reset") + "</h2>" +
-          "<p>" + t("Sign in with your new password.") + "</p>" +
-          '<a class="btn btn-primary" href="account.html">' + t("Sign in") + "</a></div>";
-      } catch (err) {
-        errEl.textContent = err.message;
-        btn.disabled = false;
-      }
-    });
-  }
-
   /* ---------- Logged in: profile + security ---------- */
 
   function renderProfile() {
@@ -209,58 +164,124 @@
     });
   }
 
-  /* ---------- Invitation landing (?welcome=TOKEN, from the invitation) ---------- */
+  /* ---------- Signed out: one centred page for sign-in, invitations and
+     new passwords. There is no sign-up: the school creates its students'
+     accounts and sends each an invitation link. ---------- */
 
-  async function renderWelcome(token) {
+  function authPage(inner, below) {
+    return (
+      '<div class="auth-center">' +
+      '<div class="auth-brand"><span class="logo-mark">1991</span>1991 Academy</div>' +
+      inner + (below || "") + "</div>"
+    );
+  }
+
+  const SUPPORT = '<a href="mailto:ai.1991@mil.am">ai.1991@mil.am</a>';
+
+  /* A message in place of a form: an expired link, a finished reset. */
+  function authMessage(icon, title, text, action) {
+    root.innerHTML = authPage(
+      '<div class="form-card auth-card auth-message"><div class="auth-icon" aria-hidden="true">' + icon + "</div>" +
+      '<h1 class="auth-title">' + title + "</h1><p>" + text + "</p>" + (action || "") + "</div>");
+  }
+
+  /* The new-password fields: show/hide, and a live checklist that keeps the
+     button off until the password is long enough and typed the same twice. */
+  function newPasswordFields() {
+    return (
+      '<div class="field"><label for="np-1">' + t("New password") + "</label>" +
+      '<div class="pw-wrap"><input id="np-1" name="password" type="password" autocomplete="new-password" minlength="8" required aria-describedby="np-rules" />' +
+      '<button type="button" class="pw-toggle" data-pw-toggle aria-controls="np-1 np-2" aria-pressed="false">' + t("Show") + "</button></div></div>" +
+      '<div class="field"><label for="np-2">' + t("Type it again") + "</label>" +
+      '<input id="np-2" name="confirm" type="password" autocomplete="new-password" minlength="8" required /></div>' +
+      '<ul class="pw-rules" id="np-rules" aria-live="polite">' +
+      '<li data-rule="length">' + t("At least 8 characters") + "</li>" +
+      '<li data-rule="match">' + t("Both passwords match") + "</li></ul>"
+    );
+  }
+
+  function bindNewPassword(form) {
+    const pw = form.querySelector("#np-1");
+    const again = form.querySelector("#np-2");
+    const btn = form.querySelector("button[type=submit]");
+    const rules = {
+      length: () => pw.value.length >= 8,
+      match: () => pw.value.length > 0 && pw.value === again.value,
+    };
+    function update() {
+      let ok = true;
+      for (const [name, test] of Object.entries(rules)) {
+        const pass = test();
+        form.querySelector('[data-rule="' + name + '"]').classList.toggle("ok", pass);
+        ok = ok && pass;
+      }
+      btn.disabled = !ok;
+    }
+    pw.addEventListener("input", update);
+    again.addEventListener("input", update);
+    form.querySelector("[data-pw-toggle]").addEventListener("click", (e) => {
+      const show = pw.type === "password";
+      pw.type = again.type = show ? "text" : "password";
+      e.currentTarget.textContent = show ? t("Hide") : t("Show");
+      e.currentTarget.setAttribute("aria-pressed", String(show));
+    });
+    update();
+  }
+
+  /* An invitation (?welcome=TOKEN) or a reset link (?reset=TOKEN): whose
+     account it is, then a new password. An invited student is signed in at
+     once; after a reset the owner signs in again. */
+  async function renderSetPassword(token, invited) {
     let username;
     try {
       username = (await Auth.welcome(token)).username;
-    } catch (err) {
-      root.innerHTML =
-        '<div class="practice-card practice-done"><div class="p-big">⌛</div>' +
-        "<h2>" + t("This invitation link has expired") + "</h2>" +
-        "<p>" + t("Ask your instructor for a new one, or write to {0}.", '<a href="mailto:ai.1991@mil.am">ai.1991@mil.am</a>') + "</p></div>";
-      return;
+    } catch {
+      return authMessage(
+        "⌛",
+        invited ? t("This invitation link has expired") : t("This link has expired"),
+        invited ? t("Ask your instructor for a new one, or write to {0}.", SUPPORT)
+                : t("Reset links work for one hour, once. Ask for a new one on the sign-in page."),
+        invited ? "" : '<a class="btn btn-primary btn-block" href="account.html">' + t("Sign in") + "</a>");
     }
-    root.innerHTML =
-      '<div class="auth-grid auth-grid-single">' +
-      '<form class="form-card" data-form="welcome">' +
-      "<h2>" + t("Welcome to 1991 Academy") + "</h2>" +
-      '<p class="f-sub">' + t("Your username is {0}. Choose a password to finish setting up your account.", "<strong>" + esc(username) + "</strong>") + "</p>" +
-      '<input type="hidden" name="username" autocomplete="username" value="' + esc(username) + '" />' +
-      '<div class="field"><label for="wl-pw">' + t("Password (min 8 characters)") + "</label>" +
-      '<input id="wl-pw" name="password" type="password" autocomplete="new-password" minlength="8" required /></div>' +
-      '<div class="field"><label for="wl-pw2">' + t("Confirm new password") + "</label>" +
-      '<input id="wl-pw2" name="confirm" type="password" autocomplete="new-password" minlength="8" required /></div>' +
-      '<button class="btn btn-primary" type="submit">' + t("Start learning") + "</button>" +
-      '<p class="f-sub form-privacy">' + t("What we store and why:") + ' <a href="privacy.html">' + t("Privacy Policy") + "</a></p>" +
-      '<p class="form-error" data-error></p></form></div>';
+    root.innerHTML = authPage(
+      '<form class="form-card auth-card" data-form="set-password" novalidate>' +
+      '<h1 class="auth-title">' + (invited ? t("Welcome to 1991 Academy") : t("Choose a new password")) + "</h1>" +
+      '<p class="f-sub">' + (invited ? t("Choose a password to finish setting up your account.")
+                                     : t("Choose a new password for your account.")) + "</p>" +
+      '<div class="auth-identity"><div class="avatar" aria-hidden="true">' + esc(username[0].toUpperCase()) + "</div>" +
+      "<div><span>" + t("Your username") + "</span><strong>" + esc(username) + "</strong></div></div>" +
+      /* for password managers: the account this password belongs to */
+      '<input class="visually-hidden" type="text" name="username" autocomplete="username" value="' + esc(username) + '" readonly tabindex="-1" aria-hidden="true" />' +
+      newPasswordFields() +
+      '<button class="btn btn-primary btn-block" type="submit">' + (invited ? t("Start learning") : t("Save new password")) + "</button>" +
+      '<p class="form-error" data-error role="alert"></p></form>',
+      '<p class="auth-foot">' + t("You can sign in with your username or your email.") +
+      '<br /><a href="privacy.html">' + t("Privacy Policy") + "</a></p>");
 
-    const form = root.querySelector("[data-form=welcome]");
+    const form = root.querySelector("[data-form=set-password]");
+    bindNewPassword(form);
     const errEl = form.querySelector("[data-error]");
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       errEl.textContent = "";
-      const f = new FormData(form);
-      if (f.get("password") !== f.get("confirm")) {
-        errEl.textContent = t("Passwords don't match.");
-        return;
-      }
-      const btn = form.querySelector("button");
+      const btn = form.querySelector("button[type=submit]");
       btn.disabled = true;
       try {
-        await Auth.resetPassword(token, f.get("password"));   /* signs the student in */
+        const out = await Auth.resetPassword(token, form.password.value);
+        // the token is spent: keep it out of the browser history
         history.replaceState(null, "", location.pathname);
-        location.href = "index.html";
+        if (out && out.user) {
+          location.href = "index.html";              /* invited: signed in */
+          return;
+        }
+        authMessage("✓", t("Password saved"), t("Sign in with your new password."),
+          '<a class="btn btn-primary btn-block" href="account.html">' + t("Sign in") + "</a>");
       } catch (err) {
         errEl.textContent = t(err.message);
         btn.disabled = false;
       }
     });
   }
-
-  /* ---------- Signed out: sign in / forgot password ----------
-     There is no sign-up: the school creates its students' accounts. */
 
   /* Where to go after signing in: the page that sent the visitor here
      (?next=/tracks/dl.html), if it is one of this site's. */
@@ -270,26 +291,22 @@
   }
 
   function renderForms() {
-    root.innerHTML =
-      '<h1 style="font-size:1.8rem; margin-bottom:8px">' + t("1991 Academy") + "</h1>" +
-      '<p class="section-sub">' + t("The online school of 1991 Unit. Sign in with the account your school created for you.") + "</p>" +
-      '<div class="auth-grid auth-grid-single">' +
-
-      '<form class="form-card" data-form="login">' +
-      "<h2>" + t("Sign in") + "</h2>" +
+    root.innerHTML = authPage(
+      '<form class="form-card auth-card" data-form="login">' +
+      '<h1 class="auth-title">' + t("Sign in") + "</h1>" +
+      '<p class="f-sub">' + t("The online school of 1991 Unit. Sign in with the account your school created for you.") + "</p>" +
       '<div class="field"><label for="li-id">' + t("Username or email") + "</label>" +
-      '<input id="li-id" name="identifier" autocomplete="username" required /></div>' +
+      '<input id="li-id" name="identifier" autocomplete="username" autocapitalize="none" spellcheck="false" required /></div>' +
       '<div class="field"><label for="li-pw">' + t("Password") + "</label>" +
-      '<input id="li-pw" name="password" type="password" autocomplete="current-password" required /></div>' +
-      '<button class="btn btn-primary" type="submit">' + t("Sign in") + "</button>" +
+      '<div class="pw-wrap"><input id="li-pw" name="password" type="password" autocomplete="current-password" required />' +
+      '<button type="button" class="pw-toggle" data-pw-toggle aria-controls="li-pw" aria-pressed="false">' + t("Show") + "</button></div></div>" +
+      '<button class="btn btn-primary btn-block" type="submit">' + t("Sign in") + "</button>" +
+      '<p class="form-error" data-error role="alert"></p>' +
       '<button type="button" class="link-btn" data-forgot-open>' + t("Forgot your password?") + "</button>" +
-      '<p class="form-error" data-error></p>' +
-      '<p class="f-sub form-privacy">' + t("No account? Accounts are only for the school's students: ask your instructor, or write to {0}.", '<a href="mailto:ai.1991@mil.am">ai.1991@mil.am</a>') + "</p>" +
       "</form>" +
-      "</div>" +
 
       /* forgot-password panel, revealed by the link */
-      '<form class="form-card auth-forgot" data-form="forgot" hidden>' +
+      '<form class="form-card auth-card auth-forgot" data-form="forgot" hidden>' +
       "<h2>" + t("Reset your password") + "</h2>" +
       '<p class="f-sub">' + t("Enter your account email and we'll send a reset link.") + "</p>" +
       '<div class="field"><label for="fg-em">' + t("Email") + "</label>" +
@@ -297,9 +314,17 @@
       '<div class="dash-actions">' +
       '<button class="btn btn-primary" type="submit">' + t("Send reset link") + "</button>" +
       '<button class="btn" type="button" data-forgot-cancel>' + t("Cancel") + "</button>" +
-      "</div><p class=\"form-error\" data-fg-msg></p></form>";
+      "</div><p class=\"form-error\" data-fg-msg role=\"status\"></p></form>",
+      '<p class="auth-foot">' + t("No account? Accounts are only for the school's students: ask your instructor, or write to {0}.", SUPPORT) + "</p>");
 
     const form = root.querySelector("form[data-form=login]");
+    const pw = form.querySelector("#li-pw");
+    form.querySelector("[data-pw-toggle]").addEventListener("click", (e) => {
+      const show = pw.type === "password";
+      pw.type = show ? "text" : "password";
+      e.currentTarget.textContent = show ? t("Hide") : t("Show");
+      e.currentTarget.setAttribute("aria-pressed", String(show));
+    });
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const errEl = form.querySelector("[data-error]");
@@ -343,8 +368,11 @@
 
   function render() {
     const params = new URLSearchParams(location.search);
-    if (params.get("welcome")) return renderWelcome(params.get("welcome"));
-    if (params.get("reset")) return renderReset(params.get("reset"));
+    /* the nav's "Sign in" link would lead to this very page */
+    const navAccount = document.querySelector("[data-account]");
+    if (navAccount) navAccount.hidden = !Auth.current();
+    if (params.get("welcome")) return renderSetPassword(params.get("welcome"), true);
+    if (params.get("reset")) return renderSetPassword(params.get("reset"), false);
     if (Auth.isOffline()) return renderOffline();
     if (Auth.current()) return renderProfile();
     renderForms();
