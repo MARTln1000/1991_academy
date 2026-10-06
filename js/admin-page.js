@@ -283,9 +283,11 @@
         const ok = res.results.filter((r) => !r.error);
         const bad = res.results.filter((r) => r.error);
         msg.style.color = ok.length ? "var(--success)" : "";
-        msg.textContent = res.sent
-          ? t("Invited {0}. Each got an email with a link to choose a password.", ok.length)
-          : t("Invited {0}. Email isn't set up on this server, so send each student their link (valid for 7 days):", ok.length);
+        msg.textContent = !ok.length
+          ? t("Nobody was invited.")
+          : res.sent
+            ? t("Invited {0}. Each got an email with a link to choose a password.", ok.length)
+            : t("Invited {0}. Email isn't set up on this server, so send each student their link (valid for 7 days):", ok.length);
         out.innerHTML =
           (!res.sent && ok.length
             ? '<div class="table-wrap"><table class="admin-table"><thead><tr><th>' + t("Learner") + "</th><th>" + t("Email") +
@@ -295,7 +297,10 @@
             : "") +
           (bad.length
             ? '<p class="form-error">' + t("Not invited:") + "</p><ul class=\"admin-list\">" +
-              bad.map((r) => "<li>" + esc(r.email || "?") + " — " + esc(t(r.error)) + "</li>").join("") + "</ul>"
+              bad.map((r) => "<li>" + esc(r.email || "?") + " — " + esc(t(r.error)) + "</li>").join("") + "</ul>" +
+              (bad.some((r) => /already has an account/.test(r.error))
+                ? '<p class="admin-hint">' + t("Already invited? To send a new link, open the student below and click “Resend the invitation”.") + "</p>"
+                : "")
             : "");
         const copy = out.querySelector("[data-copy-all]");
         if (copy) {

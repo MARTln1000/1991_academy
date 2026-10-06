@@ -101,6 +101,9 @@ I18N.extend({
   "Link": "Հղում",
   "Copy all": "Պատճենել բոլորը",
   "Not invited:": "Չհրավիրվեցին՝",
+  "Nobody was invited.": "Ոչ ոք չհրավիրվեց։",
+  "Already invited? To send a new link, open the student below and click “Resend the invitation”.":
+    "Արդեն հրավիրվա՞ծ է։ Նոր հղում ուղարկելու համար բացի՛ր ուսանողին ստորև և սեղմի՛ր «Կրկին ուղարկել հրավերը»։",
   "invited": "հրավիրված",
   "invited, not signed in yet": "հրավիրված, դեռ մուտք չի գործել",
   "Resend the invitation": "Կրկին ուղարկել հրավերը",
