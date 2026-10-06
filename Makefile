@@ -53,6 +53,7 @@ help: ## list these commands
 ##@ Run the site (Docker)
 
 up: .env ## build and start the site in the background (again after code changes)
+	@chmod 600 .env   # it may hold the SMTP password: readable by its owner only
 	@# --remove-orphans: containers of services no longer in docker-compose.yml go too
 	$(COMPOSE) up -d --build --wait --remove-orphans $(SERVICES)
 	@echo
