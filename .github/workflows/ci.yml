@@ -75,14 +75,14 @@ jobs:
             [ "$code" = 401 ] || { echo "::error::a visitor got $code for $path, expected 401"; exit 1; }
           done
           curl -fsS -o /dev/null http://127.0.0.1:8735/account.html || { echo "::error::the sign-in page is not served"; exit 1; }
-          # the first admin, as on a new server: an invitation from the command line,
-          # accepted with its link (which signs in)
-          token=$(docker compose exec -T app python app.py admin add ci_admin ci@example.com | grep -o 'welcome=[A-Za-z0-9_-]*' | cut -d= -f2)
-          [ -n "$token" ] || { echo "::error::make admin printed no invitation link"; exit 1; }
+          # the first admin, as on a new server: a temporary password from the command
+          # line, then their own password (which signs in)
+          temp=$(docker compose exec -T app python app.py admin add ci_admin ci@example.com | sed -n 's/^.*Temporary password: \([a-z0-9-]*\).*$/\1/p')
+          [ -n "$temp" ] || { echo "::error::make admin printed no temporary password"; exit 1; }
           session=$(curl -fsS -D - -o /dev/null -H 'Content-Type: application/json' \
-            -d "{\"token\": \"$token\", \"password\": \"ci-password-123\"}" http://127.0.0.1:8735/api/reset-password \
+            -d "{\"identifier\": \"ci_admin\", \"password\": \"$temp\", \"newPassword\": \"ci-password-123\"}" http://127.0.0.1:8735/api/first-password \
             | sed -n 's/^[Ss]et-[Cc]ookie: msession=\([^;]*\).*/\1/p')
-          [ -n "$session" ] || { echo "::error::accepting the invitation didn't sign in"; exit 1; }
+          [ -n "$session" ] || { echo "::error::choosing a first password didn't sign in"; exit 1; }
           echo "SESSION=$session" >> "$GITHUB_ENV"
           C="Cookie: msession=$session"
           # signed in, the frontend is served: pages, and files from inside its folders

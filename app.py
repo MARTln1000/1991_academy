@@ -32,7 +32,7 @@ Environment:
 
 API:
     POST /api/login               {identifier, password}
-    POST /api/welcome             {token} -> {username}  (an invitation link's account)
+    POST /api/first-password      {identifier, password, newPassword}  (temporary -> own password)
     POST /api/logout
     GET  /api/me
     GET  /api/state               -> {"data": {...}|null, "updated": ts|null}
@@ -40,51 +40,46 @@ API:
     GET  /api/leaderboard[?period=week|all] -> {"top": [{username, xp}...], "you": rank|null, "period"}
     POST /api/leaderboard-optin   {"optIn": bool}
     POST /api/change-password     {currentPassword, newPassword}
-    POST /api/forgot-password     {email}            (always 200; emails a reset link)
-    POST /api/reset-password      {token, password}  (also: an invited student's first password)
     POST /api/delete-account      {password}
     GET  /api/health
     GET  /api/auth-check          204 when signed in, else 401 (Caddy asks it before serving videos)
     GET  /api/content.js          lessons and announcements added in the admin panel,
                                   and the lesson videos hosted here (ACADEMY_MEDIA)
 
-Accounts are by invitation only: there is no sign-up. Admins invite students;
-the first admin is made on the server (`python app.py admin add NAME EMAIL`).
+Accounts are made by admins only: there is no sign-up, and the site sends no
+email. A new student gets a temporary password (shown to the admin once),
+which works for 14 days and only to choose their own on first sign-in. The
+first admin is made on the server: `python app.py admin add NAME EMAIL`;
+`python app.py password NAME` gives any account a new temporary password.
 
 Admin (accounts with users.is_admin; `python app.py admin add NAME` grants it):
     GET  /api/admin/overview      site statistics
-    POST /api/admin/invites       {students: [{email, username?}]} -> accounts + welcome links
+    POST /api/admin/students      {students: [{email, username?}]} -> accounts + temporary passwords
     GET  /api/admin/users[?q=&sort=created|active|xp|name&offset=]
     GET  /api/admin/users/NAME    one learner, with their progress
-    POST /api/admin/users/NAME/reset-link | sign-out | delete
+    POST /api/admin/users/NAME/temp-password | sign-out | delete
     GET  /api/admin/lessons       PUT|DELETE /api/admin/lessons/ID   POST .../ID/preview
     GET  /api/admin/announcements POST /api/admin/announcements  PUT|DELETE .../ID
     GET  /api/admin/log           what admins changed
     GET  /api/admin/media         which lesson videos are hosted here
 
-Email (password reset) env, all optional — unset ⇒ links are logged not sent:
-    ACADEMY_SMTP_HOST / _PORT / _USER / _PASS / _FROM,  ACADEMY_BASE_URL
+ACADEMY_BASE_URL: the site's address, which admins send to new students.
 """
 
 import asyncio
-import email.utils
 import hashlib
 import hmac
-import html
 import json
 import logging
 import math
 import os
 import re
 import secrets
-import smtplib
 import sqlite3
-import ssl
 import sys
 import time
 from collections import Counter, defaultdict, deque
 from contextlib import asynccontextmanager, contextmanager
-from email.message import EmailMessage
 from pathlib import Path
 from urllib.parse import quote
 
@@ -93,7 +88,6 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.gzip import GZipMiddleware
 
@@ -128,11 +122,10 @@ TRUST_PROXY = os.environ.get("ACADEMY_TRUST_PROXY", "0") == "1"
 
 SESSION_TTL = 30 * 86400          # 30 days
 MAX_BODY = 300_000                # bytes, hard cap for any request body
-RESET_TTL = 3600                  # password-reset links live 1 hour
-INVITE_TTL = 7 * 86400            # invitations (welcome links) live a week
-# pass_hash of an invited account whose student hasn't chosen a password yet:
-# no password matches it, so nobody can sign in to it until they do.
-INVITED = "!"
+TEMP_PASSWORD_TTL = 14 * 86400   # a temporary password works for 14 days, once
+# pass_hash of an account that has no usable password (created before
+# temporary passwords existed): nothing matches it.
+NO_PASSWORD = "!"
 SWEEP_INTERVAL = 3600             # expired sessions / reset tokens, hourly
 # Ceiling for the leaderboard XP snapshot. The whole curriculum is worth a few
 # thousand XP, so anything past this is a corrupt or forged blob. Clamping also
@@ -149,15 +142,10 @@ STORE_PREFIX = "1991_academy:"
 LEGACY_STORE_PREFIX = "martinium:"
 XP_KEY = STORE_PREFIX + "xp:v1"
 
-# Outbound email (password reset). Unset SMTP → links are logged, never sent
-# (fine for local dev; on a public host set these or reset emails won't arrive).
-SMTP_HOST = os.environ.get("ACADEMY_SMTP_HOST")
-SMTP_PORT = int(os.environ.get("ACADEMY_SMTP_PORT", 587))
-SMTP_USER = os.environ.get("ACADEMY_SMTP_USER")
-SMTP_PASS = os.environ.get("ACADEMY_SMTP_PASS")
-DEFAULT_FROM = "no-reply@1991.academy"
-SMTP_FROM = os.environ.get("ACADEMY_SMTP_FROM") or SMTP_USER or DEFAULT_FROM
-# Absolute origin used to build reset links in emails (e.g. https://academy.example.com).
+# The site sends no email at all: admins send each new student, from their own
+# mailbox, the site's address, a username and a temporary password (the admin
+# panel writes that message). BASE_URL is the address in it, e.g.
+# https://academy.example.com (docker-compose.yml sets it from DOMAIN).
 BASE_URL = os.environ.get("ACADEMY_BASE_URL", f"http://localhost:{PORT}").rstrip("/")
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,20}$")
@@ -165,7 +153,7 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,20}$")
 # or in a mail header: an address can never carry markup onto a page.
 _EMAIL_CHAR = r"[^@\s\x00-\x1f\x7f<>\"'`()\[\]\\,;:]"
 EMAIL_RE = re.compile(rf"^{_EMAIL_CHAR}+@{_EMAIL_CHAR}+\.{_EMAIL_CHAR}+$")
-MAX_EMAIL = 254                   # the longest address SMTP allows
+MAX_EMAIL = 254                   # the longest valid email address
 
 # The git commit this image was built from ("-dirty" = with uncommitted
 # changes). The Dockerfile writes the file from the REVISION build argument the
@@ -330,6 +318,16 @@ def init_db():
             conn.execute("ALTER TABLE users ADD COLUMN xp_week_start INTEGER NOT NULL DEFAULT 0")
             conn.execute("ALTER TABLE users ADD COLUMN week_id TEXT")
             log.info("migration: added users.xp_week_start / week_id")
+        if "must_change_password" not in cols:
+            # a temporary password (from an admin) works once, until it expires,
+            # and only to choose the account's own password
+            conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+            conn.execute("ALTER TABLE users ADD COLUMN temp_password_expires REAL")
+            log.info("migration: added users.must_change_password / temp_password_expires")
+        # accounts made before temporary passwords never got a usable
+        # password: they wait for a temporary one from an admin
+        conn.execute("UPDATE users SET must_change_password = 1 WHERE pass_hash = ? AND must_change_password = 0",
+                     (NO_PASSWORD,))
         if "is_admin" not in cols:
             conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
             log.info("migration: added users.is_admin")
@@ -438,7 +436,7 @@ def hash_password(password: str, salt: bytes) -> str:
 
 def verify_password(row, password: str) -> bool:
     """Constant-time check of a plaintext password against a user row."""
-    if row["pass_hash"] == INVITED:      # no password chosen yet: nothing matches
+    if row["pass_hash"] == NO_PASSWORD:  # no usable password: nothing matches
         burn_password_time(password)
         return False
     return hmac.compare_digest(
@@ -462,125 +460,6 @@ def burn_password_time(password: str) -> None:
 def current_week_id(now: float | None = None) -> str:
     """ISO year-week, e.g. '2026-W28'. Weeks roll over Monday 00:00 UTC."""
     return time.strftime("%G-W%V", time.gmtime(now if now is not None else time.time()))
-
-
-def smtp_login() -> bool:
-    """Sign in to the mail server with a mailbox password? Without one (no
-    ACADEMY_SMTP_USER and no _PASS) the site sends as an IP relay: the mail
-    server lets this server's address send as ACADEMY_SMTP_FROM, and no
-    password exists anywhere to leak."""
-    return bool(SMTP_USER and SMTP_PASS)
-
-
-def email_configured() -> bool:
-    if not SMTP_HOST:
-        return False
-    if smtp_login():
-        return True
-    # an IP relay: no password at all, but the sender must be named
-    return not SMTP_USER and not SMTP_PASS and SMTP_FROM != DEFAULT_FROM
-
-
-def build_message(to: str, subject: str, text: str, html_body: str | None = None) -> EmailMessage:
-    """A complete email: plain text, plus an HTML version when given (whose
-    values the caller has escaped). Date and Message-ID are set here: mail
-    servers and spam filters expect them, and smtplib adds neither."""
-    msg = EmailMessage()
-    msg["From"] = SMTP_FROM
-    msg["To"] = to
-    msg["Subject"] = subject
-    msg["Date"] = email.utils.formatdate(usegmt=True)
-    domain = email.utils.parseaddr(SMTP_FROM)[1].rpartition("@")[2] or "1991.academy"
-    msg["Message-ID"] = email.utils.make_msgid(domain=domain)
-    msg.set_content(text)
-    if html_body is not None:
-        msg.add_alternative(html_body, subtype="html")
-    return msg
-
-
-@contextmanager
-def smtp_session():
-    """A signed-in connection to the configured mailbox.
-
-    The connection is encrypted before the password is sent, and the mail
-    server's certificate is checked against the trusted authorities: an
-    unchecked one would hand the mailbox password to whoever sits in between.
-    Port 465 is encrypted from the start; any other port (587) upgrades with
-    STARTTLS. Every network step times out after 20 seconds. As an IP relay
-    (no password), the connection is encrypted and checked all the same."""
-    context = ssl.create_default_context()
-    if SMTP_PORT == 465:
-        server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20, context=context)
-    else:
-        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20)
-    with server as s:
-        if SMTP_PORT != 465:
-            s.starttls(context=context)
-        if smtp_login():
-            s.login(SMTP_USER, SMTP_PASS)
-        yield s
-
-
-def deliver(to: str, subject: str, text: str, html_body: str | None = None) -> None:
-    """Send one email now, or raise."""
-    with smtp_session() as s:
-        s.send_message(build_message(to, subject, text, html_body))
-
-
-RELAY_REFUSED = ("The mail server refused to send it without a password: the mail administrator "
-                 "must allow this server's IP address to send as the site's address (an SMTP relay).")
-
-
-def email_failure(exc: Exception) -> str:
-    """What went wrong, in words an admin can act on (no server internals)."""
-    if not smtp_login() and isinstance(
-            exc, (smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused, smtplib.SMTPDataError)):
-        return RELAY_REFUSED
-    if isinstance(exc, smtplib.SMTPRecipientsRefused):
-        return "The mail server refused this address."
-    if isinstance(exc, smtplib.SMTPAuthenticationError):
-        return "The mail server refused the site's mailbox login (ACADEMY_SMTP_USER / _PASS)."
-    if isinstance(exc, ssl.SSLCertVerificationError):
-        return "The mail server's certificate isn't trusted."
-    if isinstance(exc, (OSError, smtplib.SMTPServerDisconnected)):
-        return "The mail server couldn't be reached."
-    return "The mail server didn't accept the email."
-
-
-def deliver_all(messages: list) -> list:
-    """Send [(to, subject, text, html)] over one connection. Returns, per
-    message, None when the mail server accepted it, or what went wrong. One
-    refused address doesn't stop the others."""
-    results = []
-    try:
-        with smtp_session() as s:
-            for to, subject, text, html_body in messages:
-                try:
-                    s.send_message(build_message(to, subject, text, html_body))
-                    results.append(None)
-                    log.info("sent email to %s: %s", to, subject)
-                except (smtplib.SMTPException, OSError) as exc:
-                    log.error("SMTP send to %s failed: %s", to, exc)
-                    results.append(email_failure(exc))
-    except Exception as exc:  # noqa: BLE001 — connecting or signing in failed: none sent
-        log.error("SMTP connection failed: %s", exc)
-        reason = email_failure(exc)
-        results += [reason] * (len(messages) - len(results))
-    return results
-
-
-def send_email(to: str, subject: str, text: str, html_body: str | None = None) -> bool:
-    """Send an email, reporting success. Without email set up nothing is
-    sent; in debug mode the text (with its link) goes to the log so local
-    development stays testable, but never in production: a log must not hold
-    working sign-in links."""
-    if not email_configured():
-        if DEBUG:
-            log.warning("SMTP not configured — email to %s NOT sent. Contents:\n%s", to, text)
-        else:
-            log.warning("email to %s not sent: email isn't set up (ACADEMY_SMTP_* in .env)", to)
-        return False
-    return deliver_all([(to, subject, text, html_body)])[0] is None
 
 
 # ---------------------------------------------------------------- helpers
@@ -702,7 +581,6 @@ def failures(request: Request, bucket: str, window_s: int):
 
 
 IP_LOGIN_FAILS = 10          # wrong passwords per minute per address
-IP_TOKEN_FAILS = 20          # invalid or expired links per 10 minutes per address
 
 
 def rate_limited(request: Request, bucket: str, limit: int, window_s: int) -> bool:
@@ -717,11 +595,9 @@ def rate_limited(request: Request, bucket: str, limit: int, window_s: int) -> bo
 
 
 # Per account rather than per IP: an attacker with many addresses gets around
-# the IP limits, but not these. 20 wrong passwords in 15 minutes pause that
-# account's sign-in for 15 minutes; 3 reset emails an hour per address stop
-# anyone from flooding a student's inbox.
+# the IP limits, but not this one. 20 wrong passwords in 15 minutes pause that
+# account's sign-in for 15 minutes.
 LOGIN_FAILS, LOGIN_FAIL_WINDOW = 20, 900
-RESETS_PER_EMAIL, RESET_EMAIL_WINDOW = 3, 3600
 
 
 def account_key(kind: str, name: str) -> str:
@@ -737,7 +613,7 @@ async def lifespan(_app: FastAPI):
     await run_in_threadpool(init_db)
     await run_in_threadpool(sweep_expired)
     if not DEBUG and links_warning():
-        log.warning("%s Invitation and reset links will be useless: set DOMAIN in .env.", links_warning())
+        log.warning("%s Students would be given a useless address: set DOMAIN in .env.", links_warning())
 
     async def sweeper():
         while True:
@@ -816,7 +692,7 @@ async def unhandled_error(request: Request, exc: Exception):
 
 
 # 1991 Academy is a closed school: only its students (accounts an admin
-# invited) see anything. Without a session a visitor reaches the sign-in page
+# added) see anything. Without a session a visitor reaches the sign-in page
 # and what it needs: its scripts and styles, and the privacy policy. Lessons
 # (js/data/), course files (assets/), videos (media/) and every other page
 # need one. API endpoints check the session themselves.
@@ -904,11 +780,35 @@ async def guard(request: Request, call_next):
 # ---------------------------------------------------------------- auth
 
 
+# Temporary passwords: 12 characters in three groups, from an alphabet without
+# look-alikes (no 0/o, 1/l/i), so they survive being typed from an email.
+# About 59 bits: with the login limits, guessing one is out of the question.
+TEMP_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+
+
+def temp_password() -> str:
+    return "-".join("".join(secrets.choice(TEMP_ALPHABET) for _ in range(4)) for _ in range(3))
+
+
+def issue_temp_password(conn, uid: int) -> str:
+    """Give the account a new temporary password: it works for
+    TEMP_PASSWORD_TTL and only to choose the account's own password. Every
+    session of the account ends. Only its hash is stored; the admin sees the
+    password once. The caller commits."""
+    password = temp_password()
+    salt = secrets.token_bytes(16)
+    conn.execute(
+        "UPDATE users SET pass_hash = ?, salt = ?, must_change_password = 1, temp_password_expires = ? WHERE id = ?",
+        (hash_password(password, salt), salt.hex(), time.time() + TEMP_PASSWORD_TTL, uid),
+    )
+    conn.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
+    return password
+
+
 def create_account(conn, username: str, email: str, password: str | None = None) -> int:
-    """A new account (its id), or Invalid. There is no sign-up: admins invite
-    students, so without a password this is an invitation, which nobody can
-    sign in to until the student chooses a password with the welcome link.
-    The caller commits."""
+    """A new account (its id), or Invalid. There is no sign-up: admins add
+    students. Without a password the account has none usable yet; the caller
+    gives it a temporary one (issue_temp_password). The caller commits."""
     if not USERNAME_RE.match(username):
         raise Invalid("Username must be 3-20 characters: letters, digits, underscore.")
     if len(email) > MAX_EMAIL or not EMAIL_RE.match(email):
@@ -918,21 +818,25 @@ def create_account(conn, username: str, email: str, password: str | None = None)
     if conn.execute("SELECT 1 FROM users WHERE email = ? COLLATE NOCASE", (email,)).fetchone():
         raise Invalid(f"{email} already has an account.")
     if password is None:
-        pass_hash, salt = INVITED, ""
+        pass_hash, salt = NO_PASSWORD, ""
     else:
         raw_salt = secrets.token_bytes(16)
         pass_hash, salt = hash_password(password, raw_salt), raw_salt.hex()
     try:
         cur = conn.execute(
-            "INSERT INTO users (username, email, pass_hash, salt, created) VALUES (?, ?, ?, ?, ?)",
-            (username, email, pass_hash, salt, time.time()),
+            "INSERT INTO users (username, email, pass_hash, salt, created, must_change_password) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (username, email, pass_hash, salt, time.time(), int(password is None)),
         )
-    except sqlite3.IntegrityError:            # a concurrent invite for the same name
+    except sqlite3.IntegrityError:            # a concurrent request for the same name
         raise Invalid(f"The username {username} or {email} is taken.") from None
     return cur.lastrowid
 
 
 def _login(identifier: str, password: str):
+    """(row, session token) for a correct password; (row, None) when it is a
+    temporary password, which gives no session: it only lets the student
+    choose their own password (/api/first-password); (None, None) otherwise."""
     with db() as conn:
         row = conn.execute(
             "SELECT * FROM users WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE",
@@ -943,7 +847,13 @@ def _login(identifier: str, password: str):
             return None, None
         if not verify_password(row, password):
             return None, None
+        if row["must_change_password"]:
+            return row, None
         return row, new_session(conn, row["id"])
+
+
+def temp_expired(row) -> bool:
+    return not row["temp_password_expires"] or row["temp_password_expires"] < time.time()
 
 
 @app.post("/api/login")
@@ -971,9 +881,83 @@ async def api_login(request: Request):
         log.info("login-failed identifier=%s", identifier[:64])
         return err("Wrong credentials.", 401)
     fails.clear()
+    if token is None:            # a temporary password: no session, choose your own first
+        if temp_expired(row):
+            return err("This temporary password has expired. Ask your instructor for a new one.", 401)
+        return JSONResponse({"error": "Choose your own password to continue.", "mustChangePassword": True,
+                             "username": row["username"]}, status_code=403)
     response = JSONResponse({"user": public_user(row)})
     set_session_cookie(response, token)
     log.info("login user=%s", row["username"])
+    return response
+
+
+def _first_password(identifier: str, temporary: str, new: str):
+    """The student's own password, set with the temporary one: (user row,
+    session token), or a reason it can't be. Checked and changed in one
+    write, so one temporary password can't be used twice."""
+    salt = secrets.token_bytes(16)
+    new_hash = hash_password(new, salt)          # the slow part, before taking the write lock
+    with db() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE",
+            (identifier, identifier),
+        ).fetchone()
+        if row is None:
+            burn_password_time(temporary)
+            return None, "wrong"
+        if not verify_password(row, temporary):
+            return None, "wrong"
+        if not row["must_change_password"]:
+            return None, "wrong"                  # not a temporary password (any more)
+        if temp_expired(row):
+            return None, "expired"
+        if hmac.compare_digest(new, temporary):
+            return None, "same"
+        changed = conn.execute(
+            "UPDATE users SET pass_hash = ?, salt = ?, must_change_password = 0, temp_password_expires = NULL "
+            "WHERE id = ? AND must_change_password = 1 AND pass_hash = ?",
+            (new_hash, salt.hex(), row["id"], row["pass_hash"]),
+        ).rowcount
+        if not changed:                           # a second submission won the race
+            conn.rollback()
+            return None, "wrong"
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],))
+        conn.commit()
+        session = new_session(conn, row["id"])
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (row["id"],)).fetchone()
+        return user, session
+
+
+@app.post("/api/first-password")
+async def api_first_password(request: Request):
+    """Sign in with a temporary password and choose one's own, in one step."""
+    ip_fails, _ = failures(request, "login-fail", 60)
+    if len(ip_fails) >= IP_LOGIN_FAILS:
+        return err("Too many login attempts — wait a minute.", 429)
+    body = await json_body(request)
+    if body is None:
+        return err("invalid request body")
+    identifier = str(body.get("identifier", "")).strip()
+    temporary = str(body.get("password", ""))
+    new = str(body.get("newPassword", ""))
+    if len(new) < 8:
+        return err("Password must be at least 8 characters.")
+    fails, now = _recent(account_key("login-fail", identifier), LOGIN_FAIL_WINDOW)
+    if len(fails) >= LOGIN_FAILS:
+        return err("Too many wrong passwords for this account — wait 15 minutes.", 429)
+    user, outcome = await run_in_threadpool(_first_password, identifier, temporary, new)
+    if user is None:
+        if outcome == "wrong":
+            fails.append(now)
+            ip_fails.append(now)
+            return err("Wrong credentials.", 401)
+        if outcome == "expired":
+            return err("This temporary password has expired. Ask your instructor for a new one.", 401)
+        return err("Choose a password different from the temporary one.")
+    log.info("first-password user=%s", user["username"])
+    response = JSONResponse({"user": public_user(user)})
+    set_session_cookie(response, outcome)
     return response
 
 
@@ -1224,207 +1208,19 @@ async def api_change_password(request: Request):
     return {"ok": True}
 
 
-def new_reset_link(conn, user_id: int, welcome: bool = False) -> str:
-    """A fresh link to set the account's password, replacing any older one:
-    a one-hour password reset, or with welcome=True a week-long invitation
-    (account.html?welcome=…). Only the token's hash is stored. The caller
-    commits."""
-    token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    now = time.time()
-    conn.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
-    conn.execute(
-        "INSERT INTO password_resets (token_hash, user_id, created, expires) "
-        "VALUES (?, ?, ?, ?)",
-        (token_hash, user_id, now, now + (INVITE_TTL if welcome else RESET_TTL)),
-    )
-    return f"{BASE_URL}/account.html?{'welcome' if welcome else 'reset'}={token}"
-
-
-SUPPORT_EMAIL = "ai.1991@mil.am"
-
-
-def account_email(kind: str, username: str, link: str) -> tuple[str, str, str]:
-    """(subject, text, html) of an invitation (kind="invite") or a password
-    reset ("reset"), in English and Armenian: the student's language isn't
-    known yet. Every value in the HTML is escaped."""
-    if kind == "invite":
-        subject = "Your 1991 Academy account · Քո 1991 Academy հաշիվը"
-        parts = [
-            ("You've been invited to 1991 Academy, the online school of 1991 Unit.",
-             "Choose your password here. The link works once, for 7 days:",
-             "Choose your password",
-             "If you weren't expecting this, you can ignore this email."),
-            ("Քեզ հրավիրել են 1991 Academy՝ 1991 Ստորաբաժանման առցանց դպրոց։",
-             "Ընտրի՛ր գաղտնաբառդ այստեղ։ Հղումը գործում է մեկ անգամ, 7 օր՝",
-             "Ընտրել գաղտնաբառ",
-             "Եթե սա չէիր սպասում, պարզապես անտեսի՛ր այս նամակը։"),
-        ]
-    else:
-        subject = "Set a new 1991 Academy password · Նոր գաղտնաբառ 1991 Academy-ում"
-        parts = [
-            ("A new password was requested for your 1991 Academy account.",
-             "Choose a new password here. The link works once, for 1 hour:",
-             "Choose a new password",
-             "If this wasn't you, ignore this email: your password stays the same."),
-            ("Քո 1991 Academy հաշվի համար նոր գաղտնաբառ է խնդրվել։",
-             "Ընտրի՛ր նոր գաղտնաբառ այստեղ։ Հղումը գործում է մեկ անգամ, 1 ժամ՝",
-             "Ընտրել նոր գաղտնաբառ",
-             "Եթե դա դու չէիր, անտեսի՛ր այս նամակը. գաղտնաբառդ չի փոխվի։"),
-        ]
-    user_label = ("Your username", "Քո օգտանունը")
-    help_line = (f"Questions? Write to {SUPPORT_EMAIL}.", f"Հարցերի համար գրի՛ր {SUPPORT_EMAIL} հասցեին։")
-    text = "\n\n---\n\n".join(
-        f"{intro}\n\n{user_label[i]}: {username}\n\n{lead}\n{link}\n\n{ignore}\n{help_line[i]}"
-        for i, (intro, lead, _button, ignore) in enumerate(parts)
-    )
-    e = html.escape
-    blocks = "".join(
-        f'<div lang="{lang}" style="padding:24px 0;{"border-top:1px solid #e3e6ee;" if i else ""}">'
-        f"<p style=\"margin:0 0 14px\">{e(intro)}</p>"
-        f'<p style="margin:0 0 18px">{e(user_label[i])}: <strong>{e(username)}</strong></p>'
-        f'<p style="margin:0 0 22px"><a href="{e(link, quote=True)}" style="display:inline-block;padding:12px 22px;'
-        f'border-radius:10px;background:#6366f1;color:#ffffff;text-decoration:none;font-weight:600">{e(button)}</a></p>'
-        f'<p style="margin:0 0 6px;font-size:13px;color:#55607a">{e(lead)}<br>'
-        f'<a href="{e(link, quote=True)}" style="color:#4f46e5;word-break:break-all">{e(link)}</a></p>'
-        f'<p style="margin:14px 0 0;font-size:13px;color:#55607a">{e(ignore)} {e(help_line[i])}</p></div>'
-        for i, ((intro, lead, button, ignore), lang) in enumerate(zip(parts, ("en", "hy"), strict=True))
-    )
-    page = (
-        '<!doctype html><html><body style="margin:0;padding:24px;background:#f6f7fb;'
-        'font-family:-apple-system,Segoe UI,Roboto,Noto Sans Armenian,Arial,sans-serif;color:#101527;line-height:1.5">'
-        '<div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;padding:8px 28px">'
-        '<p style="margin:24px 0 0;font-size:18px;font-weight:700">1991 Academy</p>'
-        f"{blocks}</div></body></html>"
-    )
-    return subject, text, page
+def site_address() -> str:
+    """Where students sign in: the address in the message an admin sends."""
+    return f"{BASE_URL}/account.html"
 
 
 def links_warning() -> str | None:
-    """Links that only work on this computer: a server whose ACADEMY_BASE_URL
-    (DOMAIN in .env) isn't set would email students useless links."""
+    """An address that only works on this computer: a server whose
+    ACADEMY_BASE_URL (DOMAIN in .env) isn't set would give students a useless
+    address."""
     host = BASE_URL.split("://", 1)[-1].split("/", 1)[0].split(":")[0]
     if host in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
-        return f"These links start with {BASE_URL}, which works only on the computer running the site."
+        return f"This address starts with {BASE_URL}, which works only on the computer running the site."
     return None
-
-
-def _forgot_password(email: str):
-    """Returns the reset link to send, or None when the email is unknown."""
-    with db() as conn:
-        row = conn.execute(
-            "SELECT * FROM users WHERE email = ? COLLATE NOCASE", (email,)
-        ).fetchone()
-        if row is None:
-            return None
-        link = new_reset_link(conn, row["id"])
-        conn.commit()
-    return row["username"], link
-
-
-@app.post("/api/forgot-password")
-async def api_forgot_password(request: Request):
-    if rate_limited(request, "forgot", 10, 600):
-        return err("Too many reset requests — try again later.", 429)
-    body = await json_body(request)
-    if body is None:
-        return err("invalid request body")
-    email = str(body.get("email", "")).strip().lower()
-    # ALWAYS return the same response — never reveal whether an email is registered.
-    if not EMAIL_RE.match(email):
-        return JSONResponse({"ok": True})
-    sent, now = _recent(account_key("reset-email", email), RESET_EMAIL_WINDOW)
-    if len(sent) >= RESETS_PER_EMAIL:
-        log.warning("reset-email-paused email=%s", email)
-        return JSONResponse({"ok": True})
-    sent.append(now)
-    found = await run_in_threadpool(_forgot_password, email)
-    if not found:
-        return JSONResponse({"ok": True})
-    # Hand the SMTP round-trip to a background task: awaiting it here would make
-    # a registered address answer seconds slower than an unregistered one, which
-    # is the email-enumeration leak the generic response exists to prevent.
-    return JSONResponse({"ok": True}, background=BackgroundTask(
-        send_email, email, *account_email("reset", *found)))
-
-
-def _reset_password(token: str, new: str):
-    """(user row, session token or None), or None for a bad link. A student
-    accepting an invitation is signed in at once; after a password reset every
-    session ends and the owner signs in again."""
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    salt = secrets.token_bytes(16)
-    new_hash = hash_password(new, salt)          # the slow part, before taking the write lock
-    with db() as conn:
-        # Using the link and checking it are one statement: of two
-        # submissions arriving together, only one gets the row.
-        row = conn.execute(
-            "DELETE FROM password_resets WHERE token_hash = ? AND expires >= ? RETURNING user_id",
-            (token_hash, time.time()),
-        ).fetchone()
-        if row is None:
-            conn.rollback()
-            return None
-        uid = row["user_id"]
-        was_invited = conn.execute("SELECT pass_hash FROM users WHERE id = ?", (uid,)).fetchone()[0] == INVITED
-        conn.execute("UPDATE users SET pass_hash = ?, salt = ? WHERE id = ?", (new_hash, salt.hex(), uid))
-        conn.execute("DELETE FROM password_resets WHERE user_id = ?", (uid,))
-        conn.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))  # force re-login
-        conn.commit()
-        session = new_session(conn, uid) if was_invited else None
-        user = conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
-        return user, session
-
-
-def _welcome(token: str):
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    with db() as conn:
-        row = conn.execute(
-            "SELECT u.username, r.expires FROM password_resets r JOIN users u ON u.id = r.user_id "
-            "WHERE r.token_hash = ?", (token_hash,)
-        ).fetchone()
-    return row["username"] if row and row["expires"] >= time.time() else None
-
-
-@app.post("/api/welcome")
-async def api_welcome(request: Request):
-    """Whose invitation (or reset) link this is: the page shows the username."""
-    bad, now = failures(request, "token-fail", 600)
-    if len(bad) >= IP_TOKEN_FAILS:
-        return err("Too many attempts — try again later.", 429)
-    body = await json_body(request)
-    if body is None:
-        return err("invalid request body")
-    username = await run_in_threadpool(_welcome, str(body.get("token", "")))
-    if username is None:
-        bad.append(now)
-        return err("This link is invalid or has expired. Ask for a new one.", 400)
-    return {"username": username}
-
-
-@app.post("/api/reset-password")
-async def api_reset_password(request: Request):
-    bad, now = failures(request, "token-fail", 600)
-    if len(bad) >= IP_TOKEN_FAILS:
-        return err("Too many attempts — try again later.", 429)
-    body = await json_body(request)
-    if body is None:
-        return err("invalid request body")
-    token = str(body.get("token", ""))
-    new = str(body.get("password", ""))
-    if len(new) < 8:
-        return err("Password must be at least 8 characters.")
-    out = await run_in_threadpool(_reset_password, token, new)
-    if out is None:
-        bad.append(now)
-        return err("This reset link is invalid or has expired.", 400)
-    user, session = out
-    log.info("%s user=%s", "welcome" if session else "reset-password", user["username"])
-    if session is None:
-        return {"ok": True}
-    response = JSONResponse({"ok": True, "user": public_user(user)})
-    set_session_cookie(response, session)
-    return response
 
 
 def delete_user_rows(conn, uid: int):
@@ -1581,7 +1377,7 @@ def learner_summary(row, wk: str) -> dict:
         "weekXp": week_xp(row, wk),
         "optIn": bool(row["leaderboard_opt_in"]),
         "admin": bool(row["is_admin"]),
-        "invited": row["pass_hash"] == INVITED,    # hasn't chosen a password yet
+        "new": bool(row["must_change_password"]),   # hasn't chosen their own password yet
     }
 
 
@@ -1618,7 +1414,7 @@ def _overview(conn, _admin):
 
     return {
         "learners": one("SELECT COUNT(*) FROM users"),
-        "invited": one("SELECT COUNT(*) FROM users WHERE pass_hash = ?", INVITED),
+        "new": one("SELECT COUNT(*) FROM users WHERE must_change_password = 1"),
         "admins": one("SELECT COUNT(*) FROM users WHERE is_admin = 1"),
         "new7": one("SELECT COUNT(*) FROM users WHERE created >= ?", now - 7 * day),
         "new30": one("SELECT COUNT(*) FROM users WHERE created >= ?", now - 30 * day),
@@ -1709,44 +1505,28 @@ async def api_admin_user(request: Request, username: str):
     return await admin_call(request, _learner, username)
 
 
-def _learner_reset_link(conn, admin, username: str):
-    """A reset link, or for a student who hasn't accepted the invitation yet,
-    a new invitation."""
+def _learner_temp_password(conn, admin, username: str):
+    """A new temporary password for a student who forgot theirs (or never
+    used the first one). Not for admins: one admin could take over another's
+    account (an admin's password is reset on the server: make password)."""
     row = find_learner(conn, username)
-    invited = row["pass_hash"] == INVITED
-    link = new_reset_link(conn, row["id"], welcome=invited)
-    audit(conn, admin["username"], "invite" if invited else "reset-link", row["username"])
+    if row["is_admin"]:
+        raise AdminError("An admin's password is reset on the server (make password NAME=…), not here.", 409)
+    password = issue_temp_password(conn, row["id"])
+    audit(conn, admin["username"], "temp-password", row["username"])
     conn.commit()
-    return row["email"], link, row["username"], invited
+    return {"username": row["username"], "email": row["email"], "password": password,
+            "days": TEMP_PASSWORD_TTL // 86400, "site": site_address(), "warning": links_warning()}
 
 
-@app.post("/api/admin/users/{username}/reset-link")
-async def api_admin_reset_link(request: Request, username: str):
+@app.post("/api/admin/users/{username}/temp-password")
+async def api_admin_temp_password(request: Request, username: str):
     if denied := await admin_gate(request):
         return denied
-    sent, now = _recent(account_key("resend", username), RESENDS_WINDOW)
-    if len(sent) >= RESENDS_PER_STUDENT:
-        return err("This student was sent several links in the last hour. Wait before sending another.", 429)
-    out = await admin_call(request, _learner_reset_link, username)
-    if not isinstance(out, JSONResponse):
-        sent.append(now)
-    if isinstance(out, JSONResponse):
-        return out
-    email, link, username, invited = out
-    warning = links_warning()
-    if not email_configured():
-        # Nothing can send it, so the admin passes it on. With email set up,
-        # the link goes only to the learner: an admin can't take an account.
-        return {"sent": False, "link": link, "invite": invited, "warning": warning}
-    # Sent while the admin waits, so the panel says what really happened.
-    error = (await run_in_threadpool(
-        deliver_all, [(email, *account_email("invite" if invited else "reset", username, link))]))[0]
-    if error:
-        return JSONResponse({"sent": False, "email": email, "invite": invited, "error": error}, status_code=502)
-    return {"sent": True, "email": email, "invite": invited, "warning": warning}
+    return await admin_call(request, _learner_temp_password, username)
 
 
-MAX_INVITES = 200   # per request
+MAX_NEW_STUDENTS = 200   # per request
 
 
 def username_from(conn, email: str) -> str:
@@ -1760,7 +1540,7 @@ def username_from(conn, email: str) -> str:
     return name
 
 
-def _invite(conn, admin, students: list):
+def _add_students(conn, admin, students: list):
     results = []
     for s in students:
         email = s["email"]
@@ -1770,40 +1550,27 @@ def _invite(conn, admin, students: list):
         except Invalid as e:
             results.append({"email": email, "username": s["username"], "error": str(e)})
             continue
-        link = new_reset_link(conn, uid, welcome=True)
-        audit(conn, admin["username"], "invite", username)
-        results.append({"email": email, "username": username, "link": link})
+        password = issue_temp_password(conn, uid)
+        audit(conn, admin["username"], "add-student", username)
+        results.append({"email": email, "username": username, "password": password})
     conn.commit()
     return results
 
 
-RESENDS_PER_STUDENT, RESENDS_WINDOW = 5, 3600        # links an admin sends one student
-INVITE_EMAILS_PER_HOUR = 300                          # invitation emails per admin
-
-
-def send_invitations(invited: list) -> list:
-    """[(email, username, link)] -> per invitation None (the mail server took
-    it) or what went wrong."""
-    return deliver_all([(email, *account_email("invite", username, link)) for email, username, link in invited])
-
-
-def _admin_name(conn, admin):
-    return admin["username"]
-
-
-@app.post("/api/admin/invites")
-async def api_admin_invites(request: Request):
-    """Accounts for new students, each with a week-long link to choose a
-    password: emailed when email is set up, otherwise returned for the admin
-    to hand out."""
+@app.post("/api/admin/students")
+async def api_admin_students(request: Request):
+    """Accounts for new students, each with a temporary password that works
+    for TEMP_PASSWORD_TTL, only to choose their own. The site sends no email:
+    the admin sends each student the address, username and password (the
+    panel writes the message). The passwords are shown this once."""
     if denied := await admin_gate(request):
         return denied
     body = await json_body(request)
     raw = body.get("students") if body else None
     if not isinstance(raw, list) or not raw:
         return err("invalid request body")
-    if len(raw) > MAX_INVITES:
-        return err(f"At most {MAX_INVITES} students at a time.")
+    if len(raw) > MAX_NEW_STUDENTS:
+        return err(f"At most {MAX_NEW_STUDENTS} students at a time.")
     students = []
     for item in raw:
         if not isinstance(item, dict):
@@ -1812,33 +1579,11 @@ async def api_admin_invites(request: Request):
             "email": str(item.get("email", "")).strip().lower(),
             "username": str(item.get("username") or "").strip(),
         })
-    admin = await admin_call(request, _admin_name)
-    if isinstance(admin, JSONResponse):
-        return admin
-    # one admin account can't turn the school's mailbox into a spam cannon
-    budget, now = _recent(account_key("invite-emails", admin), 3600)
-    if email_configured() and len(budget) + len(students) > INVITE_EMAILS_PER_HOUR:
-        return err(f"One admin can send at most {INVITE_EMAILS_PER_HOUR} invitations an hour. "
-                   "Invite the rest later.", 429)
-    results = await admin_call(request, _invite, students)
+    results = await admin_call(request, _add_students, students)
     if isinstance(results, JSONResponse):
         return results
-    warning = links_warning()
-    if not email_configured():
-        return {"sent": False, "results": results, "warning": warning}
-    invited = [r for r in results if "link" in r]
-    budget.extend([now] * len(invited))
-    # Sent now, while the admin waits (one connection for all of them), so the
-    # panel shows who really got an email. The accounts exist either way: a
-    # failed one can be sent again with "Resend the invitation".
-    outcomes = await run_in_threadpool(send_invitations, [(r["email"], r["username"], r["link"]) for r in invited])
-    for r, failure in zip(invited, outcomes, strict=True):
-        del r["link"]                   # the link goes only to the student
-        if failure:
-            r["emailError"] = failure
-        else:
-            r["emailed"] = True
-    return {"sent": True, "results": results, "warning": warning}
+    return {"results": results, "days": TEMP_PASSWORD_TTL // 86400, "site": site_address(),
+            "warning": links_warning()}
 
 
 def _learner_sign_out(conn, admin, username: str):
@@ -2263,53 +2008,30 @@ async def api_content_js(request: Request):
 # ------------------------------------------------------- command line (admins)
 
 
-def email_test(to: str) -> int:
-    """`make email-test TO=…`: send one email now and say exactly what failed."""
-    if not email_configured():
-        print("Email isn't set up. In .env: ACADEMY_SMTP_HOST and ACADEMY_SMTP_FROM (no password: the mail\n"
-              "server must allow this server's IP address), or also ACADEMY_SMTP_USER and _PASS. Then make restart.",
-              file=sys.stderr)
-        return 1
-    print(f"Sending a test email from {SMTP_FROM} to {to} through {SMTP_HOST}:{SMTP_PORT} ...")
-    print(f"Signing in as {SMTP_USER}" if smtp_login() else
-          "No password: sending as an IP relay (the mail server must allow this server's address)")
-    print(f"Links in invitations will start with {BASE_URL}")
-    if links_warning():
-        print("WARNING: " + links_warning() + " Set DOMAIN in .env on the server.")
-    try:
-        deliver(to, "1991 Academy: test email",
-                "This is a test from 1991 Academy. Email works: invitations and password resets\n"
-                "will be sent from this address.")
-    except ssl.SSLCertVerificationError as e:
-        print(f"FAILED: the mail server's certificate isn't trusted ({getattr(e, 'verify_message', None) or e}). Ask the mail "
-              "administrator for the right server name, or for a certificate from a public authority.",
-              file=sys.stderr)
-        return 1
-    except smtplib.SMTPAuthenticationError:
-        print("FAILED: the mail server refused the user name or password.", file=sys.stderr)
-        return 1
-    except (smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused, smtplib.SMTPDataError) as e:
-        if not smtp_login():
-            print("FAILED: " + RELAY_REFUSED, file=sys.stderr)
-        else:
-            print(f"FAILED: the mail server refused the email ({type(e).__name__}).", file=sys.stderr)
-        return 1
-    except (OSError, smtplib.SMTPException) as e:
-        print(f"FAILED: {type(e).__name__}: {e}", file=sys.stderr)
-        return 1
-    print("Sent. Check that it arrived (and isn't in spam).")
-    return 0
-
-
 def cli(args: list) -> int:
     """python app.py admin add NAME [EMAIL] | admin remove NAME | admin list
+    python app.py password NAME
 
-    With EMAIL, a NAME that has no account yet gets one (an invitation): how
-    the first admin starts, since there is no sign-up."""
+    With EMAIL, a NAME that has no account yet gets one, with a temporary
+    password: how the first admin starts, since there is no sign-up.
+    `password NAME` gives any account a new temporary password: the way back
+    in for an admin who forgot theirs (the site sends no email)."""
     usage = ("usage: python app.py admin add NAME [EMAIL] | admin remove NAME | admin list\n"
-             "       python app.py email-test ADDRESS")
-    if args[:1] == ["email-test"] and len(args) == 2:
-        return email_test(args[1])
+             "       python app.py password NAME")
+    if args[:1] == ["password"] and len(args) == 2:
+        init_db()
+        with db() as conn:
+            row = conn.execute("SELECT id, username FROM users WHERE username = ? COLLATE NOCASE",
+                               (args[1],)).fetchone()
+            if row is None:
+                print(f"No account named {args[1]!r}.", file=sys.stderr)
+                return 1
+            password = issue_temp_password(conn, row["id"])
+            audit(conn, "(server)", "temp-password", row["username"])
+            conn.commit()
+        print(f"Temporary password for {row['username']}: {password}\n"
+              f"It works for {TEMP_PASSWORD_TTL // 86400} days, once, to choose their own password at {site_address()}")
+        return 0
     if args[:1] != ["admin"] or len(args) < 2:
         print(usage, file=sys.stderr)
         return 2
@@ -2330,14 +2052,14 @@ def cli(args: list) -> int:
         row = conn.execute(
             "SELECT id, username FROM users WHERE username = ? COLLATE NOCASE", (args[2],)
         ).fetchone()
-        welcome = None
+        temporary = None
         if row is None and len(args) == 4:
             try:
                 uid = create_account(conn, args[2], args[3].strip().lower())
             except Invalid as e:
                 print(e, file=sys.stderr)
                 return 1
-            welcome = new_reset_link(conn, uid, welcome=True)
+            temporary = issue_temp_password(conn, uid)
             row = conn.execute("SELECT id, username FROM users WHERE id = ?", (uid,)).fetchone()
         if row is None:
             print(f"No account named {args[2]!r}. To create it, give an email too: "
@@ -2348,8 +2070,9 @@ def cli(args: list) -> int:
         audit(conn, "(server)", "admin-add" if add else "admin-remove", row["username"])
         conn.commit()
     print(f"{row['username']} is {'now an admin: sign in and open /admin.html' if add else 'no longer an admin'}.")
-    if welcome:
-        print(f"The account is new: open this link to choose its password (valid for 7 days):\n{welcome}")
+    if temporary:
+        print(f"The account is new. Temporary password: {temporary}\n"
+              f"Sign in at {site_address()} within {TEMP_PASSWORD_TTL // 86400} days and choose your own.")
     return 0
 
 
@@ -2370,7 +2093,6 @@ async def api_health():
         "ok": True,
         "uptime_s": int(time.time() - STARTED_AT),
         "debug": DEBUG,
-        "email": email_configured(),
         "secure_cookies": SECURE_COOKIES,
         "trust_proxy": TRUST_PROXY,
         "week": current_week_id(),

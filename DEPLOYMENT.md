@@ -18,7 +18,7 @@ development: `make dev` (or `.venv/bin/python app.py`).
 | `ACADEMY_DEBUG` | `1` | `0` | `0` enables asset caching and hides the API docs |
 | `ACADEMY_SECURE_COOKIES` | on unless `ACADEMY_DEBUG=1` | on | Marks the session cookie `Secure` (HTTPS only) and sends HSTS |
 | `ACADEMY_TRUST_PROXY` | `0` | `1` | **`1` when, and only when, a trusted reverse proxy sets `X-Forwarded-For`.** See §3 |
-| `ACADEMY_BASE_URL` | `http://localhost:8735` | `https://$DOMAIN` | Public origin used to build password-reset links |
+| `ACADEMY_BASE_URL` | `http://localhost:8735` | `https://$DOMAIN` | The site's address, in the message admins send new students |
 
 Where each one is set:
 
@@ -27,16 +27,12 @@ Where each one is set:
 - **`docker-compose.local.yml`**: used instead when `DOMAIN` is empty (your own
   computer, plain http). It turns `ACADEMY_SECURE_COOKIES` and
   `ACADEMY_TRUST_PROXY` off, and sets `ACADEMY_BASE_URL=http://localhost:8735`.
-- **`.env`** (from `.env.example`, never committed): `DOMAIN`, `PROXY` and the
-  SMTP settings. Values set by the compose files take precedence over `.env`,
+- **`.env`** (from `.env.example`, never committed): `DOMAIN`, `PROXY` and
+  `MEDIA_DIR`. Values set by the compose files take precedence over `.env`,
   so a stray line there can't switch a production setting off.
 
-Password reset needs SMTP. With these unset, the reset link is written to the
-log (`make logs`) instead of emailed:
-
-| Variable | Meaning |
-|----------|---------|
-| `ACADEMY_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` / `_FROM` | Outbound mail relay (STARTTLS). `_PORT` defaults to 587 |
+The site sends no email and has no mail settings: admins send new students
+their username and temporary password from their own mailbox.
 
 ## 2. What runs where
 
@@ -49,7 +45,7 @@ volume academy_caddy-data     the HTTPS certificates and Caddy's ACME account
 volume academy_caddy-config   Caddy's saved config
 
 this folder (the git clone)
-├── .env                      DOMAIN, PROXY, SMTP. Gitignored
+├── .env                      DOMAIN, PROXY, MEDIA_DIR. Gitignored
 └── backups/                  copies made by `make backup`. Gitignored
 ```
 
@@ -179,8 +175,12 @@ languages and its date.
 
 In `app.py`:
 
-- **A closed school:** no sign-up; admins invite students (week-long links
-  to choose a password, stored hashed). Without a session only the sign-in
+- **A closed school:** no sign-up and no email; admins add students, each
+  with a temporary password (12 characters, about 59 bits, stored only
+  hashed, shown to the admin once). It works for 14 days and only to choose
+  the student's own password: signing in with it gives no session, and it
+  is checked and replaced in one write, so it can't be used twice. Admins
+  can't issue one for another admin (`make password` on the server can). Without a session only the sign-in
   page, its scripts and styles, and the privacy policy are served: pages
   redirect to sign-in, lessons (`js/data/`), course files, videos and the
   leaderboard answer 401, and Caddy checks the session (`/api/auth-check`)
@@ -188,14 +188,7 @@ In `app.py`:
 - Limits that count **failures only**, so a classroom behind one address
   is never locked out: 10 wrong passwords a minute per address; 20 wrong
   passwords in 15 minutes per account (from any address: pauses that
-  account's sign-in for 15 minutes); 20 invalid or expired links per 10
-  minutes per address. Reset emails: 3 an hour per address, 10 requests per
-  10 minutes per address. Invitation emails: 300 an hour per admin; links
-  sent to one student: 5 an hour.
-- Invitation and reset links: 32 random bytes, stored only as a SHA-256
-  hash, one live link per account, used up in the same statement that checks
-  them (two submissions at once can't both succeed), expiring after 7 days
-  (invitations) or 1 hour (resets). Never written to the production log.
+  account's sign-in for 15 minutes). They cover temporary passwords too.
 - Admin endpoints check the admin's rights before they read the request,
   so others learn nothing about what they would accept.
 - 300 KB request-body cap.
@@ -213,8 +206,7 @@ In `app.py`:
   only the server's command line sets (`make admin NAME=…`); every admin
   request re-checks it, and every change is written to `admin_log`. Lesson
   HTML from the panel is sanitized with an allowlist (`nh3`) before it is
-  stored, and admins can't delete admin accounts or see a reset link when
-  email is set up.
+  stored, and admins can't delete admin accounts.
 - **Cross-site request forgery:** every API write must be sent as JSON (else
   415), which a form on another site can't do; there is no CORS.
 - **Static serving is an allowlist**: only `/`, the seven page files,

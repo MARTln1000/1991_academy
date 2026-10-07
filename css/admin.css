@@ -219,3 +219,23 @@ select.admin-input { max-width: 100%; }
   .admin-facts { grid-template-columns: minmax(0, 1fr); }
   .admin-facts dd { margin-bottom: 6px; }
 }
+
+/* ---------- new students' temporary passwords ---------- */
+.admin-temps { display: grid; gap: 8px; margin: 12px 0; }
+.admin-temp {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+.admin-temp > div { overflow-wrap: anywhere; }
+.admin-temp-pw { font-family: var(--font-mono); font-size: 1rem; letter-spacing: 0.04em; user-select: all; }
+.admin-temp .btn { padding: 7px 12px; font-size: 0.84rem; }
+@media (max-width: 760px) {
+  .admin-temp { grid-template-columns: minmax(0, 1fr) auto; }
+  .admin-temp > div:first-child { grid-column: 1 / -1; }
+}

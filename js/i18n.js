@@ -274,6 +274,14 @@ const I18N = (() => {
     "This link has expired": "Այս հղումը ժամկետանց է",
     "Reset links work for one hour, once. Ask for a new one on the sign-in page.": "Վերականգնման հղումը գործում է մեկ ժամ և մեկ անգամ։ Նորը խնդրի՛ր մուտքի էջում։",
     "Password saved": "Գաղտնաբառը պահպանվեց",
+    /* temporary passwords (from an admin) */
+    "Choose your own password": "Ընտրի՛ր քո սեփական գաղտնաբառը",
+    "You signed in with a temporary password. Choose your own to continue: you'll sign in with it from now on.": "Մուտք գործեցիր ժամանակավոր գաղտնաբառով։ Շարունակելու համար ընտրի՛ր քո սեփականը. այսուհետ մուտք կգործես դրանով։",
+    "Not the temporary password": "Ժամանակավոր գաղտնաբառից տարբեր",
+    "Forgot your password? Your instructor can give you a new temporary password.": "Մոռացե՞լ ես գաղտնաբառդ։ Դասավանդողդ կարող է քեզ տալ նոր ժամանակավոր գաղտնաբառ։",
+    "This temporary password has expired. Ask your instructor for a new one.": "Այս ժամանակավոր գաղտնաբառը ժամկետանց է։ Նորը խնդրի՛ր դասավանդողիդ։",
+    "Choose a password different from the temporary one.": "Ընտրի՛ր ժամանակավորից տարբեր գաղտնաբառ։",
+    "Choose your own password to continue.": "Շարունակելու համար ընտրի՛ր քո սեփական գաղտնաբառը։",
     /* messages from the server */
     "Wrong credentials.": "Սխալ օգտանուն կամ գաղտնաբառ։",
     "This reset link is invalid or has expired.": "Այս հղումն անվավեր է կամ ժամկետանց։",

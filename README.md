@@ -13,7 +13,7 @@ A personal learning platform: seven structured tracks — **Mathematics for ML, 
 - **Practice** — spaced repetition: quiz questions from completed lessons become review cards, due just before you'd forget them.
 - **Achievements, streak, daily goal ring** — loss-aversion mechanics that make skipping a day feel expensive.
 
-It is **a closed school**: only the students 1991 Unit invites can sign in. Admins invite them in the admin panel, and each student gets a link to choose a password. Without signing in, only the sign-in page and the privacy policy open; lessons, course files and videos all need an account. Progress syncs to the account (SQLite), so a student can continue on any device.
+It is **a closed school**: only the students 1991 Unit adds can sign in. Admins add them in the admin panel and send each one a temporary password from their own email (the site sends no email); students choose their own password at their first sign-in. Without signing in, only the sign-in page and the privacy policy open; lessons, course files and videos all need an account. Progress syncs to the account (SQLite), so a student can continue on any device.
 
 No build step; the frontend is pure dependency-free HTML/CSS/JS. The backend is a single FastAPI app (`app.py`) — the one place dependencies live (`requirements.txt` + `.venv`).
 
@@ -79,28 +79,17 @@ Or just open `index.html` / serve statically with `python3 -m http.server` — t
 
 ### Account management
 
-There is no sign-up: admins invite students (see "Admin panel"). Signed in,
-the account page offers **change password**, **forgot/reset password**
-(emailed link) and **delete account** (GDPR-clean cascade).
+There is no sign-up, and **the site sends no email**. An admin adds each
+student in the admin panel; the site gives them a **temporary password**,
+shown to the admin once, with a ready message (English and Armenian: the
+site's address, the username, the password) that the admin sends from their
+own mailbox. The temporary password works for 14 days and only to choose the
+student's own password, at their first sign-in. A student who forgets their
+password asks an instructor, who gives them a new temporary one (Learners →
+the student → New temporary password). Signed in, the account page offers
+**change password** and **delete account** (GDPR-clean cascade).
 
-**Email** (invitations and password resets) is sent through the mail server
-in `.env`. The recommended setup has **no password anywhere**: the mail
-administrator allows the site's server (its IP address) to send as
-`ai.1991@mil.am` (an "SMTP relay"), and `.env` names only the server and the
-sender: `ACADEMY_SMTP_HOST=mail.mil.am`, `ACADEMY_SMTP_PORT=25`,
-`ACADEMY_SMTP_FROM="1991 Academy <ai.1991@mil.am>"`. Only if the mail server
-insists on a login, add `ACADEMY_SMTP_USER` / `_PASS` for a mailbox made just
-for the site (port 587), never the support inbox's own password. Either
-way the connection is encrypted and the mail server's certificate is
-checked, so nothing can be intercepted. After `make restart`, `make email-test TO=you@example.com` sends
-one test email and says exactly what failed, if anything (and warns if links
-would point to `localhost`: set `DOMAIN`). Invitations are sent while you
-wait, and the panel lists who got an email and who didn't, and why; a
-failed one is sent again with "Resend the invitation". The emails are in
-English and Armenian, plain text plus HTML. Without these settings nothing is
-emailed: the admin panel shows invitation and reset links to hand out, and a
-"forgot password" request sends nothing (the panel's "Send a password-reset
-link" gives the link instead). Links never go to the production log. The
+The
 leaderboard has **This week / All time** tabs — the weekly league resets every
 ISO week (server rebases each user's weekly baseline on their first sync of a
 new week).
@@ -178,8 +167,7 @@ This part is for whoever puts the site on the internet.
 - A domain, and access to its DNS settings.
 - Disk: 20 GB for the site; add 80–100 GB if the lesson videos are hosted
   here (see "Lesson videos").
-- Optional, from the site owner: SMTP credentials for password-reset emails,
-  and a database export (`academy-export.db.gz`, see step 6) if existing
+- Optional, from the site owner: a database export (`academy-export.db.gz`, see step 6) if existing
   accounts should move over.
 
 **Steps:**
@@ -202,8 +190,7 @@ This part is for whoever puts the site on the internet.
    git clone https://github.com/MARTln1000/1991_academy.git && cd 1991_academy
    ```
 4. **Settings.** Run `cp .env.example .env`, then in `.env` set
-   `DOMAIN=your-domain` (no `https://`). Fill in the `ACADEMY_SMTP_*` lines
-   if you have them.
+   `DOMAIN=your-domain` (no `https://`).
 
    If the server already runs a web server for other sites (nginx, Apache;
    check with `ss -tlnp | grep -E ':(80|443) '`), also set `PROXY=external`,
@@ -213,8 +200,8 @@ This part is for whoever puts the site on the internet.
    end with `running on server: https://your-domain`. Open that address; the
    padlock should show a valid certificate. Then make your own admin account
    (there is no sign-up): `make admin NAME=<your username> EMAIL=<your email>`.
-   It prints a link: open it, choose your password, and you're signed in.
-   Invite everyone else from the admin panel.
+   It prints a temporary password: sign in with it on the site and choose
+   your own. Add everyone else from the admin panel.
 6. **Existing accounts** (optional). Copy the export to the server with
    `scp academy-export.db.gz root@SERVER:1991_academy/`, then on the server,
    in `1991_academy`, run `make restore FILE=academy-export.db.gz`.
@@ -312,7 +299,7 @@ builds the image on every push and smoke-tests it, including a backup.
 | `port is already allocated` / `address already in use` | On a server (80 or 443): another web server (nginx, Apache) already uses them. If it serves other sites, keep it and set `PROXY=external` (step 4). If not, stop it: `systemctl disable --now nginx`. On a Mac (8735): `make dev` is still running |
 | Certificate errors, or the site doesn't load | DNS doesn't point at the server yet, or the provider's firewall blocks ports 80/443. `make logs` shows Caddy's attempts |
 | `Cannot connect to the Docker daemon` | On a Mac: start Docker Desktop. On a server: `systemctl start docker` |
-| Reset emails never arrive | Set `ACADEMY_SMTP_*` in `.env`, then `make restart`. `make status` shows `"email":true` once they're in place |
+| An admin forgot their password | On the server: `make password NAME=<username>` prints a new temporary password |
 
 ## Structure
 
@@ -382,7 +369,7 @@ builds the image on every push and smoke-tests it, including a backup.
 - **State is local-first.** Progress (`1991_academy:progress:v1`), XP/badges (`1991_academy:xp:v1`), review cards (`1991_academy:review:v1`), and the language choice (`1991_academy:lang`) live in localStorage (so do code drafts, `1991_academy:draft:*`, from before exercises moved to Colab). Signed in, the same keys are pushed to `/api/state` ~1.5 s after every change (coalesced into one request, and flushed on `pagehide`) and pulled back on any device you sign in on. Conflict rule: the copy with more XP wins; signing in as a *different* user on a shared device always adopts that account's server copy. The theme and per-problem editor language stay device-local on purpose. (The prefix was `martinium:` before the project was renamed. `js/common.js` moves a returning visitor's old keys over once on page load, and the server renames old keys in stored and incoming blobs.)
 - **State changes are announced, not reloaded.** `Progress`/`XP`/`Review` cache their parsed blob, so a render pass parses it once instead of forty times. Anything that rewrites those keys from outside — a sync pull, or another tab — calls `notifyStateChanged()` (`js/common.js`), which drops the caches and fires `1991_academy:state-changed`; page controllers subscribe with `onStateChanged(render)` and redraw in place. Open editors and in-progress practice sessions are deliberately left alone. Only a language change still forces a reload, because the language is baked into every rendered string.
 - **If a sync fails, you are told once.** Oversized payloads shed the largest code drafts first so progress always gets through; a 401 signs you out cleanly; repeated failures toast once, not every 1.5 seconds.
-- **Auth is boring on purpose.** Passwords are scrypt-hashed with per-user salts; sessions are random tokens in an HttpOnly cookie (30 days); users, sessions and state blobs live in `1991_academy.db` (SQLite). Accounts exist only by invitation, and every page except sign-in needs a session. The FastAPI backend adds rate limiting (login/reset), request-size caps, structured logging, `/api/health` and env-based config — see `DEPLOYMENT.md` before exposing it to the open internet (HTTPS required). Change-password and password-reset rotate the hash and invalidate sessions; reset tokens are SHA-256-hashed, single-use and expire in 1 hour; `forgot-password` always returns the same response (no email enumeration). Expired sessions and reset tokens are swept at startup and hourly.
+- **Auth is boring on purpose.** Passwords are scrypt-hashed with per-user salts; sessions are random tokens in an HttpOnly cookie (30 days); users, sessions and state blobs live in `1991_academy.db` (SQLite). Accounts are made only by admins, and every page except sign-in needs a session. The FastAPI backend adds rate limiting (failed sign-ins, per address and per account), request-size caps, structured logging, `/api/health` and env-based config — see `DEPLOYMENT.md` before exposing it to the open internet (HTTPS required). Changing a password, or a new temporary one, rotates the hash and ends other sessions; a temporary password is stored only hashed, gives no session, works once and expires in 14 days. Expired sessions are swept at startup and hourly.
 - **Nothing blocking runs on the event loop.** SQLite and scrypt go through `run_in_threadpool`, so a slow login hash never stalls other requests or static files.
 - **The web root is an allowlist, not a blocklist.** Only `/`, the seven page files, `robots.txt` and the `css/ js/ tracks/ assets/` trees are reachable. The previous extension blocklist could be walked around by case (`/APP.PY` resolves to `app.py` on macOS and Windows volumes, which served the backend source and the credentials database) and simultaneously 404'd the legitimate `.py` starter files under `assets/courses/`.
 - **The database is indexed.** `init_db()` creates `CREATE INDEX IF NOT EXISTS` entries on every start (idempotent, data-safe, and applied to existing DBs too): case-insensitive `username`/`email` for login-by-either, a composite `(leaderboard_opt_in, xp_total DESC)` so the leaderboard is an indexed search rather than a full scan, and `sessions(user_id)` for per-user session cleanup. Session-token, `state.user_id` and the UNIQUE columns are already covered by their PRIMARY KEY / UNIQUE constraints.
@@ -489,12 +476,12 @@ verified numerically against numpy before shipping.
 - **Overview:** learners, sign-ups and lessons completed over the last 30
   days, progress per track, the most and least completed lessons, Lab
   problems and missions solved.
-- **Learners:** **invite students** (one email per line, optionally with a
-  username; each gets a link, valid 7 days, to choose a password: by email
-  when SMTP is set up, otherwise the panel lists the links for you to hand
-  out). Search and sort every account, open one to see its progress lesson
-  by lesson, resend an invitation or send a password-reset link, sign it
-  out on every device, or delete it.
+- **Learners:** **add students** (one email per line, optionally with a
+  username). Each gets a temporary password, shown once, with a ready
+  message to send from your own email ("Copy message", or "Copy all
+  messages"). Search and sort every account, open one to see its progress
+  lesson by lesson, give a new temporary password, sign it out on every
+  device, or delete it.
 - **Lessons:** edit any lesson, or add new ones to a module, in English and
   Armenian: text, takeaways, quiz, videos. Saved lessons go live at once
   (no rebuild) when "Visible to learners" is ticked, otherwise they stay
@@ -506,9 +493,10 @@ verified numerically against numpy before shipping.
 Admin rights are given on the server only, never from the web:
 
 ```bash
-make admin NAME=martin EMAIL=martin@example.com   # EMAIL creates the account if there isn't one (prints its link)
+make admin NAME=martin EMAIL=martin@example.com   # EMAIL creates the account if there isn't one (prints a temporary password)
 make admins                   # who is an admin
 make admin-remove NAME=martin
+make password NAME=martin     # a new temporary password, e.g. for an admin who forgot theirs
 ```
 
 (Without Docker: `.venv/bin/python app.py admin add martin [EMAIL]`.)

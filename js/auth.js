@@ -41,6 +41,7 @@ const Auth = (() => {
     if (!res.ok) {
       const err = new Error(body.error || "HTTP " + res.status);
       err.status = res.status;
+      err.body = body;          /* e.g. mustChangePassword after a temporary password */
       throw err;
     }
     return body;
@@ -294,26 +295,17 @@ const Auth = (() => {
       });
     },
 
-    // Always resolves (the server returns a generic response either way).
-    async forgotPassword(email) {
-      await api("/api/forgot-password", {
+    /* After signing in with a temporary password (from an admin): choose
+       one's own, and be signed in. */
+    async firstPassword(identifier, password, newPassword) {
+      const out = await api("/api/first-password", {
         method: "POST",
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ identifier, password, newPassword }),
       });
-    },
-
-    /* Also an invited student's first password: then the answer carries the
-       account, and they are signed in. */
-    async resetPassword(token, password) {
-      return api("/api/reset-password", {
-        method: "POST",
-        body: JSON.stringify({ token, password }),
-      });
-    },
-
-    /* Whose invitation (or reset) link this is: {username}. */
-    welcome(token) {
-      return api("/api/welcome", { method: "POST", body: JSON.stringify({ token }) });
+      user = out.user;
+      await reconcile(user);
+      updateNav();
+      return user;
     },
 
     async deleteAccount(password) {

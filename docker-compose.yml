@@ -34,7 +34,7 @@ services:
     image: 1991-academy
     restart: unless-stopped
     env_file:
-      - path: .env        # SMTP settings for password-reset emails
+      - path: .env        # local settings (DOMAIN, PROXY, MEDIA_DIR)
         required: false
     environment:
       # Only Caddy (on the internal Docker network) and this machine reach the

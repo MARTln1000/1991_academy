@@ -90,6 +90,32 @@ I18N.extend({
   "Signed out of {0} device.": "Դուրս է հանվել {0} սարքից։",
   "Signed out of {0} devices.": "Դուրս է հանվել {0} սարքից։",
 
+  /* adding students: temporary passwords (the site sends no email) */
+  "Add students": "Ավելացնել ուսանողներ",
+  "Add": "Ավելացնել",
+  "Students can't sign up themselves. One per line: an email, and optionally a username after a comma (otherwise it is made from the email). Each gets a temporary password: send it from your own email. The site sends no email.":
+    "Ուսանողներն իրենք չեն կարող գրանցվել։ Ամեն տողում՝ էլ. փոստ, և ցանկության դեպքում ստորակետից հետո՝ օգտանուն (հակառակ դեպքում այն կազմվում է էլ. փոստից)։ Յուրաքանչյուրը ստանում է ժամանակավոր գաղտնաբառ. ուղարկի՛ր այն քո էլ. փոստից։ Կայքը նամակներ չի ուղարկում։",
+  "Added {0}. Send each of them their message: the passwords are shown only now, and work for {1} days.":
+    "Ավելացվեց՝ {0}։ Յուրաքանչյուրին ուղարկի՛ր իր նամակը. գաղտնաբառերը ցույց են տրվում միայն հիմա և գործում են {1} օր։",
+  "Nobody was added.": "Ոչ ոք չավելացվեց։",
+  "Not added:": "Չավելացվեցին՝",
+  "Copy message": "Պատճենել նամակը",
+  "Copy all messages": "Պատճենել բոլոր նամակները",
+  "Already added? To give them a new temporary password, open the student below and click “New temporary password”.":
+    "Արդեն ավելացվա՞ծ է։ Նոր ժամանակավոր գաղտնաբառ տալու համար բացի՛ր ուսանողին ստորև և սեղմի՛ր «Նոր ժամանակավոր գաղտնաբառ»։",
+  "New temporary password": "Նոր ժամանակավոր գաղտնաբառ",
+  "Give {0} a new temporary password? Their current password stops working, and they'll choose a new one when they sign in.":
+    "Տա՞լ {0}-ին նոր ժամանակավոր գաղտնաբառ։ Ներկայիս գաղտնաբառն այլևս չի գործի, և մուտք գործելիս նա կընտրի նորը։",
+  "Send this to {0} from your own email. It's shown only now, and works for {1} days:":
+    "Ուղարկի՛ր սա {0}-ին քո էլ. փոստից։ Այն ցույց է տրվում միայն հիմա և գործում է {1} օր՝",
+  "{0} has a new temporary password and was signed out everywhere.": "{0}-ն ունի նոր ժամանակավոր գաղտնաբառ և դուրս է հանվել բոլոր սարքերից։",
+  "hasn't chosen a password yet": "դեռ գաղտնաբառ չի ընտրել",
+  "haven't chosen their password yet": "դեռ գաղտնաբառ չեն ընտրել",
+  "Added a student": "Ավելացրեց ուսանող",
+  "Gave a new temporary password": "Տվեց նոր ժամանակավոր գաղտնաբառ",
+  "This address starts with": "Այս հասցեն սկսվում է",
+  "An admin's password is reset on the server (make password NAME=…), not here.": "Ադմինի գաղտնաբառը փոխվում է սերվերում (make password NAME=…), ոչ թե այստեղ։",
+
   /* invitations */
   "Invite students": "Հրավիրել ուսանողների",
   "Only invited students can sign in. One per line: an email, and optionally a username after a comma (otherwise it is made from the email).":

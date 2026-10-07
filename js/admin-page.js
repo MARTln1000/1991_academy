@@ -181,7 +181,7 @@
     const chips =
       '<div class="hero-stats admin-chips">' +
       chip(num(s.learners), t("learners with an account")) +
-      (s.invited ? chip(num(s.invited), t("invited, not signed in yet")) : "") +
+      (s.new ? chip(num(s.new), t("haven't chosen their password yet")) : "") +
       chip(num(s.new7), t("new this week")) +
       chip(num(s.active7), t("active this week")) +
       chip(num(s.active30), t("active in 30 days")) +
@@ -255,21 +255,66 @@
     });
   }
 
-  function inviteCard() {
+  /* The message an admin sends a new student from their own mailbox (the
+     site sends no email): in English and Armenian, since the student's
+     language isn't known yet. */
+  function studentMessage(r, site, days) {
+    return [
+      "Hello,", "",
+      "Your account at 1991 Academy, the online school of 1991 Unit, is ready.", "",
+      "Website: " + site,
+      "Username: " + r.username,
+      "Temporary password: " + r.password, "",
+      "Sign in within " + days + " days. You'll then choose your own password, and the temporary one stops working.", "",
+      "---", "",
+      "Բարև,", "",
+      "Քո հաշիվը 1991 Academy-ում՝ 1991 Ստորաբաժանման առցանց դպրոցում, պատրաստ է։", "",
+      "Կայք՝ " + site,
+      "Օգտանուն՝ " + r.username,
+      "Ժամանակավոր գաղտնաբառ՝ " + r.password, "",
+      "Մուտք գործի՛ր " + days + " օրվա ընթացքում։ Այնուհետև կընտրես քո սեփական գաղտնաբառը, և ժամանակավորն այլևս չի գործի։",
+    ].join("\n");
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(t("Copied."));
+    } catch { /* clipboard blocked: the text is on screen to select */ }
+  }
+
+  /* One student's temporary password, ready to send. */
+  function passwordRow(r, site, days) {
+    return (
+      '<div class="admin-temp" data-temp="' + esc(r.username) + '">' +
+      "<div><strong>" + esc(r.username) + '</strong> <span class="admin-muted">' + esc(r.email) + "</span></div>" +
+      '<code class="admin-temp-pw">' + esc(r.password) + "</code>" +
+      '<button class="btn" type="button" data-copy-message>' + t("Copy message") + "</button>" +
+      '<textarea class="visually-hidden" readonly tabindex="-1" aria-hidden="true">' + esc(studentMessage(r, site, days)) + "</textarea></div>"
+    );
+  }
+
+  function bindCopyButtons(box) {
+    box.querySelectorAll("[data-copy-message]").forEach((b) => {
+      b.addEventListener("click", () => copyText(b.parentElement.querySelector("textarea").value));
+    });
+  }
+
+  function studentsCard() {
     return card(
-      "<h3>✉️ " + t("Invite students") + "</h3>" +
-      '<p class="admin-muted">' + t("Only invited students can sign in. One per line: an email, and optionally a username after a comma (otherwise it is made from the email).") + "</p>" +
-      '<form data-invite-form>' +
+      "<h3>➕ " + t("Add students") + "</h3>" +
+      '<p class="admin-muted">' + t("Students can't sign up themselves. One per line: an email, and optionally a username after a comma (otherwise it is made from the email). Each gets a temporary password: send it from your own email. The site sends no email.") + "</p>" +
+      '<form data-students-form>' +
       '<textarea class="admin-input" name="students" rows="4" placeholder="anna.karapetyan@example.com&#10;arman@example.com, arman_s"></textarea>' +
-      '<div class="dash-actions"><button class="btn btn-primary" type="submit">' + t("Invite") + "</button></div>" +
-      '<p class="form-error" data-msg></p><div data-invite-out></div></form>',
+      '<div class="dash-actions"><button class="btn btn-primary" type="submit">' + t("Add") + "</button></div>" +
+      '<p class="form-error" data-msg></p><div data-students-out></div></form>',
       "admin-invite");
   }
 
-  function bindInvite(el, onDone) {
-    const form = el.querySelector("[data-invite-form]");
+  function bindStudents(el, onDone) {
+    const form = el.querySelector("[data-students-form]");
     const msg = form.querySelector("[data-msg]");
-    const out = form.querySelector("[data-invite-out]");
+    const out = form.querySelector("[data-students-out]");
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       msg.textContent = "";
@@ -278,50 +323,32 @@
       if (!students.length) return;
       const btn = form.querySelector("button[type=submit]");
       btn.disabled = true;
-      msg.style.color = "";
-      msg.textContent = t("Sending the invitations…");   /* a big class takes a few seconds */
       try {
-        const res = await send("POST", "/api/admin/invites", { students });
+        const res = await send("POST", "/api/admin/students", { students });
         const ok = res.results.filter((r) => !r.error);
         const bad = res.results.filter((r) => r.error);
-        const emailed = ok.filter((r) => r.emailed);
-        const unsent = ok.filter((r) => r.emailError);
-        msg.style.color = ok.length && !unsent.length ? "var(--success)" : "";
-        msg.textContent = !ok.length
-          ? t("Nobody was invited.")
-          : !res.sent
-            ? t("Invited {0}. Email isn't set up on this server, so send each student their link (valid for 7 days):", ok.length)
-            : !unsent.length
-              ? t("Invited {0}. Each got an email with a link to choose a password.", ok.length)
-              : t("Invited {0}, but only {1} of the emails could be sent.", ok.length, emailed.length);
+        msg.style.color = ok.length ? "var(--success)" : "";
+        msg.textContent = ok.length
+          ? t("Added {0}. Send each of them their message: the passwords are shown only now, and work for {1} days.", ok.length, res.days)
+          : t("Nobody was added.");
         out.innerHTML =
           (res.warning ? '<p class="form-error">⚠️ ' + esc(t(res.warning)) + "</p>" : "") +
-          (unsent.length
-            ? '<p class="form-error">' + t("These accounts were created, but their email wasn't sent. Fix the problem, then use “Resend the invitation” on each:") + "</p>" +
-              '<ul class="admin-list">' + unsent.map((r) => "<li>" + esc(r.username) + " (" + esc(r.email) + ") — " + esc(t(r.emailError)) + "</li>").join("") + "</ul>"
-            : "") +
-          (!res.sent && ok.length
-            ? '<div class="table-wrap"><table class="admin-table"><thead><tr><th>' + t("Learner") + "</th><th>" + t("Email") +
-              "</th><th>" + t("Link") + "</th></tr></thead><tbody>" +
-              ok.map((r) => "<tr><td>" + esc(r.username) + "</td><td>" + esc(r.email) + '</td><td><input class="admin-input" readonly value="' + esc(r.link) + '" /></td></tr>').join("") +
-              '</tbody></table></div><div class="dash-actions"><button class="btn" type="button" data-copy-all>' + t("Copy all") + "</button></div>"
+          (ok.length
+            ? '<div class="admin-temps">' + ok.map((r) => passwordRow(r, res.site, res.days)).join("") + "</div>" +
+              '<div class="dash-actions"><button class="btn" type="button" data-copy-all>' + t("Copy all messages") + "</button></div>"
             : "") +
           (bad.length
-            ? '<p class="form-error">' + t("Not invited:") + "</p><ul class=\"admin-list\">" +
+            ? '<p class="form-error">' + t("Not added:") + "</p><ul class=\"admin-list\">" +
               bad.map((r) => "<li>" + esc(r.email || "?") + " — " + esc(t(r.error)) + "</li>").join("") + "</ul>" +
               (bad.some((r) => /already has an account/.test(r.error))
-                ? '<p class="admin-hint">' + t("Already invited? To send a new link, open the student below and click “Resend the invitation”.") + "</p>"
+                ? '<p class="admin-hint">' + t("Already added? To give them a new temporary password, open the student below and click “New temporary password”.") + "</p>"
                 : "")
             : "");
-        const copy = out.querySelector("[data-copy-all]");
-        if (copy) {
-          copy.addEventListener("click", async () => {
-            const text = ok.map((r) => r.username + "\t" + r.email + "\t" + r.link).join("\n");
-            try {
-              await navigator.clipboard.writeText(text);
-              toast(t("Copied."));
-            } catch { /* clipboard blocked: the links are on screen */ }
-          });
+        bindCopyButtons(out);
+        const all = out.querySelector("[data-copy-all]");
+        if (all) {
+          all.addEventListener("click", () =>
+            copyText(ok.map((r) => "To: " + r.email + "\n\n" + studentMessage(r, res.site, res.days)).join("\n\n==========\n\n")));
         }
         if (ok.length) {
           form.students.value = bad.map((r) => r.email + (r.username ? ", " + r.username : "")).join("\n");
@@ -337,7 +364,7 @@
 
   async function viewLearners() {
     return {
-      html: inviteCard() + card(
+      html: studentsCard() + card(
         '<div class="admin-toolbar">' +
         '<input class="admin-input" type="search" data-q placeholder="' + esc(t("Search by name or email")) + '" value="' + esc(learnerQuery.q) + '" />' +
         '<select class="admin-input" data-sort aria-label="' + esc(t("Sort")) + '">' +
@@ -354,7 +381,7 @@
           list.innerHTML = renderLearners(d);
         }
         const reload = () => load().catch((e) => (list.innerHTML = '<p class="form-error">' + esc(e.message) + "</p>"));
-        bindInvite(el, reload);
+        bindStudents(el, reload);
         el.querySelector("[data-q]").addEventListener("input", (e) => {
           clearTimeout(timer);
           timer = setTimeout(() => {
@@ -385,7 +412,7 @@
       .map((u) =>
         '<tr><td><a href="#learner/' + encodeURIComponent(u.username) + '">' + esc(u.username) + "</a>" +
         (u.admin ? " " + badge("admin", t("admin")) : "") +
-        (u.invited ? " " + badge("draft", t("invited")) : "") + "</td>" +
+        (u.new ? " " + badge("draft", t("new")) : "") + "</td>" +
         "<td>" + esc(u.email) + "</td><td>" + fmtDate(u.created) + "</td><td>" + fmtDate(u.lastActive) + "</td>" +
         "<td>" + num(u.xp) + "</td><td>" + num(u.lessons) + "</td></tr>")
       .join("");
@@ -421,7 +448,7 @@
     const head =
       '<div class="profile-head"><div class="avatar">' + esc(u.username[0].toUpperCase()) + "</div><div>" +
       "<h2>" + esc(u.username) + " " + (u.admin ? badge("admin", t("admin")) : "") +
-      (u.invited ? badge("draft", t("invited, not signed in yet")) : "") +
+      (u.new ? badge("draft", t("hasn't chosen a password yet")) : "") +
       (u.optIn ? badge("info", t("on the leaderboard")) : "") + "</h2>" +
       '<p class="admin-muted">' + esc(u.email) + "</p></div></div>" +
       '<div class="hero-stats admin-chips">' +
@@ -444,7 +471,7 @@
     const actions =
       "<h3>" + t("Account") + "</h3>" +
       '<div class="dash-actions">' +
-      '<button class="btn" data-reset>' + (u.invited ? t("Resend the invitation") : t("Send a password-reset link")) + "</button>" +
+      '<button class="btn" data-reset' + (self || u.admin ? " disabled" : "") + ">" + t("New temporary password") + "</button>" +
       '<button class="btn" data-signout' + (self ? " disabled" : "") + ">" + t("Sign out on every device") + "</button>" +
       '<button class="btn btn-danger" data-del-open' + (self || u.admin ? " disabled" : "") + ">" + t("Delete account") + "</button>" +
       "</div>" +
@@ -513,31 +540,18 @@
         };
 
         el.querySelector("[data-reset]").addEventListener("click", async (e) => {
+          if (!confirm(t("Give {0} a new temporary password? Their current password stops working, and they'll choose a new one when they sign in.", u.username))) return;
           e.target.disabled = true;
           msg.textContent = "";
           try {
-            const out = await send("POST", userPath(u.username) + "/reset-link");
+            const out = await send("POST", userPath(u.username) + "/temp-password");
             const box = el.querySelector("[data-reset-out]");
-            if (out.sent) {
-              box.innerHTML = out.warning ? '<p class="form-error">⚠️ ' + esc(t(out.warning)) + "</p>" : "";
-              ok(out.invite ? t("A new invitation is on its way to {0}.", out.email) : t("A reset link is on its way to {0}.", out.email));
-            } else {
-              box.innerHTML =
-                '<div class="admin-confirm"><p>' + (out.invite
-                  ? t("Email isn't set up on this server, so give this invitation link to the student yourself. It works once, for 7 days:")
-                  : t("Email isn't set up on this server, so give this link to the learner yourself. It works once, for one hour:")) + "</p>" +
-                '<div class="admin-toolbar"><input class="admin-input" readonly value="' + esc(out.link) + '" />' +
-                '<button class="btn" type="button" data-copy>' + t("Copy") + "</button></div></div>";
-              box.querySelector("[data-copy]").addEventListener("click", async () => {
-                const input = box.querySelector("input");
-                try {
-                  await navigator.clipboard.writeText(input.value);
-                  toast(t("Copied."));
-                } catch {
-                  input.select();
-                }
-              });
-            }
+            box.innerHTML =
+              (out.warning ? '<p class="form-error">⚠️ ' + esc(t(out.warning)) + "</p>" : "") +
+              '<div class="admin-confirm"><p>' + t("Send this to {0} from your own email. It's shown only now, and works for {1} days:", esc(out.email), out.days) + "</p>" +
+              passwordRow(out, out.site, out.days) + "</div>";
+            bindCopyButtons(box);
+            ok(t("{0} has a new temporary password and was signed out everywhere.", u.username));
           } catch (err) {
             fail(err);
           }
@@ -1150,6 +1164,8 @@
   /* ============================================================ Activity log */
 
   const ACTIONS = {
+    "add-student": "Added a student",
+    "temp-password": "Gave a new temporary password",
     "invite": "Invited a student",
     "reset-link": "Sent a password-reset link",
     "sign-out": "Signed out on every device",
@@ -1179,7 +1195,7 @@
       if (e.action.startsWith("lesson-") && (e.action !== "lesson-delete" || builtin[e.target])) {
         return '<a href="#lesson/' + encodeURIComponent(e.target) + '">' + esc(e.target) + "</a>";
       }
-      if (["invite", "reset-link", "sign-out", "admin-add", "admin-remove"].includes(e.action)) {
+      if (["add-student", "temp-password", "invite", "reset-link", "sign-out", "admin-add", "admin-remove"].includes(e.action)) {
         return '<a href="#learner/' + encodeURIComponent(e.target) + '">' + esc(e.target) + "</a>";
       }
       return esc(e.target);

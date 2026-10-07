@@ -84,36 +84,6 @@ def test_account_validation(client, username, email):
         assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
 
 
-def test_an_invited_student_chooses_a_password_and_is_signed_in(client):
-    with app.db() as conn:
-        uid = app.create_account(conn, "anna", "anna@example.com")
-        link = app.new_reset_link(conn, uid, welcome=True)
-        conn.commit()
-    assert "/account.html?welcome=" in link
-    token = link.split("welcome=")[1]
-    # no password yet: nothing signs in, not even an empty one
-    for pw in ("", "!", "anything123"):
-        assert client.post("/api/login", json={"identifier": "anna", "password": pw}).status_code in (400, 401)
-    assert client.post("/api/welcome", json={"token": token}).json() == {"username": "anna"}
-    assert client.post("/api/welcome", json={"token": "nope"}).status_code == 400
-    r = client.post("/api/reset-password", json={"token": token, "password": "annas-password"})
-    assert r.status_code == 200 and r.json()["user"]["username"] == "anna"
-    assert client.get("/api/me").status_code == 200                     # signed in at once
-    assert client.post("/api/reset-password", json={"token": token, "password": "again12345"}).status_code == 400
-    client.post("/api/logout", json={})
-    assert client.post("/api/login", json={"identifier": "anna", "password": "annas-password"}).status_code == 200
-
-
-def test_an_invitation_expires_after_a_week(client):
-    with app.db() as conn:
-        uid = app.create_account(conn, "anna", "anna@example.com")
-        token = app.new_reset_link(conn, uid, welcome=True).split("welcome=")[1]
-        conn.execute("UPDATE password_resets SET expires = ?", (time.time() - 1,))
-        conn.commit()
-    assert client.post("/api/welcome", json={"token": token}).status_code == 400
-    assert client.post("/api/reset-password", json={"token": token, "password": "annas-password"}).status_code == 400
-
-
 # ----------------------------------------------------------------------- login
 
 def test_login_success_and_wrong_password(client):
@@ -322,32 +292,6 @@ def test_change_password_too_short(client):
 
 # --------------------------------------------------------------- password reset
 
-def test_forgot_password_is_generic_and_creates_token(client, sent_emails):
-    register(client)
-    # existing email → generic 200 + an email captured
-    assert client.post("/api/forgot-password", json={"email": "alice@example.com"}).status_code == 200
-    # unknown email → identical generic 200, no email
-    assert client.post("/api/forgot-password", json={"email": "ghost@example.com"}).status_code == 200
-    assert len(sent_emails) == 1
-    assert "reset=" in sent_emails[0][2]
-
-
-def test_reset_password_end_to_end(client, sent_emails):
-    register(client)
-    client.post("/api/forgot-password", json={"email": "alice@example.com"})
-    token = re.search(r"reset=([A-Za-z0-9_-]+)", sent_emails[0][2]).group(1)
-
-    bad = client.post("/api/reset-password", json={"token": "garbage", "password": "freshpass1"})
-    assert bad.status_code == 400
-    ok = client.post("/api/reset-password", json={"token": token, "password": "freshpass1"})
-    assert ok.status_code == 200
-    # token is single-use
-    assert client.post("/api/reset-password", json={"token": token, "password": "again9999"}).status_code == 400
-    # new password works, old one doesn't
-    assert client.post("/api/login", json={"identifier": "alice", "password": "freshpass1"}).status_code == 200
-    assert client.post("/api/login", json={"identifier": "alice", "password": "hunter2pw"}).status_code == 401
-
-
 # -------------------------------------------------------------- delete account
 
 def test_delete_account(client):
@@ -374,7 +318,7 @@ def test_login_rate_limited(client):
 def test_health(client):
     h = client.get("/api/health").json()
     assert h["ok"] is True and h["version"] == app.VERSION
-    assert h["email"] is False  # SMTP unset in tests
+    assert "email" not in h                    # the site sends no email
     assert h["revision"] is None  # no REVISION file outside a Docker image
 
 
@@ -426,37 +370,23 @@ def test_guessing_one_account_from_many_addresses_is_paused(client, monkeypatch)
                        headers={"X-Forwarded-For": "8.8.8.8"}).status_code == 200
 
 
-def test_reset_emails_to_one_address_are_capped(client, sent_emails, monkeypatch):
-    monkeypatch.setattr(app, "TRUST_PROXY", True)
-    register(client)
-    for i in range(app.RESETS_PER_EMAIL + 3):
-        r = client.post("/api/forgot-password", json={"email": "alice@example.com"},
-                        headers={"X-Forwarded-For": f"10.1.0.{i}"})
-        assert r.json() == {"ok": True}                              # the same answer every time
-    assert len(sent_emails) == app.RESETS_PER_EMAIL
-
-
 def test_a_classroom_behind_one_address_is_not_locked_out(client):
-    """Thirty students on one school network sign in, or accept their
-    invitations, at the same time: only failures count toward the limits."""
-    links = []
+    """Thirty students on one school network sign in, or choose their own
+    password with their temporary one, at the same time: only failures count
+    toward the limits."""
+    temps = []
     with app.db() as conn:
         for i in range(30):
             app.create_account(conn, f"pupil{i}", f"pupil{i}@example.com", "pupil-password")
             uid = app.create_account(conn, f"newbie{i}", f"newbie{i}@example.com")
-            links.append(app.new_reset_link(conn, uid, welcome=True).split("welcome=")[1])
+            temps.append(app.issue_temp_password(conn, uid))
         conn.commit()
     for i in range(30):
         assert client.post("/api/login", json={"identifier": f"pupil{i}", "password": "pupil-password"}).status_code == 200
-    for token in links:
-        assert client.post("/api/welcome", json={"token": token}).status_code == 200
-        assert client.post("/api/reset-password", json={"token": token, "password": "newbie-pass"}).status_code == 200
-
-
-def test_guessing_links_is_limited_per_address(client):
-    codes = [client.post("/api/welcome", json={"token": f"guess-{i}"}).status_code for i in range(app.IP_TOKEN_FAILS + 2)]
-    assert codes[:app.IP_TOKEN_FAILS] == [400] * app.IP_TOKEN_FAILS and codes[-1] == 429
-    assert client.post("/api/reset-password", json={"token": "guess", "password": "longenough1"}).status_code == 429
+    for i, temp in enumerate(temps):
+        assert client.post("/api/login", json={"identifier": f"newbie{i}", "password": temp}).status_code == 403
+        assert client.post("/api/first-password", json={"identifier": f"newbie{i}", "password": temp,
+                                                         "newPassword": "newbie-pass"}).status_code == 200
 
 
 def test_rate_limit_per_proxy_ip(client, monkeypatch):
@@ -607,7 +537,7 @@ def test_sql_injection_is_stored_as_plain_text(client):
 
 @pytest.mark.parametrize("body", ["[]", "[1, 2]", "42", '"text"', "null", "[" * 50_000 + "]" * 50_000])
 def test_non_object_json_is_a_400_not_a_crash(client, body):
-    for path in ("/api/login", "/api/forgot-password", "/api/reset-password", "/api/welcome"):
+    for path in ("/api/login", "/api/first-password", "/api/change-password"):
         r = client.post(path, content=body, headers={"Content-Type": "application/json"})
         assert r.status_code == 400, (path, body[:10], r.status_code)
 

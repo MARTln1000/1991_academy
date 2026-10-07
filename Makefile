@@ -12,7 +12,7 @@
 PYTHON := .venv/bin/python
 VENV   := .venv/.installed
 
-# make reads only the DOMAIN, PROXY and MEDIA_DIR lines of .env, so an SMTP password
+# make reads only the DOMAIN, PROXY and MEDIA_DIR lines of .env, so a password
 # containing $ or # elsewhere in the file can't confuse it.
 # (Spaces are trimmed only at the ends: a drive can be called "My Passport".)
 env_value = $(shell sed -n 's/^$(1)=//p' .env 2>/dev/null | tail -n 1 | tr -d '\r"' | sed 's/^ *//; s/ *$$//')
@@ -43,7 +43,7 @@ endif
 export REVISION := $(shell sha=$$(git rev-parse HEAD 2>/dev/null) && { git diff --quiet HEAD 2>/dev/null && echo $$sha || echo $$sha-dirty; })
 
 .DEFAULT_GOAL := help
-.PHONY: email-test video media-upload help install dev test notebooks up down restart restart-caddy prune-images check-caddy refresh logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
+.PHONY: password video media-upload help install dev test notebooks up down restart restart-caddy prune-images check-caddy refresh logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
 
 help: ## list these commands
 	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 5)} /^[a-z][a-z-]*:.*## / {printf "  make %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -53,7 +53,7 @@ help: ## list these commands
 ##@ Run the site (Docker)
 
 up: .env ## build and start the site in the background (again after code changes)
-	@chmod 600 .env   # it may hold the SMTP password: readable by its owner only
+	@chmod 600 .env   # it may hold secrets: readable by its owner only
 	@# --remove-orphans: containers of services no longer in docker-compose.yml go too
 	$(COMPOSE) up -d --build --wait --remove-orphans $(SERVICES)
 	@echo
@@ -65,7 +65,7 @@ endif
 
 .env:
 	cp .env.example .env
-	@chmod 600 .env   # it may hold the SMTP password
+	@chmod 600 .env   # it may hold secrets
 	@echo "==> Created .env from .env.example."
 
 down: ## stop the site (the database is kept)
@@ -157,7 +157,7 @@ auto-update-off: ## stop the automatic updates ('make update' still updates by h
 ##@ Admin panel
 
 # NAME, not USER: make would quietly use your login name for an unset $(USER).
-admin: ## make an account an admin: make admin NAME=<username> [EMAIL=… to create the account], then open /admin.html
+admin: ## make an account an admin: make admin NAME=<username> [EMAIL=… creates it, with a temporary password], then open /admin.html
 	@test -n "$(NAME)" || { echo "usage: make admin NAME=<username> [EMAIL=<email>, if the account doesn't exist yet]"; exit 2; }
 	$(COMPOSE) exec -T app python app.py admin add "$(NAME)" $(if $(EMAIL),"$(EMAIL)")
 
@@ -167,6 +167,10 @@ admin-remove: ## take the admin rights away again: make admin-remove NAME=<usern
 
 admins: ## list the admin accounts
 	$(COMPOSE) exec -T app python app.py admin list
+
+password: ## a new temporary password for an account (e.g. an admin who forgot theirs): make password NAME=<username>
+	@test -n "$(NAME)" || { echo "usage: make password NAME=<username>"; exit 2; }
+	$(COMPOSE) exec -T app python app.py password "$(NAME)"
 
 ##@ Lesson videos (README.md → "Lesson videos")
 
@@ -178,12 +182,6 @@ media-upload: ## copy the videos (MEDIA_DIR, default media/) to a server: make m
 	@test -n "$(TO)" || { echo "usage: make media-upload TO=root@SERVER  [DIR=folder on the server, default 1991_academy/media]"; exit 2; }
 	@# --chmod: readable by the containers, whatever the files' modes are here
 	rsync -av --partial --progress --exclude '.*' --chmod=D755,F644 "$(MEDIA)/" "$(TO):$(or $(DIR),1991_academy/media)/"
-
-##@ Email
-
-email-test: ## send a test email with the settings in .env: make email-test TO=you@example.com
-	@test -n "$(TO)" || { echo "usage: make email-test TO=<address>"; exit 2; }
-	$(COMPOSE) exec -T app python app.py email-test "$(TO)"
 
 ##@ Database (Docker)
 
