@@ -155,7 +155,8 @@ SMTP_HOST = os.environ.get("ACADEMY_SMTP_HOST")
 SMTP_PORT = int(os.environ.get("ACADEMY_SMTP_PORT", 587))
 SMTP_USER = os.environ.get("ACADEMY_SMTP_USER")
 SMTP_PASS = os.environ.get("ACADEMY_SMTP_PASS")
-SMTP_FROM = os.environ.get("ACADEMY_SMTP_FROM") or SMTP_USER or "no-reply@1991.academy"
+DEFAULT_FROM = "no-reply@1991.academy"
+SMTP_FROM = os.environ.get("ACADEMY_SMTP_FROM") or SMTP_USER or DEFAULT_FROM
 # Absolute origin used to build reset links in emails (e.g. https://academy.example.com).
 BASE_URL = os.environ.get("ACADEMY_BASE_URL", f"http://localhost:{PORT}").rstrip("/")
 
@@ -463,8 +464,21 @@ def current_week_id(now: float | None = None) -> str:
     return time.strftime("%G-W%V", time.gmtime(now if now is not None else time.time()))
 
 
+def smtp_login() -> bool:
+    """Sign in to the mail server with a mailbox password? Without one (no
+    ACADEMY_SMTP_USER and no _PASS) the site sends as an IP relay: the mail
+    server lets this server's address send as ACADEMY_SMTP_FROM, and no
+    password exists anywhere to leak."""
+    return bool(SMTP_USER and SMTP_PASS)
+
+
 def email_configured() -> bool:
-    return bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
+    if not SMTP_HOST:
+        return False
+    if smtp_login():
+        return True
+    # an IP relay: no password at all, but the sender must be named
+    return not SMTP_USER and not SMTP_PASS and SMTP_FROM != DEFAULT_FROM
 
 
 def build_message(to: str, subject: str, text: str, html_body: str | None = None) -> EmailMessage:
@@ -492,7 +506,8 @@ def smtp_session():
     server's certificate is checked against the trusted authorities: an
     unchecked one would hand the mailbox password to whoever sits in between.
     Port 465 is encrypted from the start; any other port (587) upgrades with
-    STARTTLS. Every network step times out after 20 seconds."""
+    STARTTLS. Every network step times out after 20 seconds. As an IP relay
+    (no password), the connection is encrypted and checked all the same."""
     context = ssl.create_default_context()
     if SMTP_PORT == 465:
         server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=20, context=context)
@@ -501,7 +516,8 @@ def smtp_session():
     with server as s:
         if SMTP_PORT != 465:
             s.starttls(context=context)
-        s.login(SMTP_USER, SMTP_PASS)
+        if smtp_login():
+            s.login(SMTP_USER, SMTP_PASS)
         yield s
 
 
@@ -511,8 +527,15 @@ def deliver(to: str, subject: str, text: str, html_body: str | None = None) -> N
         s.send_message(build_message(to, subject, text, html_body))
 
 
+RELAY_REFUSED = ("The mail server refused to send it without a password: the mail administrator "
+                 "must allow this server's IP address to send as the site's address (an SMTP relay).")
+
+
 def email_failure(exc: Exception) -> str:
     """What went wrong, in words an admin can act on (no server internals)."""
+    if not smtp_login() and isinstance(
+            exc, (smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused, smtplib.SMTPDataError)):
+        return RELAY_REFUSED
     if isinstance(exc, smtplib.SMTPRecipientsRefused):
         return "The mail server refused this address."
     if isinstance(exc, smtplib.SMTPAuthenticationError):
@@ -2243,10 +2266,13 @@ async def api_content_js(request: Request):
 def email_test(to: str) -> int:
     """`make email-test TO=…`: send one email now and say exactly what failed."""
     if not email_configured():
-        print("Email isn't set up: fill in ACADEMY_SMTP_HOST, _USER and _PASS in .env, then make restart.",
+        print("Email isn't set up. In .env: ACADEMY_SMTP_HOST and ACADEMY_SMTP_FROM (no password: the mail\n"
+              "server must allow this server's IP address), or also ACADEMY_SMTP_USER and _PASS. Then make restart.",
               file=sys.stderr)
         return 1
     print(f"Sending a test email from {SMTP_FROM} to {to} through {SMTP_HOST}:{SMTP_PORT} ...")
+    print(f"Signing in as {SMTP_USER}" if smtp_login() else
+          "No password: sending as an IP relay (the mail server must allow this server's address)")
     print(f"Links in invitations will start with {BASE_URL}")
     if links_warning():
         print("WARNING: " + links_warning() + " Set DOMAIN in .env on the server.")
@@ -2261,6 +2287,12 @@ def email_test(to: str) -> int:
         return 1
     except smtplib.SMTPAuthenticationError:
         print("FAILED: the mail server refused the user name or password.", file=sys.stderr)
+        return 1
+    except (smtplib.SMTPRecipientsRefused, smtplib.SMTPSenderRefused, smtplib.SMTPDataError) as e:
+        if not smtp_login():
+            print("FAILED: " + RELAY_REFUSED, file=sys.stderr)
+        else:
+            print(f"FAILED: the mail server refused the email ({type(e).__name__}).", file=sys.stderr)
         return 1
     except (OSError, smtplib.SMTPException) as e:
         print(f"FAILED: {type(e).__name__}: {e}", file=sys.stderr)

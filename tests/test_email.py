@@ -98,3 +98,46 @@ def test_email_test_without_settings(monkeypatch, capsys):
     monkeypatch.setattr(app, "SMTP_HOST", None)
     assert app.cli(["email-test", "me@example.com"]) == 1
     assert "isn't set up" in capsys.readouterr().err
+
+
+# --------------------------------------------- an IP relay: no password at all
+
+@pytest.fixture
+def relay(mail, monkeypatch):
+    monkeypatch.setattr(app, "SMTP_USER", None)
+    monkeypatch.setattr(app, "SMTP_PASS", None)
+    monkeypatch.setattr(app, "SMTP_PORT", 25)
+    return mail
+
+
+def test_a_relay_sends_without_any_password_but_still_encrypted(relay):
+    assert app.email_configured() and not app.smtp_login()
+    app.deliver("anna@example.com", "Hi", "Body")
+    s = relay.instances[0]
+    assert [c[0] for c in s.calls] == ["starttls"]               # no login: nothing to leak
+    assert verifying(s.calls[0][1])
+    assert s.sent[0]["From"] == "1991 Academy <ai.1991@mil.am>"
+
+
+@pytest.mark.parametrize("user,password,sender", [
+    ("ai.1991@mil.am", None, "1991 Academy <ai.1991@mil.am>"),    # half a login
+    (None, "secret", "1991 Academy <ai.1991@mil.am>"),
+    (None, None, app.DEFAULT_FROM),                               # a relay must name its sender
+])
+def test_half_set_up_is_not_set_up(mail, monkeypatch, user, password, sender):
+    for key, value in (("SMTP_USER", user), ("SMTP_PASS", password), ("SMTP_FROM", sender)):
+        monkeypatch.setattr(app, key, value)
+    assert not app.email_configured()
+
+
+class RelayDenied(FakeSMTP):
+    def send_message(self, msg):
+        raise smtplib.SMTPRecipientsRefused({msg["To"]: (554, b"5.7.1 Relay access denied")})
+
+
+def test_a_relay_not_allowed_yet_says_what_to_ask_for(relay, monkeypatch, capsys):
+    monkeypatch.setattr(smtplib, "SMTP", RelayDenied)
+    assert app.deliver_all([("anna@example.com", "s", "t", None)]) == [app.RELAY_REFUSED]
+    assert app.cli(["email-test", "me@example.com"]) == 1
+    err = capsys.readouterr()
+    assert "IP relay" in err.out and "allow this server's IP address" in err.err

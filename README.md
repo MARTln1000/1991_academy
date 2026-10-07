@@ -83,12 +83,16 @@ There is no sign-up: admins invite students (see "Admin panel"). Signed in,
 the account page offers **change password**, **forgot/reset password**
 (emailed link) and **delete account** (GDPR-clean cascade).
 
-**Email** (invitations and password resets) is sent from the mailbox in
-`.env`: `ACADEMY_SMTP_HOST` / `_PORT` / `_USER` / `_PASS` / `_FROM` (the
-template has the lines for `ai.1991@mil.am`; the password goes only in `.env`
-on the server). Port 587 (STARTTLS) or 465 (TLS), and the mail server's
-certificate must be valid: it is checked, so the password can't be
-intercepted. After `make restart`, `make email-test TO=you@example.com` sends
+**Email** (invitations and password resets) is sent through the mail server
+in `.env`. The recommended setup has **no password anywhere**: the mail
+administrator allows the site's server (its IP address) to send as
+`ai.1991@mil.am` (an "SMTP relay"), and `.env` names only the server and the
+sender: `ACADEMY_SMTP_HOST=mail.mil.am`, `ACADEMY_SMTP_PORT=25`,
+`ACADEMY_SMTP_FROM="1991 Academy <ai.1991@mil.am>"`. Only if the mail server
+insists on a login, add `ACADEMY_SMTP_USER` / `_PASS` for a mailbox made just
+for the site (port 587), never the support inbox's own password. Either
+way the connection is encrypted and the mail server's certificate is
+checked, so nothing can be intercepted. After `make restart`, `make email-test TO=you@example.com` sends
 one test email and says exactly what failed, if anything (and warns if links
 would point to `localhost`: set `DOMAIN`). Invitations are sent while you
 wait, and the panel lists who got an email and who didn't, and why; a
