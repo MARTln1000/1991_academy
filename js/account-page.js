@@ -307,7 +307,7 @@
     root.innerHTML = authPage(
       '<form class="form-card auth-card" data-form="join">' +
       '<h1 class="auth-title">' + t("Join 1991 Academy") + "</h1>" +
-      '<p class="f-sub">' + t("Your instructor sent you this link. Type the email you want to use: your account is made for it. The link works only once.") + "</p>" +
+      '<p class="f-sub">' + t("Your instructor sent you this link. Type the email you want to use (one you'll keep: temporary email addresses aren't accepted). Your account is made for it. The link works only once.") + "</p>" +
       '<div class="field"><label for="jn-email">' + t("Email") + "</label>" +
       '<input id="jn-email" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required /></div>' +
       '<div class="field"><label for="jn-name">' + t("Username (optional)") + "</label>" +

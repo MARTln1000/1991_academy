@@ -288,8 +288,8 @@ const I18N = (() => {
     "This link can't be used": "Այս հղումը հնարավոր չէ օգտագործել",
     "You're signed in as {0}. This link makes a new account: sign out first if it's meant for you.":
       "Մուտք ես գործել որպես {0}։ Այս հղումը նոր հաշիվ է ստեղծում. եթե այն քեզ համար է, նախ դուրս եկ։",
-    "Your instructor sent you this link. Type the email you want to use: your account is made for it. The link works only once.":
-      "Այս հղումը քեզ ուղարկել է դասավանդողդ։ Գրի՛ր այն էլ. հասցեն, որը ցանկանում ես օգտագործել. հաշիվդ կստեղծվի դրա համար։ Հղումը գործում է միայն մեկ անգամ։",
+    "Your instructor sent you this link. Type the email you want to use (one you'll keep: temporary email addresses aren't accepted). Your account is made for it. The link works only once.":
+      "Այս հղումը քեզ ուղարկել է դասավանդողդ։ Գրի՛ր այն էլ. հասցեն, որը ցանկանում ես օգտագործել (մշտական հասցե. ժամանակավոր էլ. հասցեներն ընդունելի չեն)։ Հաշիվդ կստեղծվի դրա համար։ Հղումը գործում է միայն մեկ անգամ։",
     "Username (optional)": "Օգտանուն (ըստ ցանկության)",
     "3–20 letters, digits or _. Others see it on the leaderboard. Leave it empty to make one from your email.":
       "3–20 տառ, թիվ կամ _։ Այն երևում է առաջատարների ցուցակում։ Թող դատարկ, և այն կկազմվի էլ. հասցեիցդ։",
@@ -306,6 +306,8 @@ const I18N = (() => {
     "This link has expired. Ask your instructor for a new one.": "Այս հղումը ժամկետանց է։ Նորը խնդրի՛ր դասավանդողիդ։",
     "This link was cancelled. Ask your instructor for a new one.": "Այս հղումը չեղարկվել է։ Նորը խնդրի՛ր դասավանդողիդ։",
     "That doesn't look like an email address.": "Սա էլ. հասցեի նման չէ։",
+    "Temporary email addresses can't be used. Use an address you'll keep.":
+      "Ժամանակավոր էլ. հասցեներ չեն կարող օգտագործվել։ Օգտագործի՛ր հասցե, որը կպահես։",
     /* messages from the server */
     "Wrong credentials.": "Սխալ օգտանուն կամ գաղտնաբառ։",
     "This reset link is invalid or has expired.": "Այս հղումն անվավեր է կամ ժամկետանց։",

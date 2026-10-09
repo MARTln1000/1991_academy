@@ -214,3 +214,37 @@ def test_new_students_are_on_the_leaderboard(admin):
         s.post("/api/first-password", json={"identifier": "s@example.com", "password": out["password"], "newPassword": "s-password"})
         assert s.get("/api/me").json()["user"]["leaderboardOptIn"] is True
         assert s.post("/api/leaderboard-optin", json={"optIn": False}).json()["optIn"] is False   # they can hide
+
+
+# ------------------------------------------------- temporary email addresses
+
+def test_the_list_of_temporary_email_domains_is_loaded():
+    assert len(app.DISPOSABLE_DOMAINS) > 5000
+    for real in ("gmail.com", "yahoo.com", "outlook.com", "mail.ru", "yandex.ru", "mil.am", "example.com"):
+        assert not app.disposable_email("someone@" + real), real
+    for temp in ("x@mailinator.com", "x@YOPMAIL.COM", "x@a.b.mailinator.com", "x@10minutemail.com", "x@mailinator.com."):
+        assert app.disposable_email(temp), temp
+
+
+def test_no_account_with_a_temporary_email(admin, capsys):
+    tok = token(make(admin, "x")["links"][0])
+    with TestClient(app.app) as c:
+        r = join(c, tok, "anna@yopmail.com")
+        assert r.status_code == 400 and "Temporary email" in r.json()["error"]
+        assert join(c, tok, "anna@sub.guerrillamail.com").status_code == 400
+        assert join(c, tok, "anna@gmail.com").status_code == 200              # the link was still unused
+    result = admin.post("/api/admin/students", json={"students": [{"email": "b@mailinator.com"}]}).json()["results"][0]
+    assert "Temporary email" in result["error"] and "password" not in result
+    assert app.cli(["admin", "add", "tempboss", "tb@10minutemail.com"]) == 1
+    with app.db() as conn:
+        emails = [r[0] for r in conn.execute("SELECT email FROM users")]
+    assert not any(app.disposable_email(e) for e in emails)
+
+
+def test_accounts_made_before_are_marked(admin):
+    with app.db() as conn:
+        conn.execute("INSERT INTO users (username, email, pass_hash, salt, created) VALUES ('old', 'old@yopmail.com', '!', '', 0)")
+        conn.commit()
+    assert admin.get("/api/admin/users/old").json()["learner"]["tempEmail"] is True
+    assert admin.get("/api/admin/users/boss").json()["learner"]["tempEmail"] is False
+    assert admin.get("/api/admin/overview").json()["tempEmail"] == 1

@@ -96,6 +96,12 @@ I18N.extend({
   "Or make the accounts yourself, when you know each student's email. One per line: an email, and optionally a username after a comma (otherwise it is made from the email). Each gets a temporary password: send it from your own email. The site sends no email.":
     "Կամ ստեղծի՛ր հաշիվներն ինքդ, երբ գիտես յուրաքանչյուր ուսանողի էլ. հասցեն։ Ամեն տողում՝ էլ. փոստ, և ցանկության դեպքում ստորակետից հետո՝ օգտանուն (հակառակ դեպքում այն կազմվում է էլ. փոստից)։ Յուրաքանչյուրը ստանում է ժամանակավոր գաղտնաբառ. ուղարկի՛ր այն քո էլ. փոստից։ Կայքը նամակներ չի ուղարկում։",
 
+  /* temporary (disposable) email addresses */
+  "temporary email": "ժամանակավոր էլ. հասցե",
+  "with a temporary email (marked in Learners)": "ժամանակավոր էլ. հասցեով (նշված են «Սովորողներ»-ում)",
+  "Temporary email addresses can't be used. Use an address you'll keep.":
+    "Ժամանակավոր էլ. հասցեներ չեն կարող օգտագործվել։ Օգտագործի՛ր հասցե, որը կպահես։",
+
   /* invitation links */
   "Invitation links": "Հրավերի հղումներ",
   "Send each student a link from your own email. Whoever opens it types the email they want to use and gets an account. Each link works once, for 7 days. Write who you're sending them to, one per line (an email or a name): it's only for you, to see below who has joined.":

@@ -43,7 +43,7 @@ endif
 export REVISION := $(shell sha=$$(git rev-parse HEAD 2>/dev/null) && { git diff --quiet HEAD 2>/dev/null && echo $$sha || echo $$sha-dirty; })
 
 .DEFAULT_GOAL := help
-.PHONY: password video media-upload help install dev test notebooks up down restart restart-caddy prune-images check-caddy refresh logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
+.PHONY: disposable-list password video media-upload help install dev test notebooks up down restart restart-caddy prune-images check-caddy refresh logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
 
 help: ## list these commands
 	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 5)} /^[a-z][a-z-]*:.*## / {printf "  make %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -153,6 +153,13 @@ auto-update-on: ## on a server: install every new commit pushed to GitHub by its
 auto-update-off: ## stop the automatic updates ('make update' still updates by hand)
 	@crontab -l 2>/dev/null | grep -vF "$(AUTO_UPDATE_MARK)" | crontab - ; \
 	echo "==> Automatic updates are off. 'make update' installs new commits by hand."
+
+DISPOSABLE_URL := https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/main/disposable_email_blocklist.conf
+disposable-list: ## refresh the list of temporary-email domains that accounts can't use (then make release)
+	@curl -fsSL "$(DISPOSABLE_URL)" -o .disposable.tmp
+	@test "$$(wc -l < .disposable.tmp)" -gt 1000 || { rm -f .disposable.tmp; echo "The download looks wrong; the list is unchanged."; exit 1; }
+	@{ head -4 disposable_email_domains.txt; cat .disposable.tmp; } > .disposable.new && rm .disposable.tmp && mv .disposable.new disposable_email_domains.txt
+	@echo "==> $$(grep -vc '^#' disposable_email_domains.txt) temporary-email domains. 'make release' publishes the new list."
 
 ##@ Admin panel
 

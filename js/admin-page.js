@@ -182,6 +182,7 @@
       '<div class="hero-stats admin-chips">' +
       chip(num(s.learners), t("learners with an account")) +
       (s.new ? chip(num(s.new), t("haven't chosen their password yet")) : "") +
+      (s.tempEmail ? chip(num(s.tempEmail), t("with a temporary email (marked in Learners)")) : "") +
       chip(num(s.new7), t("new this week")) +
       chip(num(s.active7), t("active this week")) +
       chip(num(s.active30), t("active in 30 days")) +
@@ -256,17 +257,9 @@
   }
 
   /* The message an admin sends a new student from their own mailbox (the
-     site sends no email): in English and Armenian, since the student's
-     language isn't known yet. */
+     site sends no email), in Armenian. */
   function studentMessage(r, site, days) {
     return [
-      "Hello,", "",
-      "Your account at 1991 Academy, the online school of 1991 Unit, is ready.", "",
-      "Website: " + site,
-      "Username: " + r.username,
-      "Temporary password: " + r.password, "",
-      "Sign in within " + days + " days. You'll then choose your own password, and the temporary one stops working.", "",
-      "---", "",
       "Բարև,", "",
       "Քո հաշիվը 1991 Academy-ում՝ 1991 Ստորաբաժանման առցանց դպրոցում, պատրաստ է։", "",
       "Կայք՝ " + site,
@@ -305,17 +298,11 @@
 
   function linkMessage(link, days) {
     return [
-      "Hello,", "",
-      "You're invited to 1991 Academy, the online school of 1991 Unit.", "",
-      "Open this link to create your account:",
-      link, "",
-      "You can use any email address you like. The link works only once, within " + days + " days.", "",
-      "---", "",
       "Բարև,", "",
       "Հրավիրված ես 1991 Academy՝ 1991 Ստորաբաժանման առցանց դպրոց։", "",
       "Հաշիվ ստեղծելու համար բացի՛ր այս հղումը՝",
       link, "",
-      "Կարող ես օգտագործել ցանկացած էլ. հասցե։ Հղումը գործում է միայն մեկ անգամ՝ " + days + " օրվա ընթացքում։",
+      "Կարող ես օգտագործել քո ցանկացած մշտական էլ. հասցեն (ժամանակավոր էլ. հասցեներն ընդունելի չեն)։ Հղումը գործում է միայն մեկ անգամ՝ " + days + " օրվա ընթացքում։",
     ].join("\n");
   }
 
@@ -401,7 +388,7 @@
           '<div class="dash-actions"><button class="btn" type="button" data-copy-all>' + t("Copy all messages") + "</button></div>";
         bindCopyButtons(out);
         out.querySelector("[data-copy-all]").addEventListener("click", () =>
-          copyText(res.links.map((l) => "To: " + (l.sentTo || "?") + "\n\n" + linkMessage(l.link, res.days)).join("\n\n==========\n\n")));
+          copyText(res.links.map((l) => "Ում՝ " + (l.sentTo || "?") + "\n\n" + linkMessage(l.link, res.days)).join("\n\n==========\n\n")));
         form.sentTo.value = "";
         loadList();
       } catch (err) {
@@ -472,7 +459,7 @@
         const all = out.querySelector("[data-copy-all]");
         if (all) {
           all.addEventListener("click", () =>
-            copyText(ok.map((r) => "To: " + r.email + "\n\n" + studentMessage(r, res.site, res.days)).join("\n\n==========\n\n")));
+            copyText(ok.map((r) => "Ում՝ " + r.email + "\n\n" + studentMessage(r, res.site, res.days)).join("\n\n==========\n\n")));
         }
         if (ok.length) {
           form.students.value = bad.map((r) => r.email + (r.username ? ", " + r.username : "")).join("\n");
@@ -537,7 +524,8 @@
       .map((u) =>
         '<tr><td><a href="#learner/' + encodeURIComponent(u.username) + '">' + esc(u.username) + "</a>" +
         (u.admin ? " " + badge("admin", t("admin")) : "") +
-        (u.new ? " " + badge("draft", t("new")) : "") + "</td>" +
+        (u.new ? " " + badge("draft", t("new")) : "") +
+        (u.tempEmail ? " " + badge("draft", t("temporary email")) : "") + "</td>" +
         "<td>" + esc(u.email) + "</td><td>" + fmtDate(u.created) + "</td><td>" + fmtDate(u.lastActive) + "</td>" +
         "<td>" + num(u.xp) + "</td><td>" + num(u.lessons) + "</td></tr>")
       .join("");
@@ -574,7 +562,8 @@
       '<div class="profile-head"><div class="avatar">' + esc(u.username[0].toUpperCase()) + "</div><div>" +
       "<h2>" + esc(u.username) + " " + (u.admin ? badge("admin", t("admin")) : "") +
       (u.new ? badge("draft", t("hasn't chosen a password yet")) : "") +
-      (u.optIn ? badge("info", t("on the leaderboard")) : "") + "</h2>" +
+      (u.optIn ? badge("info", t("on the leaderboard")) : "") +
+      (u.tempEmail ? badge("draft", t("temporary email")) : "") + "</h2>" +
       '<p class="admin-muted">' + esc(u.email) + "</p></div></div>" +
       '<div class="hero-stats admin-chips">' +
       chip(num(u.xp) + " XP", t("in total")) +

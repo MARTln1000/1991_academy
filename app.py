@@ -161,6 +161,7 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,20}$")
 _EMAIL_CHAR = r"[^@\s\x00-\x1f\x7f<>\"'`()\[\]\\,;:]"
 EMAIL_RE = re.compile(rf"^{_EMAIL_CHAR}+@{_EMAIL_CHAR}+\.{_EMAIL_CHAR}+$")
 MAX_EMAIL = 254                   # the longest valid email address
+DISPOSABLE_FILE = ROOT / "disposable_email_domains.txt"
 
 # The git commit this image was built from ("-dirty" = with uncommitted
 # changes). The Dockerfile writes the file from the REVISION build argument the
@@ -830,6 +831,25 @@ def issue_temp_password(conn, uid: int) -> str:
     return password
 
 
+def load_disposable_domains() -> frozenset:
+    try:
+        lines = DISPOSABLE_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        log.warning("%s is missing: temporary email addresses can't be refused.", DISPOSABLE_FILE.name)
+        return frozenset()
+    return frozenset(x.strip().lower() for x in lines if x.strip() and not x.startswith("#"))
+
+
+DISPOSABLE_DOMAINS = load_disposable_domains()
+
+
+def disposable_email(email: str) -> bool:
+    """An address at a temporary-email service (mailinator.com, or any
+    subdomain of one: x.mailinator.com)."""
+    parts = email.rsplit("@", 1)[-1].strip().lower().rstrip(".").split(".")
+    return any(".".join(parts[i:]) in DISPOSABLE_DOMAINS for i in range(len(parts) - 1))
+
+
 def create_account(conn, username: str, email: str, password: str | None = None) -> int:
     """A new account (its id), or Invalid. There is no open sign-up: admins
     add students, or send them an invitation link. Without a password the
@@ -840,6 +860,8 @@ def create_account(conn, username: str, email: str, password: str | None = None)
         raise Invalid("Username must be 3-20 characters: letters, digits, underscore.")
     if len(email) > MAX_EMAIL or not EMAIL_RE.match(email):
         raise Invalid("That doesn't look like an email address.")
+    if disposable_email(email):
+        raise Invalid("Temporary email addresses can't be used. Use an address you'll keep.")
     if conn.execute("SELECT 1 FROM users WHERE username = ? COLLATE NOCASE", (username,)).fetchone():
         raise Invalid(f"The username {username} is taken.")
     if conn.execute("SELECT 1 FROM users WHERE email = ? COLLATE NOCASE", (email,)).fetchone():
@@ -1405,6 +1427,7 @@ def learner_summary(row, wk: str) -> dict:
         "optIn": bool(row["leaderboard_opt_in"]),
         "admin": bool(row["is_admin"]),
         "new": bool(row["must_change_password"]),   # hasn't chosen their own password yet
+        "tempEmail": disposable_email(row["email"]),  # made before such addresses were refused
     }
 
 
@@ -1443,6 +1466,7 @@ def _overview(conn, _admin):
         "learners": one("SELECT COUNT(*) FROM users"),
         "new": one("SELECT COUNT(*) FROM users WHERE must_change_password = 1"),
         "admins": one("SELECT COUNT(*) FROM users WHERE is_admin = 1"),
+        "tempEmail": sum(1 for r in conn.execute("SELECT email FROM users") if disposable_email(r["email"])),
         "new7": one("SELECT COUNT(*) FROM users WHERE created >= ?", now - 7 * day),
         "new30": one("SELECT COUNT(*) FROM users WHERE created >= ?", now - 30 * day),
         "active7": one("SELECT COUNT(*) FROM state WHERE updated >= ?", now - 7 * day),

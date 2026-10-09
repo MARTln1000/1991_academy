@@ -95,7 +95,16 @@ both from the admin panel (Learners):
 
 A temporary password works for 14 days and only to choose the student's own
 password, at their first sign-in. New students are on the leaderboard once
-they earn XP; each can hide themselves on their account page. A student who forgets their
+they earn XP; each can hide themselves on their account page.
+
+No account can use a **temporary (disposable) email address**
+(mailinator.com, yopmail.com and about 9,000 others, with their subdomains):
+joining, adding students and `make admin` all refuse one. The list is
+`disposable_email_domains.txt`, from the community-maintained
+[disposable-email-domains](https://github.com/disposable-email-domains/disposable-email-domains)
+project; `make disposable-list` refreshes it (then `make release`). Accounts
+made before an address was on the list are marked "temporary email" in the
+admin panel. A student who forgets their
 password asks an instructor, who gives them a new temporary one (Learners →
 the student → New temporary password). Signed in, the account page offers
 **change password** and **delete account** (GDPR-clean cascade).

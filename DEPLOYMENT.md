@@ -181,7 +181,9 @@ In `app.py`:
   the URL fragment so they never reach a log or a Referer): each makes one
   account, for the email the student types, within 7 days; the link is
   claimed and the account made in one transaction, and a wrong link counts
-  as a failed sign-in. Or admins add students directly. Either way the
+  as a failed sign-in. Or admins add students directly. No account can use
+  a temporary-email address (`disposable_email_domains.txt`, refreshed with
+  `make disposable-list`). Either way the
   student gets a temporary password (12 characters, about 59 bits, stored only
   hashed, shown once). It works for 14 days and only to choose
   the student's own password: signing in with it gives no session, and it
