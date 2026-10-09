@@ -553,13 +553,13 @@ def test_api_writes_must_be_json(client, ctype):
     this API never grants. So a forged request is refused before it runs."""
     register(client)
     headers = {"Content-Type": ctype} if ctype else {}
-    body = '{"optIn": true}'
+    body = '{"optIn": false}'                 # new accounts are on the leaderboard
     for method, path in [("POST", "/api/leaderboard-optin"), ("POST", "/api/logout"),
                          ("PUT", "/api/state"), ("POST", "/api/delete-account")]:
         r = client.request(method, path, content=body, headers=headers)
         assert r.status_code == 415, (method, path, r.status_code)
     assert client.get("/api/me").status_code == 200    # still signed in, account intact
-    assert client.get("/api/me").json()["user"]["leaderboardOptIn"] is False
+    assert client.get("/api/me").json()["user"]["leaderboardOptIn"] is True
 
 
 def test_api_has_no_cors(client):

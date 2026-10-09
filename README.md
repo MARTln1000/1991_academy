@@ -13,7 +13,7 @@ A personal learning platform: seven structured tracks — **Mathematics for ML, 
 - **Practice** — spaced repetition: quiz questions from completed lessons become review cards, due just before you'd forget them.
 - **Achievements, streak, daily goal ring** — loss-aversion mechanics that make skipping a day feel expensive.
 
-It is **a closed school**: only the students 1991 Unit adds can sign in. Admins add them in the admin panel and send each one a temporary password from their own email (the site sends no email); students choose their own password at their first sign-in. Without signing in, only the sign-in page and the privacy policy open; lessons, course files and videos all need an account. Progress syncs to the account (SQLite), so a student can continue on any device.
+It is **a closed school**: only the students 1991 Unit adds can sign in. Admins send each one an invitation link from their own email (or add them and send a temporary password); the site sends no email. Students choose their own password at their first sign-in, and appear in the admin panel and on the leaderboard by themselves. Without signing in, only the sign-in page and the privacy policy open; lessons, course files and videos all need an account. Progress syncs to the account (SQLite), so a student can continue on any device.
 
 No build step; the frontend is pure dependency-free HTML/CSS/JS. The backend is a single FastAPI app (`app.py`) — the one place dependencies live (`requirements.txt` + `.venv`).
 
@@ -79,12 +79,23 @@ Or just open `index.html` / serve statically with `python3 -m http.server` — t
 
 ### Account management
 
-There is no sign-up, and **the site sends no email**. An admin adds each
-student in the admin panel; the site gives them a **temporary password**,
-shown to the admin once, with a ready message (English and Armenian: the
-site's address, the username, the password) that the admin sends from their
-own mailbox. The temporary password works for 14 days and only to choose the
-student's own password, at their first sign-in. A student who forgets their
+There is no open sign-up, and **the site sends no email**. Two ways in,
+both from the admin panel (Learners):
+
+- **Invitation links** (the usual way). The admin makes one link per
+  student and sends it, with the ready message (English and Armenian), from
+  their own mailbox. The link isn't tied to an address: whoever opens it
+  types the email they want to use (and optionally a username), and gets a
+  username and a **temporary password** on the screen, then chooses their
+  own password straight away. A link works **once, for 7 days**; the panel
+  shows which links are waiting and who joined with each, and can cancel
+  one. Only a hash of each link is stored.
+- **Add students** directly, by email: each gets a temporary password, shown
+  to the admin once, with a ready message to send.
+
+A temporary password works for 14 days and only to choose the student's own
+password, at their first sign-in. New students are on the leaderboard once
+they earn XP; each can hide themselves on their account page. A student who forgets their
 password asks an instructor, who gives them a new temporary one (Learners →
 the student → New temporary password). Signed in, the account page offers
 **change password** and **delete account** (GDPR-clean cascade).
@@ -369,7 +380,7 @@ builds the image on every push and smoke-tests it, including a backup.
 - **State is local-first.** Progress (`1991_academy:progress:v1`), XP/badges (`1991_academy:xp:v1`), review cards (`1991_academy:review:v1`), and the language choice (`1991_academy:lang`) live in localStorage (so do code drafts, `1991_academy:draft:*`, from before exercises moved to Colab). Signed in, the same keys are pushed to `/api/state` ~1.5 s after every change (coalesced into one request, and flushed on `pagehide`) and pulled back on any device you sign in on. Conflict rule: the copy with more XP wins; signing in as a *different* user on a shared device always adopts that account's server copy. The theme and per-problem editor language stay device-local on purpose. (The prefix was `martinium:` before the project was renamed. `js/common.js` moves a returning visitor's old keys over once on page load, and the server renames old keys in stored and incoming blobs.)
 - **State changes are announced, not reloaded.** `Progress`/`XP`/`Review` cache their parsed blob, so a render pass parses it once instead of forty times. Anything that rewrites those keys from outside — a sync pull, or another tab — calls `notifyStateChanged()` (`js/common.js`), which drops the caches and fires `1991_academy:state-changed`; page controllers subscribe with `onStateChanged(render)` and redraw in place. Open editors and in-progress practice sessions are deliberately left alone. Only a language change still forces a reload, because the language is baked into every rendered string.
 - **If a sync fails, you are told once.** Oversized payloads shed the largest code drafts first so progress always gets through; a 401 signs you out cleanly; repeated failures toast once, not every 1.5 seconds.
-- **Auth is boring on purpose.** Passwords are scrypt-hashed with per-user salts; sessions are random tokens in an HttpOnly cookie (30 days); users, sessions and state blobs live in `1991_academy.db` (SQLite). Accounts are made only by admins, and every page except sign-in needs a session. The FastAPI backend adds rate limiting (failed sign-ins, per address and per account), request-size caps, structured logging, `/api/health` and env-based config — see `DEPLOYMENT.md` before exposing it to the open internet (HTTPS required). Changing a password, or a new temporary one, rotates the hash and ends other sessions; a temporary password is stored only hashed, gives no session, works once and expires in 14 days. Expired sessions are swept at startup and hourly.
+- **Auth is boring on purpose.** Passwords are scrypt-hashed with per-user salts; sessions are random tokens in an HttpOnly cookie (30 days); users, sessions and state blobs live in `1991_academy.db` (SQLite). Accounts are made only by admins or with an admin's invitation link (one use, 7 days, stored hashed), and every page except sign-in needs a session. The FastAPI backend adds rate limiting (failed sign-ins, per address and per account), request-size caps, structured logging, `/api/health` and env-based config — see `DEPLOYMENT.md` before exposing it to the open internet (HTTPS required). Changing a password, or a new temporary one, rotates the hash and ends other sessions; a temporary password is stored only hashed, gives no session, works once and expires in 14 days. Expired sessions are swept at startup and hourly.
 - **Nothing blocking runs on the event loop.** SQLite and scrypt go through `run_in_threadpool`, so a slow login hash never stalls other requests or static files.
 - **The web root is an allowlist, not a blocklist.** Only `/`, the seven page files, `robots.txt` and the `css/ js/ tracks/ assets/` trees are reachable. The previous extension blocklist could be walked around by case (`/APP.PY` resolves to `app.py` on macOS and Windows volumes, which served the backend source and the credentials database) and simultaneously 404'd the legitimate `.py` starter files under `assets/courses/`.
 - **The database is indexed.** `init_db()` creates `CREATE INDEX IF NOT EXISTS` entries on every start (idempotent, data-safe, and applied to existing DBs too): case-insensitive `username`/`email` for login-by-either, a composite `(leaderboard_opt_in, xp_total DESC)` so the leaderboard is an indexed search rather than a full scan, and `sessions(user_id)` for per-user session cleanup. Session-token, `state.user_id` and the UNIQUE columns are already covered by their PRIMARY KEY / UNIQUE constraints.
@@ -476,10 +487,11 @@ verified numerically against numpy before shipping.
 - **Overview:** learners, sign-ups and lessons completed over the last 30
   days, progress per track, the most and least completed lessons, Lab
   problems and missions solved.
-- **Learners:** **add students** (one email per line, optionally with a
-  username). Each gets a temporary password, shown once, with a ready
-  message to send from your own email ("Copy message", or "Copy all
-  messages"). Search and sort every account, open one to see its progress
+- **Learners:** **invitation links** (one per student, each with a ready
+  message to send from your own email; see who joined with each, cancel
+  one), or **add students** (one email per line, optionally with a
+  username), each with a temporary password, shown once, and a ready
+  message ("Copy message", or "Copy all messages"). Search and sort every account, open one to see its progress
   lesson by lesson, give a new temporary password, sign it out on every
   device, or delete it.
 - **Lessons:** edit any lesson, or add new ones to a module, in English and

@@ -32,7 +32,8 @@ Where each one is set:
   so a stray line there can't switch a production setting off.
 
 The site sends no email and has no mail settings: admins send new students
-their username and temporary password from their own mailbox.
+an invitation link (or their username and temporary password) from their own
+mailbox.
 
 ## 2. What runs where
 
@@ -175,9 +176,14 @@ languages and its date.
 
 In `app.py`:
 
-- **A closed school:** no sign-up and no email; admins add students, each
-  with a temporary password (12 characters, about 59 bits, stored only
-  hashed, shown to the admin once). It works for 14 days and only to choose
+- **A closed school:** no open sign-up and no email. Admins send
+  invitation links (32 random characters, stored only as a SHA-256 hash, in
+  the URL fragment so they never reach a log or a Referer): each makes one
+  account, for the email the student types, within 7 days; the link is
+  claimed and the account made in one transaction, and a wrong link counts
+  as a failed sign-in. Or admins add students directly. Either way the
+  student gets a temporary password (12 characters, about 59 bits, stored only
+  hashed, shown once). It works for 14 days and only to choose
   the student's own password: signing in with it gives no session, and it
   is checked and replaced in one write, so it can't be used twice. Admins
   can't issue one for another admin (`make password` on the server can). Without a session only the sign-in

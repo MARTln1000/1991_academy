@@ -33,6 +33,8 @@ Environment:
 API:
     POST /api/login               {identifier, password}
     POST /api/first-password      {identifier, password, newPassword}  (temporary -> own password)
+    POST /api/join/check          {token}   is this invitation link still good?
+    POST /api/join                {token, email, username?} -> {username, password, days}
     POST /api/logout
     GET  /api/me
     GET  /api/state               -> {"data": {...}|null, "updated": ts|null}
@@ -46,15 +48,18 @@ API:
     GET  /api/content.js          lessons and announcements added in the admin panel,
                                   and the lesson videos hosted here (ACADEMY_MEDIA)
 
-Accounts are made by admins only: there is no sign-up, and the site sends no
-email. A new student gets a temporary password (shown to the admin once),
-which works for 14 days and only to choose their own on first sign-in. The
+There is no open sign-up, and the site sends no email. An admin either adds
+students (each gets a temporary password, shown to the admin once) or makes
+invitation links and sends them from their own mailbox: whoever opens a link
+types the email they want and gets a temporary password, once, within 7 days.
+A temporary password works for 14 days and only to choose one's own. The
 first admin is made on the server: `python app.py admin add NAME EMAIL`;
 `python app.py password NAME` gives any account a new temporary password.
 
 Admin (accounts with users.is_admin; `python app.py admin add NAME` grants it):
     GET  /api/admin/overview      site statistics
     POST /api/admin/students      {students: [{email, username?}]} -> accounts + temporary passwords
+    GET  /api/admin/join-links    POST /api/admin/join-links {sentTo: [...]}  POST .../ID/cancel
     GET  /api/admin/users[?q=&sort=created|active|xp|name&offset=]
     GET  /api/admin/users/NAME    one learner, with their progress
     POST /api/admin/users/NAME/temp-password | sign-out | delete
@@ -123,6 +128,8 @@ TRUST_PROXY = os.environ.get("ACADEMY_TRUST_PROXY", "0") == "1"
 SESSION_TTL = 30 * 86400          # 30 days
 MAX_BODY = 300_000                # bytes, hard cap for any request body
 TEMP_PASSWORD_TTL = 14 * 86400   # a temporary password works for 14 days, once
+JOIN_LINK_TTL = 7 * 86400         # an invitation link works for 7 days, once
+JOIN_LINKS_KEPT = 30 * 86400      # the panel lists links this long after they expire
 # pass_hash of an account that has no usable password (created before
 # temporary passwords existed): nothing matches it.
 NO_PASSWORD = "!"
@@ -291,6 +298,21 @@ def init_db():
                 created REAL NOT NULL,
                 created_by TEXT NOT NULL
             );
+            -- Invitation links an admin sends from their own mailbox. Whoever
+            -- opens one types the email they want and gets an account, once.
+            -- Only the token's hash is stored. `sent_to` is the admin's own
+            -- note of who got the link; `used_by` the username it made.
+            CREATE TABLE IF NOT EXISTS join_links (
+                id INTEGER PRIMARY KEY,
+                token_hash TEXT UNIQUE NOT NULL,
+                sent_to TEXT NOT NULL DEFAULT '',
+                created REAL NOT NULL,
+                created_by TEXT NOT NULL,
+                expires REAL NOT NULL,
+                used REAL,
+                used_by TEXT,
+                cancelled REAL
+            );
             -- Every change made through the admin panel or `app.py admin`.
             -- Names, not user ids: the record outlives deleted accounts.
             CREATE TABLE IF NOT EXISTS admin_log (
@@ -423,6 +445,9 @@ def sweep_expired():
         ).rowcount
         resets = conn.execute(
             "DELETE FROM password_resets WHERE expires < ?", (now,)
+        ).rowcount
+        resets += conn.execute(
+            "DELETE FROM join_links WHERE expires < ?", (now - JOIN_LINKS_KEPT,)
         ).rowcount
         conn.commit()
     if sessions or resets:
@@ -806,9 +831,11 @@ def issue_temp_password(conn, uid: int) -> str:
 
 
 def create_account(conn, username: str, email: str, password: str | None = None) -> int:
-    """A new account (its id), or Invalid. There is no sign-up: admins add
-    students. Without a password the account has none usable yet; the caller
-    gives it a temporary one (issue_temp_password). The caller commits."""
+    """A new account (its id), or Invalid. There is no open sign-up: admins
+    add students, or send them an invitation link. Without a password the
+    account has none usable yet; the caller gives it a temporary one
+    (issue_temp_password). New accounts are on the leaderboard; each student
+    can hide themselves on their account page. The caller commits."""
     if not USERNAME_RE.match(username):
         raise Invalid("Username must be 3-20 characters: letters, digits, underscore.")
     if len(email) > MAX_EMAIL or not EMAIL_RE.match(email):
@@ -824,8 +851,8 @@ def create_account(conn, username: str, email: str, password: str | None = None)
         pass_hash, salt = hash_password(password, raw_salt), raw_salt.hex()
     try:
         cur = conn.execute(
-            "INSERT INTO users (username, email, pass_hash, salt, created, must_change_password) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO users (username, email, pass_hash, salt, created, must_change_password, "
+            "leaderboard_opt_in) VALUES (?, ?, ?, ?, ?, ?, 1)",
             (username, email, pass_hash, salt, time.time(), int(password is None)),
         )
     except sqlite3.IntegrityError:            # a concurrent request for the same name
@@ -1585,6 +1612,200 @@ async def api_admin_students(request: Request):
     return {"results": results, "days": TEMP_PASSWORD_TTL // 86400, "site": site_address(),
             "warning": links_warning()}
 
+
+
+# --- invitation links
+#
+# The admin sends each student a link from their own mailbox. The link isn't
+# tied to an address: the student may want another one, so whoever opens it
+# types the email they want. That is why a link works only once: a forwarded
+# or leaked link makes at most one account, and the admin sees whose.
+
+MAX_JOIN_LINKS = 200     # per request
+MAX_SENT_TO = 120        # characters of the admin's note
+
+
+def token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def join_address(token: str) -> str:
+    # in the fragment: browsers never send it to the server or in a Referer
+    return f"{BASE_URL}/account.html#join={token}"
+
+
+def link_status(row, now: float) -> str:
+    if row["used"]:
+        return "used"
+    if row["cancelled"]:
+        return "cancelled"
+    return "expired" if row["expires"] < now else "waiting"
+
+
+def link_out(row, now: float) -> dict:
+    return {"id": row["id"], "sentTo": row["sent_to"], "created": row["created"], "createdBy": row["created_by"],
+            "expires": row["expires"], "used": row["used"], "usedBy": row["used_by"], "status": link_status(row, now)}
+
+
+def _make_join_links(conn, admin, sent_to: list):
+    now, links = time.time(), []
+    for note in sent_to:
+        token = secrets.token_urlsafe(24)
+        cur = conn.execute(
+            "INSERT INTO join_links (token_hash, sent_to, created, created_by, expires) VALUES (?, ?, ?, ?, ?)",
+            (token_hash(token), note, now, admin["username"], now + JOIN_LINK_TTL),
+        )
+        links.append({"id": cur.lastrowid, "sentTo": note, "link": join_address(token)})
+    audit(conn, admin["username"], "join-links", None, f"{len(links)} link(s)")
+    conn.commit()
+    return {"links": links, "days": JOIN_LINK_TTL // 86400, "warning": links_warning()}
+
+
+@app.post("/api/admin/join-links")
+async def api_admin_join_links(request: Request):
+    """Invitation links, one per entry in sentTo (the admin's note of who
+    gets it: an email or a name). The links are shown this once."""
+    if denied := await admin_gate(request):
+        return denied
+    body = await json_body(request)
+    raw = body.get("sentTo") if body else None
+    if not isinstance(raw, list) or not raw or not all(isinstance(x, str) for x in raw):
+        return err("invalid request body")
+    if len(raw) > MAX_JOIN_LINKS:
+        return err(f"At most {MAX_JOIN_LINKS} links at a time.")
+    return await admin_call(request, _make_join_links, [x.strip()[:MAX_SENT_TO] for x in raw])
+
+
+def _join_links(conn, _admin):
+    now = time.time()
+    rows = conn.execute(
+        "SELECT * FROM join_links WHERE expires >= ? ORDER BY created DESC, id DESC LIMIT 500",
+        (now - JOIN_LINKS_KEPT,),
+    ).fetchall()
+    return {"links": [link_out(r, now) for r in rows]}
+
+
+@app.get("/api/admin/join-links")
+async def api_admin_join_links_list(request: Request):
+    return await admin_call(request, _join_links)
+
+
+def _cancel_join_link(conn, admin, link_id: int):
+    row = conn.execute("SELECT * FROM join_links WHERE id = ?", (link_id,)).fetchone()
+    if row is None:
+        raise AdminError("not found", 404)
+    if link_status(row, time.time()) != "waiting":
+        raise AdminError("This link can't be used any more anyway.", 409)
+    conn.execute("UPDATE join_links SET cancelled = ? WHERE id = ? AND used IS NULL", (time.time(), link_id))
+    audit(conn, admin["username"], "join-link-cancel", row["sent_to"] or f"#{link_id}")
+    conn.commit()
+    return {"ok": True}
+
+
+@app.post("/api/admin/join-links/{link_id}/cancel")
+async def api_admin_join_link_cancel(request: Request, link_id: int):
+    return await admin_call(request, _cancel_join_link, link_id)
+
+
+JOIN_PROBLEMS = {
+    "unknown": "This link doesn't work. Check that you opened the whole link, or ask your instructor for a new one.",
+    "used": "This link has already been used. If that wasn't you, tell your instructor.",
+    "expired": "This link has expired. Ask your instructor for a new one.",
+    "cancelled": "This link was cancelled. Ask your instructor for a new one.",
+}
+
+
+def join_problem(conn, token: str):
+    """None if the link can make an account, else what is wrong with it."""
+    row = conn.execute("SELECT * FROM join_links WHERE token_hash = ?", (token_hash(token),)).fetchone()
+    if row is None:
+        return "unknown"
+    status = link_status(row, time.time())
+    return None if status == "waiting" else status
+
+
+def _check_join(token: str):
+    with db() as conn:
+        return join_problem(conn, token)
+
+
+def _join(token: str, email: str, username: str):
+    """An account for whoever opened the link: (result, None) or (None,
+    problem). The link is claimed and the account made in one transaction,
+    so a link makes one account even if it is submitted twice at once; a
+    rejected email or username leaves the link unused."""
+    with db() as conn:
+        problem = join_problem(conn, token)
+        if problem:
+            return None, problem
+        now = time.time()
+        claimed = conn.execute(
+            "UPDATE join_links SET used = ? WHERE token_hash = ? AND used IS NULL AND cancelled IS NULL AND expires >= ?",
+            (now, token_hash(token), now),
+        ).rowcount
+        if not claimed:                          # another submission got there first
+            conn.rollback()
+            return None, "used"
+        try:
+            uid = create_account(conn, username or username_from(conn, email), email)
+        except Invalid as e:
+            conn.rollback()
+            return None, str(e)
+        password = issue_temp_password(conn, uid)
+        name = conn.execute("SELECT username FROM users WHERE id = ?", (uid,)).fetchone()[0]
+        conn.execute("UPDATE join_links SET used_by = ? WHERE token_hash = ?", (name, token_hash(token)))
+        conn.commit()
+        return {"username": name, "email": email, "password": password, "days": TEMP_PASSWORD_TTL // 86400}, None
+
+
+async def join_token(request: Request):
+    """(body, token, ip failure list) or (error response, None, None). A
+    wrong token counts like a wrong password: tokens can't be guessed, but
+    nobody gets to try."""
+    ip_fails, _ = failures(request, "join-fail", 60)
+    if len(ip_fails) >= IP_LOGIN_FAILS:
+        log.warning("rate-limit ip=%s bucket=join-fail", client_ip(request))
+        return err("Too many attempts — try again later.", 429), None, None
+    body = await json_body(request)
+    token = str(body.get("token", "")) if body else ""
+    if not body or not token or len(token) > 100:
+        return err("invalid request body"), None, None
+    return body, token, ip_fails
+
+
+def join_error(problem: str, ip_fails) -> JSONResponse:
+    if problem == "unknown":
+        ip_fails.append(time.time())
+    return JSONResponse({"error": JOIN_PROBLEMS[problem], "problem": problem}, status_code=410)
+
+
+@app.post("/api/join/check")
+async def api_join_check(request: Request):
+    body, token, ip_fails = await join_token(request)
+    if token is None:
+        return body
+    problem = await run_in_threadpool(_check_join, token)
+    if problem:
+        return join_error(problem, ip_fails)
+    return {"ok": True, "days": TEMP_PASSWORD_TTL // 86400}
+
+
+@app.post("/api/join")
+async def api_join(request: Request):
+    """Whoever opened an invitation link: an account for the email they type,
+    with a temporary password (shown on their screen) to choose their own."""
+    body, token, ip_fails = await join_token(request)
+    if token is None:
+        return body
+    email = str(body.get("email", "")).strip().lower()
+    username = str(body.get("username") or "").strip()
+    result, problem = await run_in_threadpool(_join, token, email, username)
+    if result is None:
+        if problem in JOIN_PROBLEMS:
+            return join_error(problem, ip_fails)
+        return err(problem)
+    log.info("join user=%s", result["username"])
+    return result
 
 def _learner_sign_out(conn, admin, username: str):
     row = find_learner(conn, username)

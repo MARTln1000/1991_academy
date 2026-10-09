@@ -282,6 +282,30 @@ const I18N = (() => {
     "This temporary password has expired. Ask your instructor for a new one.": "Այս ժամանակավոր գաղտնաբառը ժամկետանց է։ Նորը խնդրի՛ր դասավանդողիդ։",
     "Choose a password different from the temporary one.": "Ընտրի՛ր ժամանակավորից տարբեր գաղտնաբառ։",
     "Choose your own password to continue.": "Շարունակելու համար ընտրի՛ր քո սեփական գաղտնաբառը։",
+    /* invitation links (account.html#join=…) */
+    "Join 1991 Academy": "Միացի՛ր 1991 Academy-ին",
+    "Checking your link…": "Հղումը ստուգվում է…",
+    "This link can't be used": "Այս հղումը հնարավոր չէ օգտագործել",
+    "You're signed in as {0}. This link makes a new account: sign out first if it's meant for you.":
+      "Մուտք ես գործել որպես {0}։ Այս հղումը նոր հաշիվ է ստեղծում. եթե այն քեզ համար է, նախ դուրս եկ։",
+    "Your instructor sent you this link. Type the email you want to use: your account is made for it. The link works only once.":
+      "Այս հղումը քեզ ուղարկել է դասավանդողդ։ Գրի՛ր այն էլ. հասցեն, որը ցանկանում ես օգտագործել. հաշիվդ կստեղծվի դրա համար։ Հղումը գործում է միայն մեկ անգամ։",
+    "Username (optional)": "Օգտանուն (ըստ ցանկության)",
+    "3–20 letters, digits or _. Others see it on the leaderboard. Leave it empty to make one from your email.":
+      "3–20 տառ, թիվ կամ _։ Այն երևում է առաջատարների ցուցակում։ Թող դատարկ, և այն կկազմվի էլ. հասցեիցդ։",
+    "Create my account": "Ստեղծել իմ հաշիվը",
+    "Your account is ready": "Հաշիվդ պատրաստ է",
+    "Your temporary password": "Քո ժամանակավոր գաղտնաբառը",
+    "If you stop here, sign in later with {0} and this temporary password, within {1} days.":
+      "Եթե հիմա կանգ առնես, ավելի ուշ մուտք գործի՛ր {0}-ով և այս ժամանակավոր գաղտնաբառով՝ {1} օրվա ընթացքում։",
+    "Continue: choose your own password": "Շարունակել՝ ընտրել իմ գաղտնաբառը",
+    "This link doesn't work. Check that you opened the whole link, or ask your instructor for a new one.":
+      "Այս հղումը չի աշխատում։ Ստուգի՛ր, որ բացել ես ամբողջ հղումը, կամ նորը խնդրի՛ր դասավանդողիդ։",
+    "This link has already been used. If that wasn't you, tell your instructor.":
+      "Այս հղումն արդեն օգտագործվել է։ Եթե դա դու չէիր, տեղեկացրո՛ւ դասավանդողիդ։",
+    "This link has expired. Ask your instructor for a new one.": "Այս հղումը ժամկետանց է։ Նորը խնդրի՛ր դասավանդողիդ։",
+    "This link was cancelled. Ask your instructor for a new one.": "Այս հղումը չեղարկվել է։ Նորը խնդրի՛ր դասավանդողիդ։",
+    "That doesn't look like an email address.": "Սա էլ. հասցեի նման չէ։",
     /* messages from the server */
     "Wrong credentials.": "Սխալ օգտանուն կամ գաղտնաբառ։",
     "This reset link is invalid or has expired.": "Այս հղումն անվավեր է կամ ժամկետանց։",

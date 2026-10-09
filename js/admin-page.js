@@ -300,10 +300,134 @@
     });
   }
 
+  /* ---------- Invitation links: one per student, sent from the admin's own
+     mailbox. Whoever opens one types the email they want, once. ---------- */
+
+  function linkMessage(link, days) {
+    return [
+      "Hello,", "",
+      "You're invited to 1991 Academy, the online school of 1991 Unit.", "",
+      "Open this link to create your account:",
+      link, "",
+      "You can use any email address you like. The link works only once, within " + days + " days.", "",
+      "---", "",
+      "Բարև,", "",
+      "Հրավիրված ես 1991 Academy՝ 1991 Ստորաբաժանման առցանց դպրոց։", "",
+      "Հաշիվ ստեղծելու համար բացի՛ր այս հղումը՝",
+      link, "",
+      "Կարող ես օգտագործել ցանկացած էլ. հասցե։ Հղումը գործում է միայն մեկ անգամ՝ " + days + " օրվա ընթացքում։",
+    ].join("\n");
+  }
+
+  function linkRow(l, days) {
+    return (
+      '<div class="admin-temp admin-link-row">' +
+      "<div><strong>" + esc(l.sentTo || t("(no note)")) + "</strong></div>" +
+      '<code class="admin-temp-pw admin-link">' + esc(l.link) + "</code>" +
+      '<button class="btn" type="button" data-copy-message>' + t("Copy message") + "</button>" +
+      '<textarea class="visually-hidden" readonly tabindex="-1" aria-hidden="true">' + esc(linkMessage(l.link, days)) + "</textarea></div>"
+    );
+  }
+
+  function linksCard() {
+    return card(
+      "<h3>🔗 " + t("Invitation links") + "</h3>" +
+      '<p class="admin-muted">' + t("Send each student a link from your own email. Whoever opens it types the email they want to use and gets an account. Each link works once, for 7 days. Write who you're sending them to, one per line (an email or a name): it's only for you, to see below who has joined.") + "</p>" +
+      '<form data-links-form>' +
+      '<textarea class="admin-input" name="sentTo" rows="4" placeholder="anna.karapetyan@example.com&#10;Arman Sargsyan"></textarea>' +
+      '<div class="dash-actions"><button class="btn btn-primary" type="submit">' + t("Make links") + "</button></div>" +
+      '<p class="form-error" data-msg></p><div data-links-out></div></form>' +
+      '<div data-links-list></div>',
+      "admin-invite");
+  }
+
+  const LINK_STATUS = { waiting: "waiting", used: "joined", expired: "expired", cancelled: "cancelled" };
+
+  function renderLinkList(links) {
+    if (!links.length) return "";
+    const status = (l) => {
+      if (l.status === "used") {
+        return badge("new", t("joined")) + " " +
+          (l.usedBy ? '<a href="#learner/' + encodeURIComponent(l.usedBy) + '">' + esc(l.usedBy) + "</a>" : "");
+      }
+      if (l.status === "waiting") return badge("edited", t("waiting")) + ' <span class="admin-muted">' + t("until {0}", fmtDate(l.expires)) + "</span>";
+      return badge("muted", t(LINK_STATUS[l.status]));
+    };
+    const rows = links.map((l) =>
+      "<tr><td>" + esc(l.sentTo || "—") + "</td><td>" + fmtDate(l.created) + " · " + esc(l.createdBy) + "</td>" +
+      "<td>" + status(l) + "</td><td>" +
+      (l.status === "waiting" ? '<button class="btn" data-cancel-link="' + l.id + '">' + t("Cancel") + "</button>" : "") +
+      "</td></tr>").join("");
+    const waiting = links.filter((l) => l.status === "waiting").length;
+    const joined = links.filter((l) => l.status === "used").length;
+    return (
+      "<h4>" + t("Links of the last 30 days") + "</h4>" +
+      '<p class="admin-muted">' + t("{0} joined, {1} waiting.", joined, waiting) + "</p>" +
+      '<div class="table-wrap"><table class="admin-table"><thead><tr><th>' + t("Sent to") + "</th><th>" + t("Made") +
+      "</th><th>" + t("Status") + "</th><th></th></tr></thead><tbody>" + rows + "</tbody></table></div>"
+    );
+  }
+
+  function bindLinks(el) {
+    const form = el.querySelector("[data-links-form]");
+    const msg = form.querySelector("[data-msg]");
+    const out = form.querySelector("[data-links-out]");
+    const list = el.querySelector("[data-links-list]");
+    async function loadList() {
+      try {
+        list.innerHTML = renderLinkList((await api("/api/admin/join-links")).links);
+      } catch (e) {
+        list.innerHTML = '<p class="form-error">' + esc(e.message) + "</p>";
+      }
+    }
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      msg.textContent = "";
+      out.innerHTML = "";
+      const sentTo = form.sentTo.value.split("\n").map((x) => x.trim()).filter(Boolean);
+      if (!sentTo.length) {
+        msg.textContent = t("Write who gets each link, one per line.");
+        return;
+      }
+      const btn = form.querySelector("button[type=submit]");
+      btn.disabled = true;
+      try {
+        const res = await send("POST", "/api/admin/join-links", { sentTo });
+        msg.style.color = "var(--success)";
+        msg.textContent = t("Made {0}. Send each link from your own email: they're shown only now.", res.links.length);
+        out.innerHTML =
+          (res.warning ? '<p class="form-error">⚠️ ' + esc(t(res.warning)) + "</p>" : "") +
+          '<div class="admin-temps">' + res.links.map((l) => linkRow(l, res.days)).join("") + "</div>" +
+          '<div class="dash-actions"><button class="btn" type="button" data-copy-all>' + t("Copy all messages") + "</button></div>";
+        bindCopyButtons(out);
+        out.querySelector("[data-copy-all]").addEventListener("click", () =>
+          copyText(res.links.map((l) => "To: " + (l.sentTo || "?") + "\n\n" + linkMessage(l.link, res.days)).join("\n\n==========\n\n")));
+        form.sentTo.value = "";
+        loadList();
+      } catch (err) {
+        msg.style.color = "";
+        msg.textContent = err.message;
+      }
+      btn.disabled = false;
+    });
+    list.addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-cancel-link]");
+      if (!b || !confirm(t("Cancel this link? Nobody will be able to join with it."))) return;
+      b.disabled = true;
+      try {
+        await send("POST", "/api/admin/join-links/" + b.dataset.cancelLink + "/cancel");
+      } catch (err) {
+        toast(err.message);
+      }
+      loadList();
+    });
+    loadList();
+  }
+
   function studentsCard() {
     return card(
       "<h3>➕ " + t("Add students") + "</h3>" +
-      '<p class="admin-muted">' + t("Students can't sign up themselves. One per line: an email, and optionally a username after a comma (otherwise it is made from the email). Each gets a temporary password: send it from your own email. The site sends no email.") + "</p>" +
+      '<p class="admin-muted">' + t("Or make the accounts yourself, when you know each student's email. One per line: an email, and optionally a username after a comma (otherwise it is made from the email). Each gets a temporary password: send it from your own email. The site sends no email.") + "</p>" +
       '<form data-students-form>' +
       '<textarea class="admin-input" name="students" rows="4" placeholder="anna.karapetyan@example.com&#10;arman@example.com, arman_s"></textarea>' +
       '<div class="dash-actions"><button class="btn btn-primary" type="submit">' + t("Add") + "</button></div>" +
@@ -364,7 +488,7 @@
 
   async function viewLearners() {
     return {
-      html: studentsCard() + card(
+      html: linksCard() + studentsCard() + card(
         '<div class="admin-toolbar">' +
         '<input class="admin-input" type="search" data-q placeholder="' + esc(t("Search by name or email")) + '" value="' + esc(learnerQuery.q) + '" />' +
         '<select class="admin-input" data-sort aria-label="' + esc(t("Sort")) + '">' +
@@ -381,6 +505,7 @@
           list.innerHTML = renderLearners(d);
         }
         const reload = () => load().catch((e) => (list.innerHTML = '<p class="form-error">' + esc(e.message) + "</p>"));
+        bindLinks(el);
         bindStudents(el, reload);
         el.querySelector("[data-q]").addEventListener("input", (e) => {
           clearTimeout(timer);
@@ -1166,6 +1291,8 @@
   const ACTIONS = {
     "add-student": "Added a student",
     "temp-password": "Gave a new temporary password",
+    "join-links": "Made invitation links",
+    "join-link-cancel": "Cancelled an invitation link",
     "invite": "Invited a student",
     "reset-link": "Sent a password-reset link",
     "sign-out": "Signed out on every device",
@@ -1205,6 +1332,8 @@
       if (DETAILS[e.detail]) return esc(t(DETAILS[e.detail]));
       const sessions = e.detail.match(/^(\d+) session\(s\)$/);
       if (sessions) return esc(t(sessions[1] === "1" ? "{0} device" : "{0} devices", sessions[1]));
+      const links = e.detail.match(/^(\d+) link\(s\)$/);
+      if (links) return esc(t(links[1] === "1" ? "{0} link" : "{0} links", links[1]));
       return esc(e.detail);
     };
     const rows = entries

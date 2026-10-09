@@ -93,6 +93,35 @@ I18N.extend({
   /* adding students: temporary passwords (the site sends no email) */
   "Add students": "Ավելացնել ուսանողներ",
   "Add": "Ավելացնել",
+  "Or make the accounts yourself, when you know each student's email. One per line: an email, and optionally a username after a comma (otherwise it is made from the email). Each gets a temporary password: send it from your own email. The site sends no email.":
+    "Կամ ստեղծի՛ր հաշիվներն ինքդ, երբ գիտես յուրաքանչյուր ուսանողի էլ. հասցեն։ Ամեն տողում՝ էլ. փոստ, և ցանկության դեպքում ստորակետից հետո՝ օգտանուն (հակառակ դեպքում այն կազմվում է էլ. փոստից)։ Յուրաքանչյուրը ստանում է ժամանակավոր գաղտնաբառ. ուղարկի՛ր այն քո էլ. փոստից։ Կայքը նամակներ չի ուղարկում։",
+
+  /* invitation links */
+  "Invitation links": "Հրավերի հղումներ",
+  "Send each student a link from your own email. Whoever opens it types the email they want to use and gets an account. Each link works once, for 7 days. Write who you're sending them to, one per line (an email or a name): it's only for you, to see below who has joined.":
+    "Յուրաքանչյուր ուսանողի ուղարկի՛ր հղում քո էլ. փոստից։ Ով բացում է այն, գրում է իր ուզած էլ. հասցեն և ստանում հաշիվ։ Յուրաքանչյուր հղում գործում է մեկ անգամ՝ 7 օրվա ընթացքում։ Գրի՛ր, թե ում ես ուղարկում, ամեն տողում մեկը (էլ. հասցե կամ անուն). դա միայն քեզ համար է, որպեսզի ստորև տեսնես, թե ով է միացել։",
+  "Make links": "Ստեղծել հղումներ",
+  "(no note)": "(առանց նշումի)",
+  "Write who gets each link, one per line.": "Գրի՛ր, թե ով է ստանում յուրաքանչյուր հղումը, ամեն տողում մեկը։",
+  "Made {0}. Send each link from your own email: they're shown only now.":
+    "Ստեղծվեց՝ {0}։ Յուրաքանչյուր հղում ուղարկի՛ր քո էլ. փոստից. դրանք ցույց են տրվում միայն հիմա։",
+  "Links of the last 30 days": "Վերջին 30 օրվա հղումները",
+  "{0} joined, {1} waiting.": "Միացել են՝ {0}, սպասվում են՝ {1}։",
+  "Sent to": "Ում է ուղարկվել",
+  "Made": "Ստեղծվել է",
+  "Status": "Կարգավիճակ",
+  "waiting": "սպասվում է",
+  "joined": "միացել է",
+  "expired": "ժամկետանց",
+  "cancelled": "չեղարկված",
+  "until {0}": "մինչև {0}",
+  "Cancel this link? Nobody will be able to join with it.": "Չեղարկե՞լ այս հղումը։ Դրանով այլևս ոչ ոք չի կարողանա միանալ։",
+  "This link can't be used any more anyway.": "Այս հղումն արդեն իսկ հնարավոր չէ օգտագործել։",
+  "Made invitation links": "Ստեղծեց հրավերի հղումներ",
+  "Cancelled an invitation link": "Չեղարկեց հրավերի հղում",
+  "{0} link": "{0} հղում",
+  "{0} links": "{0} հղում",
+
   "Students can't sign up themselves. One per line: an email, and optionally a username after a comma (otherwise it is made from the email). Each gets a temporary password: send it from your own email. The site sends no email.":
     "Ուսանողներն իրենք չեն կարող գրանցվել։ Ամեն տողում՝ էլ. փոստ, և ցանկության դեպքում ստորակետից հետո՝ օգտանուն (հակառակ դեպքում այն կազմվում է էլ. փոստից)։ Յուրաքանչյուրը ստանում է ժամանակավոր գաղտնաբառ. ուղարկի՛ր այն քո էլ. փոստից։ Կայքը նամակներ չի ուղարկում։",
   "Added {0}. Send each of them their message: the passwords are shown only now, and work for {1} days.":

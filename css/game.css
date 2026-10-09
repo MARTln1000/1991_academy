@@ -734,6 +734,8 @@
 .auth-identity .avatar { width: 44px; height: 44px; font-size: 1.2rem; flex: none; }
 .auth-identity span { display: block; font-size: 0.78rem; color: var(--text-muted); }
 .auth-identity strong { font-size: 1.05rem; overflow-wrap: anywhere; }
+.auth-temp-pw { font-family: var(--font-mono); letter-spacing: 0.04em; user-select: all; }
+.auth-hint { margin: 6px 0 0; font-size: 0.8rem; color: var(--text-muted); }
 
 /* password with show/hide */
 .pw-wrap { position: relative; }

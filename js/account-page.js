@@ -1,10 +1,11 @@
 /* ============================================
    1991 Academy — Account page
-   Sign in when logged out (there is no sign-up:
-   an admin adds each student and sends them a
-   temporary password), choosing one's own
-   password after signing in with a temporary
-   one, and profile + security when logged in.
+   Sign in when logged out (there is no open
+   sign-up: an admin adds each student, or sends
+   them an invitation link: #join=…), choosing
+   one's own password after signing in with a
+   temporary one, and profile + security when
+   logged in.
    ============================================ */
 
 (async function () {
@@ -259,6 +260,97 @@
     });
   }
 
+  /* ---------- An invitation link: account.html#join=TOKEN ----------
+     The link isn't tied to an address: whoever opens it types the email they
+     want, once. The token stays in the fragment, which the browser never
+     sends to the server except in these requests. */
+
+  function joinToken() {
+    const m = location.hash.match(/^#join=([A-Za-z0-9_-]{1,100})$/);
+    return m ? m[1] : null;
+  }
+
+  function forgetJoinLink() {
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+
+  function renderJoinProblem(message) {
+    root.innerHTML = authPage(
+      '<div class="form-card auth-card">' +
+      '<h1 class="auth-title">' + t("This link can't be used") + "</h1>" +
+      '<p class="f-sub" data-problem></p>' +
+      '<a class="btn btn-primary btn-block" href="account.html" data-to-sign-in>' + t("Sign in") + "</a></div>",
+      '<p class="auth-foot">' + t("No account? Accounts are only for the school's students: ask your instructor, or write to {0}.", SUPPORT) + "</p>");
+    root.querySelector("[data-problem]").textContent = t(message);
+    root.querySelector("[data-to-sign-in]").addEventListener("click", forgetJoinLink);
+  }
+
+  async function renderJoin(token) {
+    if (Auth.current()) {
+      root.innerHTML = authPage(
+        '<div class="form-card auth-card">' +
+        '<h1 class="auth-title">' + t("Join 1991 Academy") + "</h1>" +
+        '<p class="f-sub">' + t("You're signed in as {0}. This link makes a new account: sign out first if it's meant for you.", esc(Auth.current().username)) + "</p>" +
+        '<button class="btn btn-primary btn-block" type="button" data-signout>' + t("Sign out") + "</button></div>");
+      root.querySelector("[data-signout]").addEventListener("click", async () => {
+        await Auth.logout();
+        render();
+      });
+      return;
+    }
+    root.innerHTML = authPage('<div class="form-card auth-card"><p class="f-sub">' + t("Checking your link…") + "</p></div>");
+    try {
+      await Auth.joinCheck(token);
+    } catch (err) {
+      return renderJoinProblem(err.message);
+    }
+    root.innerHTML = authPage(
+      '<form class="form-card auth-card" data-form="join">' +
+      '<h1 class="auth-title">' + t("Join 1991 Academy") + "</h1>" +
+      '<p class="f-sub">' + t("Your instructor sent you this link. Type the email you want to use: your account is made for it. The link works only once.") + "</p>" +
+      '<div class="field"><label for="jn-email">' + t("Email") + "</label>" +
+      '<input id="jn-email" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required /></div>' +
+      '<div class="field"><label for="jn-name">' + t("Username (optional)") + "</label>" +
+      '<input id="jn-name" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" aria-describedby="jn-name-hint" />' +
+      '<p class="auth-hint" id="jn-name-hint">' + t("3–20 letters, digits or _. Others see it on the leaderboard. Leave it empty to make one from your email.") + "</p></div>" +
+      '<button class="btn btn-primary btn-block" type="submit">' + t("Create my account") + "</button>" +
+      '<p class="form-error" data-error role="alert"></p></form>',
+      '<p class="auth-foot"><a href="privacy.html">' + t("Privacy Policy") + "</a></p>");
+
+    const form = root.querySelector("[data-form=join]");
+    const errEl = form.querySelector("[data-error]");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errEl.textContent = "";
+      const btn = form.querySelector("button[type=submit]");
+      btn.disabled = true;
+      try {
+        const r = await Auth.join(token, form.email.value.trim(), form.username.value.trim());
+        forgetJoinLink();
+        renderJoined(r);
+      } catch (err) {
+        if (err.body && err.body.problem) return renderJoinProblem(err.message);
+        errEl.textContent = t(err.message);
+        btn.disabled = false;
+      }
+    });
+  }
+
+  /* The account exists, with a temporary password: show it (in case they stop
+     here), then straight on to choosing their own. */
+  function renderJoined(r) {
+    root.innerHTML = authPage(
+      '<div class="form-card auth-card">' +
+      '<h1 class="auth-title">' + t("Your account is ready") + "</h1>" +
+      '<div class="auth-identity"><div class="avatar" aria-hidden="true">' + esc(r.username[0].toUpperCase()) + "</div>" +
+      "<div><span>" + t("Your username") + "</span><strong>" + esc(r.username) + "</strong></div></div>" +
+      '<div class="auth-identity auth-temp"><div><span>' + t("Your temporary password") + "</span>" +
+      '<strong class="auth-temp-pw">' + esc(r.password) + "</strong></div></div>" +
+      '<p class="f-sub">' + t("If you stop here, sign in later with {0} and this temporary password, within {1} days.", esc(r.email), r.days) + "</p>" +
+      '<button class="btn btn-primary btn-block" type="button" data-continue>' + t("Continue: choose your own password") + "</button></div>");
+    root.querySelector("[data-continue]").addEventListener("click", () => renderFirstPassword(r.email, r.password, r.username));
+  }
+
   /* Where to go after signing in: the page that sent the visitor here
      (?next=/tracks/dl.html), if it is one of this site's. */
   function nextPage() {
@@ -315,11 +407,14 @@
     const navAccount = document.querySelector("[data-account]");
     if (navAccount) navAccount.hidden = !Auth.current();
     if (Auth.isOffline()) return renderOffline();
+    const token = joinToken();
+    if (token) return renderJoin(token);
     if (Auth.current()) return renderProfile();
     renderForms();
   }
 
   render();
+  window.addEventListener("hashchange", render);   /* an invitation link pasted into this open page */
   renderStreakPill();
   XP.renderPill();
 

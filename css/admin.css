@@ -239,3 +239,8 @@ select.admin-input { max-width: 100%; }
   .admin-temp { grid-template-columns: minmax(0, 1fr) auto; }
   .admin-temp > div:first-child { grid-column: 1 / -1; }
 }
+
+/* invitation links (Learners) */
+.admin-link { font-size: 0.82rem; letter-spacing: 0; overflow-wrap: anywhere; }
+.admin-table [data-cancel-link] { padding: 5px 10px; font-size: 0.8rem; }
+[data-links-list] h4 { margin-top: 18px; }

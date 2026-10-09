@@ -308,6 +308,16 @@ const Auth = (() => {
       return user;
     },
 
+    /* An invitation link (account.html#join=…): is it still good, and an
+       account for the email typed on it, with a temporary password. */
+    joinCheck(token) {
+      return api("/api/join/check", { method: "POST", body: JSON.stringify({ token }) });
+    },
+
+    join(token, email, username) {
+      return api("/api/join", { method: "POST", body: JSON.stringify({ token, email, username }) });
+    },
+
     async deleteAccount(password) {
       await api("/api/delete-account", {
         method: "POST",
