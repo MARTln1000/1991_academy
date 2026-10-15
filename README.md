@@ -221,7 +221,8 @@ This part is for whoever puts the site on the internet.
    padlock should show a valid certificate. Then make your own admin account
    (there is no sign-up): `make admin NAME=<your username> EMAIL=<your email>`.
    It prints a temporary password: sign in with it on the site and choose
-   your own. Add everyone else from the admin panel.
+   your own. Students then join through invitation links from the admin
+   panel (Learners), which the site's admins send from their own email.
 6. **Existing accounts** (optional). Copy the export to the server with
    `scp academy-export.db.gz root@SERVER:1991_academy/`, then on the server,
    in `1991_academy`, run `make restore FILE=academy-export.db.gz`.

@@ -25,3 +25,6 @@ media/
 
 # macOS
 .DS_Store
+
+# Notes for AI coding sessions (local only)
+NEXT_SESSION_PROMPT.md
