@@ -1,0 +1,37 @@
+[project]
+name = "academy-1991"
+version = "2.3.0"
+description = "1991 Academy: learning platform with courses, exercises and progress tracking."
+readme = "README.md"
+requires-python = ">=3.12"
+# Runtime dependencies are declared in requirements.txt and pinned in
+# requirements.lock (see README.md, "Dependencies").
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = [
+    "assets",
+    "tests/content/solutions",  # reference solutions written as learner code
+]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # import order
+    "B",        # bugbear
+    "UP",       # pyupgrade
+    "SIM",      # simplify
+    "S",        # bandit (security)
+]
+ignore = [
+    "UP031",    # printf-style formatting is acceptable
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S102", "S105", "S106", "S107", "S603", "S607", "E501"]
+"tools/**" = ["S101", "S603", "S607", "E501"]  # build script: asserts are invariants
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

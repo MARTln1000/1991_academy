@@ -35,7 +35,7 @@ endif
 export REVISION := $(shell sha=$$(git rev-parse HEAD 2>/dev/null) && { git diff --quiet HEAD 2>/dev/null && echo $$sha || echo $$sha-dirty; })
 
 .DEFAULT_GOAL := help
-.PHONY: disposable-list password video media-upload help install dev test notebooks up down restart restart-caddy prune-images check-caddy refresh logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
+.PHONY: lint disposable-list password video media-upload help install dev test notebooks up down restart restart-caddy prune-images check-caddy refresh logs status shell release admin admin-remove admins update auto-update-on auto-update-off backup nightly-backup restore
 
 help: ## list available targets
 	@awk 'BEGIN {FS = ":.*## "} /^##@/ {printf "\n%s\n", substr($$0, 5)} /^[a-z][a-z-]*:.*## / {printf "  make %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -207,6 +207,9 @@ dev: $(VENV) ## run the dev server on http://localhost:8735
 
 test: $(VENV) ## run the test suite
 	$(PYTHON) -m pytest -q
+
+lint: $(VENV) ## static analysis (ruff)
+	.venv/bin/ruff check .
 
 notebooks: ## regenerate Colab notebooks from js/data (requires Node.js)
 	python3 tools/build_notebooks.py

@@ -38,6 +38,8 @@ jobs:
             requirements.lock
       - name: Install dependencies (pinned by requirements.lock)
         run: pip install -r requirements-dev.txt -c requirements.lock
+      - name: Lint
+        run: ruff check .
       # includes notebook generation/execution tests (requires Node.js)
       - name: Run the tests
         run: pytest -q

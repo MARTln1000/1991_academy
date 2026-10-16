@@ -50,7 +50,7 @@ ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PORT", 8735))
 # With ACADEMY_TRUST_PROXY=1 this port must be reachable only by the proxy,
 # otherwise clients can forge X-Forwarded-For. Docker publishes it on 127.0.0.1.
-HOST = os.environ.get("ACADEMY_HOST", "0.0.0.0")
+HOST = os.environ.get("ACADEMY_HOST", "0.0.0.0")  # noqa: S104 - container default
 DB_PATH = os.environ.get("ACADEMY_DB", str(ROOT / "1991_academy.db"))
 # Self-hosted lesson videos: <youtube-id>.mp4|webm with an optional <youtube-id>.jpg
 # poster. Mounted at runtime; see docs/content.md.
@@ -68,7 +68,7 @@ MAX_BODY = 300_000                # bytes, per request
 TEMP_PASSWORD_TTL = 14 * 86400
 JOIN_LINK_TTL = 7 * 86400
 JOIN_LINKS_KEPT = 30 * 86400      # retention of expired links for the admin view
-NO_PASSWORD = "!"                 # pass_hash sentinel: account has no usable password
+NO_PASSWORD = "!"  # noqa: S105 - pass_hash sentinel: account has no usable password
 SWEEP_INTERVAL = 3600
 # Upper bound for the XP snapshot; also keeps it within SQLite's 64-bit INTEGER.
 MAX_XP = 10_000_000
@@ -630,12 +630,12 @@ def gate(request: Request, path: str):
 async def guard(request: Request, call_next):
     path = request.url.path
     response = gate(request, path)
-    if response is None and not path.startswith("/api/") and not public_path(path):
-        if not await run_in_threadpool(session_valid, session_token(request)):
-            if path == "/" or path.endswith(".html"):
-                response = RedirectResponse("/account.html?next=" + quote(path, safe="/"), status_code=303)
-            else:
-                response = err("Sign in first.", 401)
+    if (response is None and not path.startswith("/api/") and not public_path(path)
+            and not await run_in_threadpool(session_valid, session_token(request))):
+        if path == "/" or path.endswith(".html"):
+            response = RedirectResponse("/account.html?next=" + quote(path, safe="/"), status_code=303)
+        else:
+            response = err("Sign in first.", 401)
 
     t0 = time.time()
     if response is None:
@@ -1118,7 +1118,7 @@ def site_address() -> str:
 def links_warning() -> str | None:
     """Warning text if BASE_URL points at a loopback host, else None."""
     host = BASE_URL.split("://", 1)[-1].split("/", 1)[0].split(":")[0]
-    if host in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+    if host in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):  # noqa: S104 - comparison, not a bind
         return f"This address starts with {BASE_URL}, which works only on the computer running the site."
     return None
 
@@ -1357,9 +1357,10 @@ def _learners(conn, _admin, query: str, sort: str, offset: int):
     if query:
         where = "WHERE u.username LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\'"
         args = [like_pattern(query)] * 2
-    total = conn.execute(f"SELECT COUNT(*) FROM users u {where}", args).fetchone()[0]
+    # `where` is a constant and the ORDER BY clause comes from a whitelist.
+    total = conn.execute(f"SELECT COUNT(*) FROM users u {where}", args).fetchone()[0]  # noqa: S608
     rows = conn.execute(
-        "SELECT u.*, s.updated AS last_active, s.data AS data FROM users u "
+        "SELECT u.*, s.updated AS last_active, s.data AS data FROM users u "  # noqa: S608
         f"LEFT JOIN state s ON s.user_id = u.id {where} "
         f"ORDER BY {LEARNER_SORTS[sort]} LIMIT ? OFFSET ?",
         [*args, LEARNERS_PAGE, offset],
@@ -1608,7 +1609,8 @@ def _join(token: str, email: str, username: str):
             return None, problem
         now = time.time()
         claimed = conn.execute(
-            "UPDATE join_links SET used = ? WHERE token_hash = ? AND used IS NULL AND cancelled IS NULL AND expires >= ?",
+            "UPDATE join_links SET used = ? "
+            "WHERE token_hash = ? AND used IS NULL AND cancelled IS NULL AND expires >= ?",
             (now, token_hash(token), now),
         ).rowcount
         if not claimed:                          # lost the race to a concurrent request

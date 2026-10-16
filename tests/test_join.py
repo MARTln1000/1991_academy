@@ -46,7 +46,7 @@ def join(client, tok, email, username=""):
 
 
 def links(admin):
-    return {l["id"]: l for l in admin.get("/api/admin/join-links").json()["links"]}
+    return {link["id"]: link for link in admin.get("/api/admin/join-links").json()["links"]}
 
 
 # ------------------------------------------------------------------ making
@@ -62,7 +62,7 @@ def test_links_are_made_shown_once_and_stored_hashed(admin, caplog):
     assert token(a) not in stored and token(a) not in caplog.text
     listed = admin.get("/api/admin/join-links").text + admin.get("/api/admin/log").text
     assert token(a) not in listed
-    assert [l["status"] for l in links(admin).values()] == ["waiting", "waiting"]
+    assert [link["status"] for link in links(admin).values()] == ["waiting", "waiting"]
     entry = admin.get("/api/admin/log").json()["entries"][0]
     assert (entry["action"], entry["detail"]) == ("join-links", "2 link(s)")
 
@@ -199,7 +199,7 @@ def test_old_links_are_swept(admin):
         conn.execute("UPDATE join_links SET expires = ? WHERE sent_to = 'old'", (time.time() - app.JOIN_LINKS_KEPT - 1,))
         conn.commit()
     app.sweep_expired()
-    assert [l["sentTo"] for l in links(admin).values()] == ["new"]
+    assert [link["sentTo"] for link in links(admin).values()] == ["new"]
 
 
 def test_new_students_are_on_the_leaderboard(admin):

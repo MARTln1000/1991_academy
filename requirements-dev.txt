@@ -1,6 +1,7 @@
 # Development and test dependencies (make install).
 -r requirements.txt
 pytest>=8
+ruff==0.17.1
 httpx>=0.27
 # notebook tests (tests/test_notebooks.py)
 matplotlib>=3.8
