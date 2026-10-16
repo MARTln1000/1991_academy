@@ -416,7 +416,7 @@ def test_rate_limit_per_proxy_ip(client, monkeypatch):
     "/tests/test_api.py",
     "/DEPLOYMENT.md",
     "/.venv/pyvenv.cfg",
-    "/.claude/launch.json",
+    "/.vscode/settings.json",
     # inside the Docker image (/app) next to the site, but never web-visible
     "/REVISION",
     "/requirements.lock",

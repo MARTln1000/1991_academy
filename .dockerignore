@@ -21,7 +21,8 @@ tests/
 .git/
 .gitignore
 .github/
-.claude/
+# any other hidden folder or file (editor and tool settings)
+.*
 **/.DS_Store
 .dockerignore
 Dockerfile
