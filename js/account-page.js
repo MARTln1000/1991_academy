@@ -1,12 +1,7 @@
-/* ============================================
-   1991 Academy — Account page
-   Sign in when logged out (there is no open
-   sign-up: an admin adds each student, or sends
-   them an invitation link: #join=…), choosing
-   one's own password after signing in with a
-   temporary one, and profile + security when
-   logged in.
-   ============================================ */
+/**
+ * Account page: sign-in, invitation sign-up (#join=TOKEN), first-password
+ * setup after a temporary password, and the profile/security view.
+ */
 
 (async function () {
   const root = document.getElementById("account-root");
@@ -20,7 +15,7 @@
     });
   }
 
-  /* ---------- Offline: no server behind this page ---------- */
+  /* ---------- Offline (no backend) ---------- */
 
   function renderOffline() {
     root.innerHTML =
@@ -33,7 +28,7 @@
       "</div>";
   }
 
-  /* ---------- Logged in: profile + security ---------- */
+  /* ---------- Profile ---------- */
 
   function renderProfile() {
     const u = Auth.current();
@@ -106,7 +101,7 @@
       try {
         await Auth.setLeaderboardOptIn(e.target.checked);
       } catch {
-        e.target.checked = !e.target.checked; // server said no — show the truth
+        e.target.checked = !e.target.checked; // request failed: revert the checkbox
         msg.style.color = "";
         msg.textContent = t("Couldn't save that — check your connection.");
       } finally {
@@ -165,9 +160,7 @@
     });
   }
 
-  /* ---------- Signed out: one centred page for sign-in, invitations and
-     new passwords. There is no sign-up: the school creates its students'
-     accounts and sends each a temporary password. ---------- */
+  /* ---------- Signed out: sign-in, invitations and new passwords ---------- */
 
   function authPage(inner, below) {
     return (
@@ -179,8 +172,8 @@
 
   const SUPPORT = '<a href="mailto:ai.1991@mil.am">ai.1991@mil.am</a>';
 
-  /* The new-password fields: show/hide, and a live checklist that keeps the
-     button off until the password is long enough and typed the same twice. */
+  /* New-password fields with show/hide and a live rule checklist; the submit
+     button stays disabled until every rule passes. */
   function newPasswordFields(notTemporary) {
     return (
       '<div class="field"><label for="np-1">' + t("New password") + "</label>" +
@@ -224,9 +217,8 @@
     update();
   }
 
-  /* Signed in with a temporary password (an admin sent it): choose one's own
-     before anything else. The temporary password stays in memory only, to
-     prove it once more with the new one. */
+  /* Mandatory password change after signing in with a temporary password.
+     The temporary password is kept in memory only, to authorize the change. */
   function renderFirstPassword(identifier, temporary, username) {
     root.innerHTML = authPage(
       '<form class="form-card auth-card" data-form="first-password" novalidate>' +
@@ -234,7 +226,7 @@
       '<p class="f-sub">' + t("You signed in with a temporary password. Choose your own to continue: you'll sign in with it from now on.") + "</p>" +
       '<div class="auth-identity"><div class="avatar" aria-hidden="true">' + esc(username[0].toUpperCase()) + "</div>" +
       "<div><span>" + t("Your username") + "</span><strong>" + esc(username) + "</strong></div></div>" +
-      /* for password managers: the account this password belongs to */
+      /* hint for password managers */
       '<input class="visually-hidden" type="text" name="username" autocomplete="username" value="' + esc(username) + '" readonly tabindex="-1" aria-hidden="true" />' +
       newPasswordFields(true) +
       '<button class="btn btn-primary btn-block" type="submit">' + t("Start learning") + "</button>" +
@@ -260,10 +252,8 @@
     });
   }
 
-  /* ---------- An invitation link: account.html#join=TOKEN ----------
-     The link isn't tied to an address: whoever opens it types the email they
-     want, once. The token stays in the fragment, which the browser never
-     sends to the server except in these requests. */
+  /* ---------- Invitation link: account.html#join=TOKEN ----------
+     The token stays in the URL fragment and is sent only in the API calls below. */
 
   function joinToken() {
     const m = location.hash.match(/^#join=([A-Za-z0-9_-]{1,100})$/);
@@ -336,8 +326,8 @@
     });
   }
 
-  /* The account exists, with a temporary password: show it (in case they stop
-     here), then straight on to choosing their own. */
+  /* Account created: show the temporary credentials, then continue to the
+     password change. */
   function renderJoined(r) {
     root.innerHTML = authPage(
       '<div class="form-card auth-card">' +
@@ -351,8 +341,7 @@
     root.querySelector("[data-continue]").addEventListener("click", () => renderFirstPassword(r.email, r.password, r.username));
   }
 
-  /* Where to go after signing in: the page that sent the visitor here
-     (?next=/tracks/dl.html), if it is one of this site's. */
+  /* Post-sign-in redirect target from ?next=, restricted to same-site paths. */
   function nextPage() {
     const next = new URLSearchParams(location.search).get("next") || "";
     return /^\/(?!\/)[A-Za-z0-9_\-\/.]*$/.test(next) && !next.includes("..") ? next : "index.html";
@@ -403,7 +392,7 @@
   }
 
   function render() {
-    /* the nav's "Sign in" link would lead to this very page */
+    /* hide the nav's sign-in link on this page */
     const navAccount = document.querySelector("[data-account]");
     if (navAccount) navAccount.hidden = !Auth.current();
     if (Auth.isOffline()) return renderOffline();
@@ -414,12 +403,11 @@
   }
 
   render();
-  window.addEventListener("hashchange", render);   /* an invitation link pasted into this open page */
+  window.addEventListener("hashchange", render);   /* handle a link pasted into an already open page */
   renderStreakPill();
   XP.renderPill();
 
-  /* The profile shows XP/level/streak, so redraw it when progress lands from
-     a sync or another tab — but never while a form is being filled in. */
+  /* Re-render the profile on state changes, except while an input has focus. */
   onStateChanged(() => {
     renderStreakPill();
     XP.renderPill();

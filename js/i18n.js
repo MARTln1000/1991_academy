@@ -1,18 +1,16 @@
-/* ============================================
-   1991 Academy — i18n (English / Հայերեն)
-   English strings ARE the keys: t("Mark as
-   complete") returns Armenian in hy mode and
-   the key itself in en mode — untranslated
-   corners degrade gracefully to English.
-   Content uses L(obj, "field") → obj.field_hy
-   when present, else obj.field.
-   ============================================ */
+/**
+ * Internationalization (English / Armenian).
+ *
+ * English strings are the dictionary keys: t("Mark as complete") returns the
+ * Armenian translation in hy mode and the key itself otherwise. Content fields
+ * use L(obj, "field"), which prefers obj.field_hy in Armenian mode.
+ */
 
 const I18N = (() => {
   const KEY = "1991_academy:lang";
   let lang = localStorage.getItem(KEY) === "hy" ? "hy" : "en";
 
-  /* ---------- UI dictionary: English key → Armenian ---------- */
+  /* ---------- UI dictionary: English -> Armenian ---------- */
   const HY = {
     /* nav */
     "Lab": "Լաբ",
@@ -115,7 +113,7 @@ const I18N = (() => {
     "✓ Nice work — self-checked.": "✓ Լավ աշխատանք — ինքնաստուգված։",
     "✓ solved": "✓ լուծված",
     "This exercise needs the code runtime — open it from its track page.": "Այս վարժությանը կոդի միջավայր է պետք — բացի՛ր այն իր ուղու էջից։",
-    /* code exercises: solved in Google Colab (js/colab.js) */
+    /* code exercises (js/colab.js) */
     "Download the notebook": "Ներբեռնել նոթբուքը",
     "Download the exercise's notebook:": "Ներբեռնի՛ր վարժության նոթբուքը՝",
     "Open Google Colab, choose <strong>File → Upload notebook</strong> and pick the file you downloaded ({0}). Colab saves it in your Google Drive, in the <em>Colab Notebooks</em> folder.": "Բացի՛ր Google Colab-ը, ընտրի՛ր <strong>File → Upload notebook</strong> և ընտրի՛ր ներբեռնածդ ֆայլը ({0})։ Colab-ն այն պահում է քո Google Drive-ում՝ <em>Colab Notebooks</em> թղթապանակում։",
@@ -227,7 +225,7 @@ const I18N = (() => {
     "Update password": "Թարմացնել գաղտնաբառը",
     "✓ Password updated. Other devices were signed out.": "✓ Գաղտնաբառը թարմացվեց։ Մյուս սարքերից ելք կատարվեց։",
     "Passwords don't match.": "Գաղտնաբառերը չեն համընկնում։",
-    /* forgot / reset password */
+    /* password help */
     "Forgot your password?": "Մոռացե՞լ ես գաղտնաբառդ։",
     "Reset your password": "Վերականգնի՛ր գաղտնաբառդ",
     "Enter your account email and we'll send a reset link.": "Մուտքագրի՛ր հաշվիդ էլ. փոստը, և մենք կուղարկենք վերականգնման հղում։",
@@ -251,7 +249,7 @@ const I18N = (() => {
     "This week": "Այս շաբաթ",
     "All time": "Ամբողջ ժամանակ",
     "No XP earned this week yet — be the first.": "Այս շաբաթ դեռ XP չի վաստակվել — եղի՛ր առաջինը։",
-    /* sign-in page of a closed school: invitations instead of sign-up */
+    /* sign-in page */
     "1991 Academy": "1991 Academy",
     "The online school of 1991 Unit. Sign in with the account your school created for you.": "1991 Ստորաբաժանման առցանց դպրոցը։ Մուտք գործի՛ր այն հաշվով, որը քեզ համար ստեղծել է դպրոցը։",
     "No account? Accounts are only for the school's students: ask your instructor, or write to {0}.": "Հաշիվ չունե՞ս։ Հաշիվները միայն դպրոցի ուսանողների համար են. դիմի՛ր դասավանդողիդ կամ գրի՛ր {0} հասցեին։",
@@ -260,7 +258,7 @@ const I18N = (() => {
     "Start learning": "Սկսել սովորել",
     "This invitation link has expired": "Հրավերի այս հղումը ժամկետանց է",
     "Ask your instructor for a new one, or write to {0}.": "Նորը խնդրի՛ր դասավանդողիդ կամ գրի՛ր {0} հասցեին։",
-    /* the redesigned sign-in / new-password pages */
+    /* sign-in and new-password forms */
     "New password": "Նոր գաղտնաբառ",
     "Type it again": "Կրկնի՛ր այն",
     "At least 8 characters": "Առնվազն 8 նիշ",
@@ -274,7 +272,7 @@ const I18N = (() => {
     "This link has expired": "Այս հղումը ժամկետանց է",
     "Reset links work for one hour, once. Ask for a new one on the sign-in page.": "Վերականգնման հղումը գործում է մեկ ժամ և մեկ անգամ։ Նորը խնդրի՛ր մուտքի էջում։",
     "Password saved": "Գաղտնաբառը պահպանվեց",
-    /* temporary passwords (from an admin) */
+    /* temporary passwords */
     "Choose your own password": "Ընտրի՛ր քո սեփական գաղտնաբառը",
     "You signed in with a temporary password. Choose your own to continue: you'll sign in with it from now on.": "Մուտք գործեցիր ժամանակավոր գաղտնաբառով։ Շարունակելու համար ընտրի՛ր քո սեփականը. այսուհետ մուտք կգործես դրանով։",
     "Not the temporary password": "Ժամանակավոր գաղտնաբառից տարբեր",
@@ -282,7 +280,7 @@ const I18N = (() => {
     "This temporary password has expired. Ask your instructor for a new one.": "Այս ժամանակավոր գաղտնաբառը ժամկետանց է։ Նորը խնդրի՛ր դասավանդողիդ։",
     "Choose a password different from the temporary one.": "Ընտրի՛ր ժամանակավորից տարբեր գաղտնաբառ։",
     "Choose your own password to continue.": "Շարունակելու համար ընտրի՛ր քո սեփական գաղտնաբառը։",
-    /* invitation links (account.html#join=…) */
+    /* invitation links */
     "Join 1991 Academy": "Միացի՛ր 1991 Academy-ին",
     "Checking your link…": "Հղումը ստուգվում է…",
     "This link can't be used": "Այս հղումը հնարավոր չէ օգտագործել",
@@ -334,13 +332,13 @@ const I18N = (() => {
     return args.length ? fmt(s, args) : s;
   }
 
-  /* Content lookup: obj.field_hy in Armenian mode when present */
+  /* Content lookup: obj.field_hy in Armenian mode when present. */
   function L(obj, field) {
     if (lang === "hy" && obj && obj[field + "_hy"] != null) return obj[field + "_hy"];
     return obj ? obj[field] : "";
   }
 
-  /* Static HTML: translate [data-i18n] elements (hy only; en leaves DOM untouched) */
+  /* Translate [data-i18n] elements (Armenian only; English leaves the DOM untouched). */
   function applyStatic() {
     if (lang !== "hy") return;
     document.querySelectorAll("[data-i18n]").forEach((el) => {
@@ -357,7 +355,7 @@ const I18N = (() => {
     location.reload();
   }
 
-  /* toggle button: shows the language you'd switch TO */
+  /* label shows the target language */
   let toggleBound = false;
 
   function initToggle() {
@@ -365,7 +363,7 @@ const I18N = (() => {
       btn.textContent = lang === "hy" ? "EN" : "ՀԱՅ";
       btn.title = lang === "hy" ? "Switch to English" : "Փոխել հայերենի";
     });
-    if (toggleBound) return; // one document-level listener, however often we run
+    if (toggleBound) return; // single document-level listener
     toggleBound = true;
     document.addEventListener("click", (e) => {
       if (e.target.closest("[data-lang-toggle]")) setLang(lang === "hy" ? "en" : "hy");
@@ -377,15 +375,15 @@ const I18N = (() => {
     initToggle();
   }
 
-  /* Scripts sit at the end of <body>, so readyState is normally "loading"
-     here and DOMContentLoaded does the work. Both paths are idempotent. */
+  /* Scripts load at the end of <body>, so DOMContentLoaded normally runs this.
+     Both paths are idempotent. */
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", start);
   } else {
     start();
   }
 
-  /* More strings for one page (the admin panel keeps its own, js/i18n-admin.js) */
+  /* Page-specific dictionaries (e.g. js/i18n-admin.js). */
   function extend(dict) {
     Object.assign(HY, dict);
   }

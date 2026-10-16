@@ -1,13 +1,8 @@
-"""The scripts that move code from GitHub to the servers:
+"""Deployment scripts: deploy/auto-update.sh, tools/release.sh and the Makefile cron jobs.
 
-- deploy/auto-update.sh: run by cron on a server (`make auto-update-on`)
-- tools/release.sh: `make release`, which publishes to dev and master
-- the Makefile's cron jobs: auto-update and nightly backup leave each other be
-
-Each test builds throwaway git repositories: `origin` (a bare repo standing in
-for GitHub), `work` (the developer's checkout) and `server` (a clone, as on a
-server). Their Makefile is a stub that records which targets ran, so nothing
-here touches Docker, the real repository or the real crontab.
+Tests run against throwaway git repositories (a bare `origin`, a developer
+checkout and a server clone) with a stub Makefile that records invoked
+targets. Docker, the real repository and the real crontab are never touched.
 """
 import os
 import shutil

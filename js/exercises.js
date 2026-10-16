@@ -1,9 +1,7 @@
-/* ============================================
-   1991 Academy — Interactive exercises
-   Parsons (reorder), faded blanks, matching,
-   worked problems, and code exercises that
-   are solved in Google Colab (colab.js).
-   ============================================ */
+/**
+ * Interactive exercises: Parsons (reorder), faded blanks, matching, worked
+ * problems, and code exercises solved in Google Colab (see colab.js).
+ */
 
 const Exercises = (() => {
   function shuffle(arr) {
@@ -17,8 +15,7 @@ const Exercises = (() => {
 
   /* ---------- Parsons: click lines into order ---------- */
 
-  /* Never hand back the solution already in order — on the first draw or
-     after a reset. */
+  /* Shuffle until the order differs from the solution. */
   function scramble(lines) {
     if (lines.length < 2) return lines.slice();
     let out = shuffle(lines);
@@ -178,10 +175,10 @@ const Exercises = (() => {
     });
   }
 
-  /* ---------- Worked problem (math): attempt → reveal → self-check ---------- */
+  /* ---------- Worked problem: attempt, reveal, self-check ---------- */
 
   function mountProblem(ex, root, onSolved) {
-    /* prompt/solution are author-trusted HTML (math markup), injected as-is */
+    /* statement/solution are trusted author HTML (math markup) */
     root.innerHTML =
       '<div class="problem-prompt">' + L(ex, "statement") + "</div>" +
       '<div class="ex-actions">' +
@@ -208,10 +205,9 @@ const Exercises = (() => {
     });
   }
 
-  /* ---------- Code exercise: solved in Google Colab ---------- */
+  /* ---------- Code exercise (Google Colab) ---------- */
 
-  /* The learner opens the exercise's notebook in Colab (task, starter code,
-     tests), solves it there, and marks it solved here. */
+  /* Solved in a Colab notebook (task, starter code, tests); marked solved here. */
   function mountCode(ex, root, onSolved) {
     if (typeof Colab === "undefined") {
       root.innerHTML = '<p class="ex-prompt">' + t("This exercise needs the code runtime — open it from its track page.") + "</p>";
@@ -226,13 +222,13 @@ const Exercises = (() => {
   /* ---------- Public API ---------- */
 
   return {
-    /* Render a lesson's exercises into `wrap`. onSolved(index) fires once per solve click. */
+    /* Render a lesson's exercises into `wrap`. onSolved(index) fires once per solve. */
     mount(lesson, wrap, onSolved) {
       if (!lesson.exercises || !lesson.exercises.length || !wrap) return;
       lesson.exercises.forEach((ex, i) => {
         const mounter = MOUNTERS[ex.type];
         if (!mounter) {
-          // A content typo must not take the rest of the lesson down with it.
+          // Isolate rendering errors to the faulty exercise.
           console.warn("Unknown exercise type " + JSON.stringify(ex.type) + " in lesson " + lesson.id);
           return;
         }
@@ -240,7 +236,7 @@ const Exercises = (() => {
         const box = document.createElement("div");
         box.className = "exercise";
         const icon = ex.type === "problem" ? "📝" : ex.type === "code" ? "🐍" : "🛠️";
-        ex.__notebook = lesson.id + "-ex" + (i + 1);   /* tools/site_data.js names them the same way */
+        ex.__notebook = lesson.id + "-ex" + (i + 1);   /* naming must match tools/site_data.js */
         ex.__solved = solvedBefore;
         box.innerHTML =
           "<h3>" + icon + " " + esc(L(ex, "title")) +

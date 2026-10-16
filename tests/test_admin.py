@@ -1,8 +1,7 @@
-"""The admin panel's API (app.py, "admin") and its page.
+"""Admin API and admin page.
 
-Two browsers: `admin` is signed in as "boss", made an admin the way the server
-does it (`python app.py admin add boss`); `learner` is signed in as "alice".
-Every test gets a fresh temp database.
+Fixtures: `admin` is signed in as an admin created through the CLI path;
+`learner` is a regular user. Each test uses a fresh temporary database.
 """
 import json
 import re

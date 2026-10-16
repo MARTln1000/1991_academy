@@ -1,14 +1,12 @@
-/* ============================================
-   1991 Academy — Auth & sync
-   Accounts are optional: everything works as a
-   guest in localStorage. Signed in, the same
-   state syncs to the server (debounced), so
-   progress follows you across devices.
-   ============================================ */
+/**
+ * Authentication and state sync.
+ *
+ * The site works without an account (state lives in localStorage). When signed
+ * in, the same keys are synchronised with /api/state, debounced.
+ */
 
 const Auth = (() => {
-  /* Keys mirrored to the account. Anything not listed here stays on this
-     device (theme, per-problem editor language). */
+  /* Keys synchronised with the account; everything else stays device-local. */
   const SYNC_KEYS = [
     "1991_academy:progress:v1",
     "1991_academy:xp:v1",
@@ -18,16 +16,15 @@ const Auth = (() => {
   const DRAFT_PREFIX = "1991_academy:draft:";
   const LAST_USER_KEY = "1991_academy:lastUser";
 
-  /* The server caps a request body at 300 KB. Stay under it with room for
-     JSON overhead; if we're over, code drafts are shed before progress. */
+  /* Request-body budget, below the server's 300 KB limit. */
   const PAYLOAD_LIMIT = 260_000;
   const PUSH_DEBOUNCE_MS = 1500;
 
   let user = null;
-  let offline = false; // no server behind this page (e.g. opened via file://)
+  let offline = false; // true when no backend is available (e.g. file://)
   let pushTimer = null;
   let lastSyncedAt = null;
-  let warnedAbout = null; // so a persistent failure toasts once, not every 1.5 s
+  let warnedAbout = null; // last failure reported, to avoid repeated toasts
 
   /* ---------- HTTP ---------- */
 
@@ -41,7 +38,7 @@ const Auth = (() => {
     if (!res.ok) {
       const err = new Error(body.error || "HTTP " + res.status);
       err.status = res.status;
-      err.body = body;          /* e.g. mustChangePassword after a temporary password */
+      err.body = body;          /* structured error details, e.g. mustChangePassword */
       throw err;
     }
     return body;
@@ -66,9 +63,8 @@ const Auth = (() => {
     return data;
   }
 
-  /* Serialize for the wire, shedding the largest code drafts first if the
-     blob would be rejected. Progress/XP/reviews are never dropped — losing a
-     draft is an inconvenience, losing progress is not acceptable. */
+  /* Serialize for upload. When over budget, drop the largest code drafts first;
+     progress, XP and reviews are never dropped. */
   function serialize(data) {
     let payload = data;
     let body = JSON.stringify({ data: payload });
@@ -97,15 +93,13 @@ const Auth = (() => {
     doomed.forEach((k) => localStorage.removeItem(k));
   }
 
-  /* Replace local state with the server's copy, then tell the page so it can
-     re-render in place (no full reload — that threw away the rendered view
-     and flashed the whole UI). Reports whether the language changed, since
-     that IS baked into every rendered string and needs a reload. */
+  /* Replace local state with the server copy and notify the page to re-render.
+     Returns whether the language changed, which requires a full reload. */
   function apply(data) {
     const langBefore = localStorage.getItem("1991_academy:lang");
     clearLocal();
     for (const [key, v] of Object.entries(data || {})) {
-      const k = currentStoreKey(key); // a blob saved before the "martinium:" rename
+      const k = currentStoreKey(key); // legacy key prefix
       if (syncedKey(k) && typeof v === "string") localStorage.setItem(k, v);
     }
     if (typeof notifyStateChanged === "function") notifyStateChanged();
@@ -140,7 +134,7 @@ const Auth = (() => {
       }
     } catch (err) {
       if (err.status === 401) {
-        // Session expired or revoked elsewhere — stop pretending we're signed in.
+        // Session expired or revoked: treat as signed out.
         user = null;
         updateNav();
         warnOnce("auth", t("Signed out — your progress is safe on this device."));
@@ -157,9 +151,8 @@ const Auth = (() => {
     pushTimer = setTimeout(() => push().catch(() => {}), PUSH_DEBOUNCE_MS);
   }
 
-  /* Best-effort flush of anything still sitting in the debounce window when
-     the tab goes away — otherwise the last few seconds of work never leave.
-     sendBeacon can't be used here: it only issues POST, and /api/state is PUT. */
+  /* Flush pending changes when the page is hidden. Uses fetch keepalive,
+     since sendBeacon only supports POST and /api/state is PUT. */
   function flush() {
     if (!user || pushTimer === null) return;
     clearTimeout(pushTimer);
@@ -170,15 +163,15 @@ const Auth = (() => {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        keepalive: body.length < 60_000, // the keepalive body cap
+        keepalive: body.length < 60_000, // keepalive body limit
         body,
       }).catch(() => {});
     } catch {
-      /* on the way out — nothing useful left to do */
+      /* ignore: page is unloading */
     }
   }
 
-  /* Decide what wins when logging in on a device with existing data. */
+  /* Resolve local vs. server state on sign-in. */
   async function reconcile(newUser) {
     const previousOwner = localStorage.getItem(LAST_USER_KEY);
     const server = (await api("/api/state")).data;
@@ -186,18 +179,16 @@ const Auth = (() => {
     let adoptedServer = false;
 
     if (!ownDevice) {
-      // Local data belongs to a different account (already synced there).
+      // Local data belongs to another account: adopt the server copy.
       apply(server || {});
       adoptedServer = true;
     } else if (server && xpTotalOf(server) > xpTotalOf(collect())) {
-      // The account knows more than this device — take the server copy.
+      // Server copy is ahead: adopt it.
       apply(server);
       adoptedServer = true;
     } else {
-      // This device is the richest copy — upload it. Best-effort: the account
-      // already exists and the local copy is intact, so a failed first push
-      // must not make a successful sign-in look like a failure. push() has
-      // already warned the user, and schedule() retries on the next change.
+      // Local copy is ahead: upload it. A failure here is non-fatal: push()
+      // reports it and the next change retries.
       await push().catch(() => {});
     }
     localStorage.setItem(LAST_USER_KEY, newUser.username);
@@ -207,14 +198,12 @@ const Auth = (() => {
   /* ---------- Nav ---------- */
 
   function updateNav() {
-    /* Signed out, only the sign-in and privacy pages are reachable: hide the
-       links to everything else (css/components.css, body.signed-out). */
+    /* Signed out: hide links to pages that require a session. */
     document.body.classList.toggle("signed-out", !user && !offline);
     const label = user ? "👤 " + user.username : (typeof t === "function" ? t("Sign in") : "Sign in");
     document.querySelectorAll("[data-account]").forEach((el) => {
       el.textContent = label;
-      /* Admins get a link to the admin panel next to their name. (Only a
-         shortcut: the server checks the admin flag on every admin request.) */
+      /* Admin panel shortcut; authorization is enforced server-side. */
       const link = el.previousElementSibling && el.previousElementSibling.matches("[data-admin-link]")
         ? el.previousElementSibling : null;
       if (user && user.admin && !link) {
@@ -235,17 +224,17 @@ const Auth = (() => {
   async function init() {
     try {
       user = (await api("/api/me")).user;
-      // Another device may have earned XP since this one last synced.
+      // Another device may have synced newer progress.
       const server = (await api("/api/state")).data;
       if (server && xpTotalOf(server) > xpTotalOf(collect())) {
-        // The page is already rendered, so only a language switch needs a reload.
+        // Only a language change requires a reload.
         if (apply(server).langChanged) {
           location.reload();
           return user;
         }
       }
     } catch (e) {
-      if (e.status === undefined) offline = true; // network error: no server here
+      if (e.status === undefined) offline = true; // network error: no backend
       user = null;
     }
     updateNav();
@@ -254,8 +243,7 @@ const Auth = (() => {
 
   const ready = init();
 
-  /* PUT is not guaranteed on unload, so flush via sendBeacon instead.
-     pagehide covers the bfcache/mobile path that unload misses. */
+  /* Flush on pagehide, which also fires for bfcache and on mobile. */
   window.addEventListener("pagehide", flush);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flush();
@@ -280,7 +268,7 @@ const Auth = (() => {
 
     async logout() {
       await api("/api/logout", { method: "POST" }).catch(() => {});
-      // The local copy stays on this device; the account keeps its own.
+      // The local copy is kept on this device.
       user = null;
       clearTimeout(pushTimer);
       pushTimer = null;
@@ -295,8 +283,7 @@ const Auth = (() => {
       });
     },
 
-    /* After signing in with a temporary password (from an admin): choose
-       one's own, and be signed in. */
+    /* Exchange a temporary password for a new one and sign in. */
     async firstPassword(identifier, password, newPassword) {
       const out = await api("/api/first-password", {
         method: "POST",
@@ -308,8 +295,7 @@ const Auth = (() => {
       return user;
     },
 
-    /* An invitation link (account.html#join=…): is it still good, and an
-       account for the email typed on it, with a temporary password. */
+    /* Invitation links (account.html#join=TOKEN): validate, then redeem. */
     joinCheck(token) {
       return api("/api/join/check", { method: "POST", body: JSON.stringify({ token }) });
     },
@@ -334,8 +320,7 @@ const Auth = (() => {
       return lastSyncedAt;
     },
 
-    /* Read the opt-in flag / rank board. Kept here so every network call to
-       the account API lives in one module. */
+    /* Leaderboard opt-in and standings. */
     async setLeaderboardOptIn(optIn) {
       const out = await api("/api/leaderboard-optin", {
         method: "POST",
@@ -353,5 +338,5 @@ const Auth = (() => {
   };
 })();
 
-/* progress.js / xp.js / review.js call Sync.schedule() after every save */
+/* Called by progress.js, xp.js and review.js after each save. */
 window.Sync = { schedule: Auth.schedule };

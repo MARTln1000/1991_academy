@@ -1,11 +1,8 @@
-/* ============================================
-   1991 Academy — Admin panel (admin.html)
-   For accounts the server marks as admins
-   (`make admin NAME=…`). Tabs: overview,
-   learners, lessons, announcements, activity.
-   The server checks the admin flag on every
-   request; this page only shows what it gets.
-   ============================================ */
+/**
+ * Admin panel (admin.html): overview, learners, lessons, announcements, audit log.
+ * Authorization is enforced by the server on every request; this page only
+ * renders what the API returns.
+ */
 
 (async function () {
   const root = document.getElementById("admin-root");
@@ -49,13 +46,13 @@
 
   /* ---------- The curriculum ---------- */
 
-  /* Lessons as shipped in js/data/ (this page doesn't load api/content.js). */
+  /* Built-in lessons from js/data/ (api/content.js is not loaded on this page). */
   const builtin = {};
   for (const id of M.order)
     for (const mod of M.tracks[id].modules) for (const l of mod.lessons) builtin[l.id] = { lesson: l, track: M.tracks[id], module: mod };
 
-  /* The tracks with these lesson records applied, the way learners' pages
-     apply them (js/custom-content.js), on a copy of the built-in data. */
+  /* Tracks with the given lesson records applied, as learners see them
+     (same logic as js/custom-content.js), on a copy of the built-in data. */
   function liveTracks(records) {
     const tracks = structuredClone(M.tracks);
     const unplaced = CustomContent.applyLessons(tracks, records);
@@ -68,7 +65,7 @@
   const published = (records) => records.filter((r) => r.published);
   const lessonTitle = (entry, id) => (entry ? L(entry.lesson, "title") : id);
 
-  /* ---------- Who may see this page ---------- */
+  /* ---------- Access ---------- */
 
   function notice(icon, text, extra) {
     root.innerHTML =
@@ -117,8 +114,8 @@
   const TAB_OF = { learner: "learners", lesson: "lessons", new: "lessons" };
   let routeToken = 0;
 
-  /* #name/arg/arg → VIEWS[name](args). A view returns {html, bind}; it is
-     shown only if no newer navigation happened while it was loading. */
+  /* Hash router: #name/arg/... -> VIEWS[name](args) returning {html, bind}.
+     Stale results are discarded if navigation changed while loading. */
   async function route() {
     const [raw, ...rest] = location.hash.replace(/^#/, "").split("/");
     const name = VIEWS[raw] ? raw : "overview";
@@ -146,7 +143,7 @@
     route();
     window.scrollTo({ top: 0 });
   });
-  /* (the first route() is at the very end: views use constants defined below) */
+  /* initial route() is called at the end of the file, after all views are defined */
 
   /* ============================================================ Overview */
 
@@ -246,7 +243,7 @@
   const learnerQuery = { q: "", sort: "created", offset: 0 };
   const SORTS = [["created", "Newest first"], ["active", "Recently active"], ["xp", "Most XP"], ["name", "Name"]];
 
-  /* "anna@x.am" or "anna@x.am, anna_k" per line -> [{email, username}] */
+  /* One student per line: "email" or "email, username" -> [{email, username}] */
   function parseStudents(text) {
     return text.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => {
       const parts = line.split(/[,;\t ]+/).filter(Boolean);
@@ -256,8 +253,7 @@
     });
   }
 
-  /* The message an admin sends a new student from their own mailbox (the
-     site sends no email), in Armenian. */
+  /* Onboarding message for a student, sent by the admin from their own mailbox. */
   function studentMessage(r, site, days) {
     return [
       "Բարև,", "",
@@ -273,10 +269,10 @@
     try {
       await navigator.clipboard.writeText(text);
       toast(t("Copied."));
-    } catch { /* clipboard blocked: the text is on screen to select */ }
+    } catch { /* clipboard unavailable: the text remains selectable */ }
   }
 
-  /* One student's temporary password, ready to send. */
+  /* Temporary-password row with a copy-message button. */
   function passwordRow(r, site, days) {
     return (
       '<div class="admin-temp" data-temp="' + esc(r.username) + '">' +
@@ -293,8 +289,7 @@
     });
   }
 
-  /* ---------- Invitation links: one per student, sent from the admin's own
-     mailbox. Whoever opens one types the email they want, once. ---------- */
+  /* ---------- Invitation links ---------- */
 
   function linkMessage(link, days) {
     return [
@@ -719,8 +714,7 @@
     return rec.published ? badge("new", t("new")) : badge("draft", t("new · draft"));
   }
 
-  /* Which lesson videos this server hosts (media/<YouTube id>.mp4) and which
-     still play from YouTube: to check that an upload arrived. */
+  /* Hosted vs. YouTube-only lesson videos, to confirm uploads. */
   function videosCard(tracks, media) {
     const seen = new Set();
     const rows = [];
@@ -756,7 +750,7 @@
       api("/api/admin/media"),
     ]);
     const byId = Object.fromEntries(recs.map((r) => [r.id, r]));
-    const shown = liveTracks(recs); /* drafts too, to show where they go */
+    const shown = liveTracks(recs); /* include drafts so their position is visible */
 
     const tracksHtml = M.order
       .map((tid) => {
@@ -803,8 +797,7 @@
     return { title: "", title_hy: "", minutes: 10, content: "", content_hy: "", takeaways: [], takeaways_hy: [], quiz: [], videos: [] };
   }
 
-  /* A built-in lesson as editable data: its English text plus whatever the
-     Armenian packs added. */
+  /* Built-in lesson as editable data: English text plus Armenian pack fields. */
   function fromBuiltin(l) {
     return {
       title: l.title,
@@ -831,7 +824,7 @@
     return base + k;
   }
 
-  /* A YouTube link in any of its usual shapes, or the bare id. */
+  /* Accepts any common YouTube URL form or a bare video id. */
   function youtubeId(text) {
     const s = text.trim();
     if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
@@ -869,7 +862,7 @@
   }
 
   let uid = 0;
-  let flash = null; /* the message a first save leaves for the reopened editor */
+  let flash = null; /* status message carried over to the re-opened editor after a first save */
 
   function field(label, control, hint) {
     return '<div class="field"><label>' + label + "</label>" + control + (hint ? '<p class="admin-hint">' + hint + "</p>" : "") + "</div>";
@@ -1004,7 +997,7 @@
         }
         const f = (name) => form.querySelector('[data-f="' + name + '"]');
 
-        /* position: the lessons of the chosen module (new lessons only) */
+        /* position options: lessons of the selected module (new lessons only) */
         const moduleSel = form.querySelector("[data-module]");
         const afterSel = form.querySelector("[data-after]");
         function fillPositions(selected) {
@@ -1098,7 +1091,7 @@
           btn.disabled = true;
           try {
             const out = await send("PUT", lessonPath(lessonId), payload);
-            /* The server removes HTML lessons can't use: say so, and show what it stored. */
+            /* Server-side sanitization may remove HTML; show what was stored. */
             const stored = out.lesson.data;
             const cleaned =
               ["content", "content_hy"].some((k) => stored[k].trim() !== payload[k].trim()) ||
@@ -1107,7 +1100,7 @@
               ? t("Saved. Some HTML that lessons can't use was removed: check the content.")
               : out.lesson.published ? t("Saved. Learners see this version now.") : t("Saved as a draft. Learners don't see it yet.");
             if (!savedOnce) {
-              /* First save: reopen as a saved lesson (delete/undo button, fixed id). */
+              /* After the first save, reopen as an existing lesson (fixed id, delete/undo). */
               flash = note;
               const target = "#lesson/" + encodeURIComponent(lessonId);
               if (location.hash === target) route();
@@ -1144,9 +1137,8 @@
           });
         }
 
-        /* Preview: the lesson as saving would store it (the server checks it
-           and removes HTML lessons can't use, without saving), roughly as
-           learners see it, in the language the site is in. */
+        /* Preview the sanitized lesson as it would be saved, rendered in the current
+           UI language. Nothing is persisted. */
         form.querySelector("[data-preview]").addEventListener("click", async () => {
           const idInput = form.querySelector("[data-id]");
           msg.textContent = "";
@@ -1300,7 +1292,7 @@
   async function viewLog() {
     const entries = (await api("/api/admin/log")).entries;
     if (!entries.length) return { html: card('<p class="admin-muted">' + t("Nothing has been changed yet.") + "</p>") };
-    /* A built-in lesson's first save and its delete are an edit and an undo. */
+    /* For built-in lessons, the first save is an edit and a delete is an undo. */
     const action = (e) => {
       if (builtin[e.target] && e.action === "lesson-create") return t("Edited a lesson");
       if (builtin[e.target] && e.action === "lesson-delete") return t("Undid the changes to a lesson");

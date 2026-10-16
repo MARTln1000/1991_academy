@@ -1,10 +1,4 @@
-"""Adding students: temporary passwords, and the first sign-in.
-
-The site sends no email. An admin adds students; each gets a temporary
-password (shown to the admin once), which the admin sends from their own
-mailbox. It works for TEMP_PASSWORD_TTL, once, and only to choose the
-student's own password.
-"""
+"""Student onboarding by admins: temporary passwords and first sign-in."""
 import logging
 import re
 import sys

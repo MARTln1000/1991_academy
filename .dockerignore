@@ -1,15 +1,13 @@
-# What `COPY . .` in the Dockerfile leaves out. The image needs app.py, the
-# page files and the css/ js/ tracks/ assets/ trees; everything else stays out.
+# Build context exclusions. The image needs app.py, the page files and the
+# css/ js/ tracks/ assets/ trees.
 
-# Never ship: real accounts, secrets, local environments.
-# (A bare `*.db` would only match at the top level; `**/` matches at any depth.)
+# Data, secrets and local environments
 **/*.db
 **/*.db-wal
 **/*.db-shm
 .env
 .env.*
 backups/
-# the lesson videos: mounted at run time, never sent to a build (tens of GB)
 media/
 .venv/
 **/__pycache__/
@@ -17,24 +15,22 @@ media/
 .pytest_cache/
 tests/
 
-# Repository and tooling
+# Repository metadata and tooling
 .git/
 .gitignore
 .github/
-# any other hidden folder or file (editor and tool settings)
 .*
 **/.DS_Store
 .dockerignore
 Dockerfile
 docker-compose*.yml
 Makefile
+pyproject.toml
 *.md
+docs/
 requirements-dev.txt
-
-# The notebook generator (its output, assets/colab/, is part of the site)
 tools/
 
-# The image needs only the backup script from deploy/ (Caddy reads the
-# Caddyfile from the host)
+# deploy/: only the backup script runs inside the container
 deploy/
 !deploy/backup.sh

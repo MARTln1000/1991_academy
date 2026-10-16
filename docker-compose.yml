@@ -1,25 +1,13 @@
-# 1991 Academy with Docker. Use it through the Makefile: `make up`, `make logs`,
-# `make backup` and so on (`make` lists them). What `make up` starts depends on
-# DOMAIN in .env:
-#
-#   DOMAIN=academy.example.com   this file: the app + Caddy serving https://DOMAIN
-#   DOMAIN= (empty)              this file + docker-compose.local.yml, app only:
-#                                http://localhost:8735 on your own computer
-#
-# Two containers, and that's everything:
-#   app    app.py: the API *and* the frontend. The database is a SQLite file in
-#          the `data` volume, created on first start; there is no database server.
-#   caddy  HTTPS: gets and renews the certificate for $DOMAIN, forwards to app.
-# Learners' code never runs here: they solve the exercises in Google Colab.
-#
-# Settings come from .env (copy .env.example). README.md → "Run with Docker".
+# Production stack: app (API + frontend, SQLite in the `data` volume) and Caddy
+# (TLS termination, automatic certificates). Use via the Makefile; with an
+# empty DOMAIN, docker-compose.local.yml is layered on top for local use.
+# See docs/deployment.md.
 
-# Fixed, so the volumes are always academy_data etc. Without it they'd be named
-# after this folder, and renaming or re-cloning it would start an empty database.
+# Fixed project name so volume names do not depend on the checkout directory.
 name: academy
 
 x-logging: &logging
-  # Docker keeps container logs forever by default; cap them at 5 × 10 MB.
+  # Cap container logs at 5 x 10 MB.
   driver: json-file
   options:
     max-size: 10m
@@ -34,23 +22,20 @@ services:
     image: 1991-academy
     restart: unless-stopped
     env_file:
-      - path: .env        # local settings (DOMAIN, PROXY, MEDIA_DIR)
+      - path: .env
         required: false
     environment:
-      # Only Caddy (on the internal Docker network) and this machine reach the
-      # app, and Caddy sets X-Forwarded-For itself, so it can be trusted.
+      # Safe: the port is reachable only by Caddy and the host, and Caddy
+      # overwrites X-Forwarded-For.
       ACADEMY_TRUST_PROXY: "1"
       ACADEMY_BASE_URL: https://${DOMAIN:-localhost}
     volumes:
       - data:/data
-      # The lesson videos (README.md → "Lesson videos"), read-only.
       - ${MEDIA_DIR:-./media}:/media:ro
     ports:
-      # Loopback only: for `make status` on a server, and the site itself on
-      # your own computer. Never publish it on 0.0.0.0: Docker's published
-      # ports bypass ufw, and clients could then forge X-Forwarded-For.
+      # Loopback only. Publishing on 0.0.0.0 would bypass the host firewall
+      # and allow X-Forwarded-For spoofing.
       - "127.0.0.1:8735:8735"
-    # The app writes only its database; everything else is read-only.
     read_only: true
     tmpfs:
       - /tmp
@@ -58,7 +43,6 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    # One Python process with a thread pool: a few dozen threads at most.
     pids_limit: 256
     logging: *logging
 
@@ -75,11 +59,9 @@ services:
       - "443:443/udp"   # HTTP/3
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data       # the HTTPS certificates: keep this volume
+      - caddy-data:/data       # certificates and ACME account
       - caddy-config:/config
-      - ${MEDIA_DIR:-./media}:/srv/media:ro   # the lesson videos, served by Caddy itself
-    # The internet's way in, so locked down like the app: it writes only its
-    # two volumes, and of root's powers keeps just binding ports 80 and 443.
+      - ${MEDIA_DIR:-./media}:/srv/media:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -93,6 +75,6 @@ services:
     logging: *logging
 
 volumes:
-  data:          # the database (academy.db) and in-container backups
+  data:          # academy.db and in-container backups
   caddy-data:
   caddy-config:

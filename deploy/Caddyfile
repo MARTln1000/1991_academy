@@ -1,25 +1,17 @@
-# The caddy service in docker-compose.yml mounts this as /etc/caddy/Caddyfile.
-#
-# DOMAIN comes from .env. Caddy gets and renews the HTTPS certificate on its
-# own once DNS points at this server, and redirects http:// to https://. It
-# also sets X-Forwarded-For to the real client address and drops any value the
-# client sent, which is what makes ACADEMY_TRUST_PROXY=1 on the app safe.
+# Caddy reverse proxy. TLS certificates are obtained and renewed automatically
+# for $DOMAIN. Caddy overwrites X-Forwarded-For, which the app relies on
+# (ACADEMY_TRUST_PROXY=1).
 {$DOMAIN} {
-	# Don't tell scanners which server software answers.
 	header {
 		-Server
 		-Via
 	}
-	# /api/health reports the deployed commit and config flags. `make status`,
-	# CI and the container healthcheck reach the app directly on port 8735;
-	# the internet doesn't need it.
+	# Internal only; reached directly on :8735 by health checks and `make status`.
 	handle /api/health {
 		respond 404
 	}
-	# The lesson videos (MEDIA_DIR, mounted at /srv/media), straight from
-	# disk: Caddy handles large files and the byte ranges a player seeks with.
-	# Only the file names the site uses; no folder listings. Only for signed-in
-	# students: Caddy asks the app first (the session cookie goes along).
+	# Self-hosted media, served from disk to authenticated users only
+	# (forward_auth). Only valid media file names; no directory listings.
 	handle_path /media/* {
 		forward_auth app:8735 {
 			uri /api/auth-check
@@ -36,9 +28,7 @@
 	}
 	handle {
 		reverse_proxy app:8735 {
-			# While the app restarts during an update (a few seconds), hold each
-			# request and retry, so visitors see a short pause instead of a 502.
-			# Only requests that never reached the app are retried.
+			# Retry while the app restarts during deploys instead of returning 502.
 			lb_try_duration 20s
 			lb_try_interval 250ms
 		}

@@ -1,9 +1,7 @@
-/* ============================================
-   1991 Academy — Spaced repetition
-   Quiz questions from completed lessons become
-   review cards. Correct answers push the card
-   further into the future; misses bring it back.
-   ============================================ */
+/**
+ * Spaced repetition: quiz questions from completed lessons become review cards.
+ * Correct answers lengthen the interval; misses reset it.
+ */
 
 const Review = (() => {
   const KEY = "1991_academy:review:v1";
@@ -33,7 +31,7 @@ const Review = (() => {
     cache = null;
   });
 
-  /* Walk every loaded track once, yielding [lesson, track] pairs. */
+  /* Yield [lesson, track] for every loaded track. */
   function* eachLesson() {
     for (const track of Object.values(M.tracks)) {
       for (const mod of track.modules) {
@@ -44,7 +42,7 @@ const Review = (() => {
 
   return {
     /* Create cards for every quiz question of every completed lesson.
-       Call on pages where all track data is loaded. */
+       Requires all track data to be loaded. */
     sync() {
       const s = load();
       const done = Progress.allDone();
@@ -54,7 +52,7 @@ const Review = (() => {
         lesson.quiz.forEach((q, qi) => {
           const id = "rc:" + lesson.id + ":" + qi;
           if (!s.cards[id]) {
-            // brand-new cards come due after one day — recall, not re-read
+            // new cards are first due after one day
             s.cards[id] = { lessonId: lesson.id, trackId: track.id, qi, interval: 0, due: Date.now() + DAY };
             added += 1;
           }
@@ -92,8 +90,8 @@ const Review = (() => {
       save(s);
     },
 
-    /* Resolve a card back to its live question content (skips stale cards:
-       a lesson dropped by a course rebuild, or a quiz that lost a question). */
+    /* Resolve a card to its current question; returns null for stale cards
+       (removed lessons or questions). */
     resolve(card) {
       const track = M.tracks[card.trackId];
       if (!track) return null;

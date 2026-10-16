@@ -1,21 +1,13 @@
 #!/bin/sh
-# Keeps a server on the newest commit of the branch it runs (normally master),
-# so a change pushed to GitHub goes live without anyone logging in to the
-# server. `make auto-update-on` runs this from cron every 5 minutes, logging
-# to backups/auto-update.log; `make auto-update-off` stops it.
+# Continuous deployment from cron (make auto-update-on), every 5 minutes.
 #
-# Nothing happens unless the branch on GitHub has moved. Then it:
-#   1. snapshots the database (make backup), and stops if that fails;
-#   2. fast-forwards to the new commit and rebuilds (what `make update` does,
-#      including a check of a changed deploy/Caddyfile before Caddy uses it);
-#   3. if that fails, goes back to the commit that was running, rebuilds it,
-#      and remembers the bad commit, so it isn't retried every 5 minutes.
-#      The next push (a fix) is tried as usual.
-# It never discards local changes and never moves backwards on its own.
+# When the tracked branch has new commits: back up the database, fast-forward,
+# validate a changed Caddyfile, rebuild and restart. On failure, roll back to
+# the previous commit and skip the failed one until a newer commit arrives.
+# Never discards local changes or follows rewritten history.
 #
-# With --refresh (weekly, from the same cron setup) it instead backs up and
-# runs `make refresh`: the newest Caddy and Python base images, for security
-# fixes that arrive without any new commit.
+# --refresh (weekly): back up, then rebuild on the latest base images.
+# Log: backups/auto-update.log
 
 set -u
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -23,8 +15,7 @@ cd "$(dirname "$0")/.." || exit 1
 
 log() { echo "$(date -u '+%Y-%m-%d %H:%M:%S UTC') $*"; }
 
-# One run at a time: a slow build can outlast the cron interval. A lock left
-# behind by a run that was killed is cleared after an hour.
+# Single instance; a stale lock (killed run) expires after an hour.
 lock=.git/auto-update.lock
 if ! mkdir "$lock" 2>/dev/null; then
     if [ -n "$(find "$lock" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
@@ -59,7 +50,7 @@ new=$(git rev-parse "origin/$branch")
 [ "$old" = "$new" ] && exit 0
 
 failed=.git/auto-update-failed
-[ "$(cat "$failed" 2>/dev/null)" = "$new" ] && exit 0   # this commit already failed; wait for the next one
+[ "$(cat "$failed" 2>/dev/null)" = "$new" ] && exit 0   # known-bad commit
 
 if ! git merge-base --is-ancestor "$old" "$new"; then
     log "origin/$branch is not ahead of what runs here ($(git rev-parse --short "$old")): history was rewritten, or this server has its own commits. Run 'make update' by hand."

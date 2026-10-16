@@ -1,8 +1,6 @@
-/* ============================================
-   1991 Academy — Track page
-   Sidebar curriculum, lesson reader, quiz
-   engine, completion + hash routing.
-   ============================================ */
+/**
+ * Track page: curriculum sidebar, lesson reader, quiz, completion and hash routing.
+ */
 
 (function () {
   const trackId = document.body.dataset.track;
@@ -123,7 +121,7 @@
         const perfect = score === lesson.quiz.length;
         let bonusText = "";
         if (perfect && !XP.has("perfect:" + lesson.id)) {
-          /* variable reward: a surprise-sized bonus for a first-try perfect */
+          /* random bonus for a perfect first attempt */
           const bonus = 10 + Math.floor(Math.random() * 16);
           XP.add(bonus, "perfect:" + lesson.id);
           XP.bump("perfectQuizzes");
@@ -183,7 +181,7 @@
         lesson.videos
           .map(
             (v) =>
-              /* v.file: our own copy (js/custom-content.js), else YouTube's */
+              /* v.file: self-hosted copy (js/custom-content.js), otherwise YouTube */
               '<div class="video-card" data-video="' + esc(v.id) + '"' + (v.file ? ' data-file="' + esc(v.file) + '"' : "") +
               ' role="button" tabindex="0" aria-label="Play: ' + esc(v.title) + '">' +
               '<div class="video-thumb">' + videoThumb(v) +
@@ -253,8 +251,8 @@
     renderStreakPill();
   }
 
-  /* The card's picture: our poster, a plain frame if a hosted video has none,
-     or YouTube's thumbnail. */
+  /* Card thumbnail: hosted poster, a blank frame for hosted video without one,
+     or the YouTube thumbnail. */
   function videoThumb(v) {
     if (v.file && !v.poster) return '<span class="video-thumb-blank" aria-hidden="true">🎬</span>';
     const src = v.file ? v.poster : "https://i.ytimg.com/vi/" + encodeURIComponent(v.id) + "/hqdefault.jpg";
@@ -266,11 +264,11 @@
     card.classList.add("playing");
     const thumb = card.querySelector(".video-thumb");
     if (card.dataset.file) {
-      /* hosted on this server: the browser's own player */
+      /* self-hosted: native player */
       thumb.innerHTML =
         '<video src="' + esc(card.dataset.file) + '" controls autoplay playsinline preload="metadata"></video>';
-      /* start it from the click itself: browsers don't always honour autoplay
-         on a player added after one */
+      /* call play() within the click handler; autoplay on a newly inserted
+         element is not reliable */
       thumb.querySelector("video").play().catch(() => {});
     } else {
       thumb.innerHTML =
@@ -304,12 +302,12 @@
         XP.checkAchievements();
         XP.renderPill();
       }
-      goto(id); /* pin the hash so the view stays on this lesson */
+      goto(id); /* keep the hash on this lesson */
     }
   });
 
   document.addEventListener("keydown", (e) => {
-    // The video card is a div with role="button": make it behave like one.
+    // Keyboard activation for the role="button" video card.
     const card = e.target.closest && e.target.closest(".video-card");
     if (card && (e.key === "Enter" || e.key === " ")) {
       e.preventDefault();
@@ -323,9 +321,8 @@
   });
 
   window.addEventListener("hashchange", render);
-  /* Progress arriving from a sync pull or another tab: refresh the sidebar
-     ticks and pills, but leave the open lesson (and any half-done exercise)
-     exactly as it is. */
+  /* On external state changes, refresh sidebar ticks and pills only; the open
+     lesson and any in-progress exercise are left untouched. */
   onStateChanged(() => {
     renderSidebar(currentLessonId());
     renderStreakPill();

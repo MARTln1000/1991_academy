@@ -1,10 +1,6 @@
-"""API tests for the 1991 Academy backend.
+"""Public API: authentication, state sync, leaderboard, security controls.
 
-    .venv/bin/pip install -r requirements-dev.txt
-    .venv/bin/pytest -q
-
-Every test runs against its own fresh temp SQLite DB (the `client` fixture
-repoints app.DB_PATH per test), so nothing here can touch real accounts.
+Each test uses a fresh temporary database (see the `client` fixture).
 """
 import json
 import os

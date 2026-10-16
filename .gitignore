@@ -1,4 +1,4 @@
-# The database holds real accounts and password hashes. Never commit it.
+# Databases (contain user accounts and password hashes)
 1991_academy.db
 1991_academy.db-wal
 1991_academy.db-shm
@@ -11,20 +11,18 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.ruff_cache/
 
-# Local settings and secrets
+# Local configuration
 .env
 .env.*
 !.env.example
 
-# Database snapshots from `make backup`: real accounts, same as the .db
+# Database backups (make backup)
 backups/
 
-# Lesson videos (README.md → "Lesson videos"): tens of GB, never in git
+# Self-hosted media (large; deployed separately)
 media/
 
 # macOS
 .DS_Store
-
-# Notes for AI coding sessions (local only)
-NEXT_SESSION_PROMPT.md

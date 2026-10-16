@@ -1,21 +1,15 @@
-/* ============================================
-   1991 Academy — content from the admin panel
-   api/content.js (loaded just before this file)
-   sets window.ACADEMY_CUSTOM: the published
-   lessons, the active announcements and the
-   lesson videos hosted on this server. This
-   file merges them into the track data,
-   so load it AFTER the data files and the
-   Armenian packs, and BEFORE the page's own
-   script. Every page loads it, for the banner.
-   The admin panel reuses CustomContent to show
-   lessons the way learners see them.
-   ============================================ */
+/**
+ * Applies admin-managed content from /api/content.js (window.ACADEMY_CUSTOM):
+ * published lessons, announcements and self-hosted video URLs.
+ *
+ * Load after the track data and Armenian packs, before the page script.
+ * Also used by the admin panel for previews.
+ */
 
 const CustomContent = (() => {
   const FIELDS = ["title", "title_hy", "minutes", "content", "content_hy", "takeaways", "takeaways_hy", "quiz", "videos"];
 
-  /* A blank Armenian field falls back to English, as if it weren't there. */
+  /* Empty Armenian fields fall back to English. */
   function dropBlankHy(obj) {
     for (const k of Object.keys(obj)) {
       if (!k.endsWith("_hy")) continue;
@@ -25,9 +19,8 @@ const CustomContent = (() => {
     return obj;
   }
 
-  /* An id that matches a built-in lesson replaces its text; its materials
-     and exercises stay. Any other id is a new lesson, placed in its module
-     after `after` (or at the end). */
+  /* Ids matching a built-in lesson override its text (materials and exercises
+     are kept); other ids are inserted after `after`, or appended. */
   function applyLesson(tracks, rec) {
     const track = tracks[rec.track];
     if (!track) return false;
@@ -51,7 +44,7 @@ const CustomContent = (() => {
     return true;
   }
 
-  /* Returns the records that found no place (unknown track or module). */
+  /* Returns records that could not be placed (unknown track or module). */
   function applyLessons(tracks, records) {
     const unplaced = [];
     for (const rec of records) {
@@ -65,8 +58,7 @@ const CustomContent = (() => {
     return unplaced;
   }
 
-  /* Lesson videos hosted on this server (media/<YouTube id>.mp4): the player
-     uses our copy, so a lesson still works if the video leaves YouTube. */
+  /* Prefer self-hosted copies of lesson videos when available. */
   function applyMedia(tracks, media) {
     for (const track of Object.values(tracks))
       for (const mod of track.modules)
@@ -81,8 +73,7 @@ const CustomContent = (() => {
   }
 
   /* ---------- Announcements ----------
-     A banner under the navigation bar. Plain text only. A learner who
-     closes one doesn't see it again on this device. */
+     Plain-text banner below the navigation; dismissal is remembered per device. */
   const DISMISSED_KEY = "1991_academy:announcements-dismissed";
 
   function dismissed() {
@@ -115,7 +106,7 @@ const CustomContent = (() => {
       close.addEventListener("click", () => {
         try {
           localStorage.setItem(DISMISSED_KEY, JSON.stringify(dismissed().concat(a.id).slice(-50)));
-        } catch { /* storage full or blocked: it just shows again next time */ }
+        } catch { /* storage unavailable: the banner shows again */ }
         el.remove();
       });
       row.append(text, close);
@@ -132,7 +123,7 @@ const CustomContent = (() => {
 
 (function () {
   const C = window.ACADEMY_CUSTOM;
-  if (!C) return; /* no server behind this page (static copy, file://), or the admin panel */
+  if (!C) return; /* no backend (static copy) */
   const M = window.ACADEMY_1991;
   if (M && M.tracks) {
     CustomContent.applyLessons(M.tracks, C.lessons || []);

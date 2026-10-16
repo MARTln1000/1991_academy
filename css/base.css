@@ -1,7 +1,4 @@
-/* ============================================
-   1991 Academy — Base
-   Reset, typography, global layout primitives.
-   ============================================ */
+/* Reset, typography and layout primitives. */
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -44,10 +41,7 @@ button {
   cursor: pointer;
 }
 
-/* Keyboard focus. The reset above strips the UA's default ring from every
-   button, and the whole UI (quiz options, sidebar lessons, track cards, nav)
-   is built from buttons and anchors — without this, tabbing is invisible.
-   :focus-visible keeps it off for mouse clicks. */
+/* Visible keyboard focus (the reset removes the UA outline); not shown for mouse clicks. */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

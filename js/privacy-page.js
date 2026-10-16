@@ -1,8 +1,6 @@
-/* ============================================
-   1991 Academy — Privacy Policy page
-   privacy.html holds the policy in English and
-   Armenian; show the one the site is in.
-   ============================================ */
+/**
+ * Privacy page: shows the policy in the current UI language.
+ */
 
 (function () {
   const lang = I18N.lang() === "hy" ? "hy" : "en";

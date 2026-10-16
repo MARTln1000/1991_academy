@@ -1,9 +1,7 @@
-/* ============================================
-   1991 Academy — XP engine
-   One currency feeding everything: daily goal,
-   levels, streak, achievements. Awards are
-   ledgered so nothing can be farmed twice.
-   ============================================ */
+/**
+ * XP engine: daily goal, levels, streak and achievements. Awards are keyed and
+ * paid out at most once.
+ */
 
 const XP = (() => {
   const KEY = "1991_academy:xp:v1";
@@ -37,9 +35,8 @@ const XP = (() => {
     } catch {
       stored = null;
     }
-    // Always merge over defaults so a partial/foreign blob (e.g. a synced copy
-    // that only carried `total`) can never leave `daily`/`awards` undefined and
-    // crash a consumer like renderDashboard.
+    // Merge over defaults: a partial blob (e.g. a synced copy with only `total`)
+    // must not leave `daily` or `awards` undefined.
     cache = stored && typeof stored === "object" ? { ...defaults(), ...stored } : defaults();
     for (const k of ["awards", "daily", "counters", "badges"]) {
       if (!cache[k] || typeof cache[k] !== "object") cache[k] = {};
@@ -59,8 +56,8 @@ const XP = (() => {
     cache = null;
   });
 
-  /* Local calendar day, shared with Progress so the goal ring and the streak
-     roll over at the learner's midnight (not UTC's). */
+  /* Local calendar day, shared with Progress, so day boundaries follow the
+     learner's local midnight. */
   function today() {
     return Progress.dayKey();
   }
@@ -128,7 +125,7 @@ const XP = (() => {
     LEVELS,
     BADGES,
 
-    /* Add XP. With an awardKey, pays out only once ever. Returns XP granted. */
+    /* Add XP; with an awardKey, pay out at most once. Returns the XP granted. */
     add(amount, awardKey) {
       const s = load();
       if (awardKey) {
@@ -188,7 +185,7 @@ const XP = (() => {
       return { level: idx + 1, name: cur.name, total, next, pct };
     },
 
-    /* Level name for an arbitrary XP total (used by the leaderboard). */
+    /* Level name for an arbitrary XP total (leaderboard). */
     levelNameFor(xp) {
       let name = LEVELS[0].name;
       for (const lv of LEVELS) if (xp >= lv.at) name = lv.name;
@@ -199,7 +196,7 @@ const XP = (() => {
       return load().badges;
     },
 
-    /* Evaluate all badge conditions; toast + persist the new ones. */
+    /* Evaluate badge conditions; persist and announce newly earned ones. */
     checkAchievements() {
       const s = load();
       const fresh = [];

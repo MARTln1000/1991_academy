@@ -1,27 +1,11 @@
 #!/usr/bin/env python3
-"""Build a Google Colab notebook for every coding exercise on the site.
+"""Generate a Google Colab notebook for every coding exercise (make notebooks).
 
-Learners write and run their code in Google Colab, in their own browser, and
-keep it in their own Google Drive; the site gives them the task, the starter
-code, the tests and the hints, in one notebook per exercise, which they
-download from the site and upload to Colab. This script writes those notebooks
-from the site's own exercise data (tools/site_data.js), in English and
-Armenian:
-
-    make notebooks            (run it after changing an exercise in js/data/)
-
-    assets/colab/<en|hy>/lab-two-sum.ipynb        Lab problem
-    assets/colab/<en|hy>/mission-maze.ipynb       mission
-    assets/colab/<en|hy>/prog-1-1-ex1.ipynb       lesson exercise
-
-The site serves them from assets/colab/ (js/colab.js puts the download
-buttons on each exercise), so a change reaches learners with the next deploy
-of the site. tests/test_notebooks.py checks that they are up to date, and runs
-every one of them.
-
-Every exercise is Python. Each notebook: the task, a cell with the starter
-code, a "Run the tests" cell that prints a check or a cross per test, the
-hints, and for the Lab problems a cell that plots what the learner's code does.
+Reads exercise data via tools/site_data.js and writes English and Armenian
+notebooks to assets/colab/<en|hy>/<exercise-id>.ipynb. Each notebook contains
+the task, starter code, a test cell, hints and, for Lab problems, a
+visualization of the learner's solution. tests/test_notebooks.py verifies that
+the output is current.
 """
 import html
 import json

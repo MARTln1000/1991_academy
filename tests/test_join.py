@@ -1,10 +1,4 @@
-"""Invitation links.
-
-An admin makes links and sends them from their own mailbox (the site sends no
-email). A link isn't tied to an address: whoever opens it types the email
-they want and gets an account with a temporary password, once, within
-JOIN_LINK_TTL.
-"""
+"""Invitation links: creation, redemption, single use, expiry and cancellation."""
 import logging
 import re
 import sys

@@ -1,7 +1,4 @@
-/* ============================================
-   1991 Academy — Components
-   Navbar, hero, cards, track page, quiz, toast.
-   ============================================ */
+/* Shared components: navbar, hero, cards, track page, quiz, toast. */
 
 /* ---------- Navbar ---------- */
 .nav {
@@ -282,8 +279,7 @@
 .feature p { font-size: 0.92rem; color: var(--text-muted); }
 
 /* ---------- Footer ---------- */
-/* The FAST Foundation credit at the foot of every page (common.js): there,
-   but deliberately quiet. */
+/* Course-material credit line (rendered by common.js). */
 .fast-credit {
   margin: 0;
   padding: 4px 16px 14px;
@@ -302,7 +298,7 @@
 .policy a, .form-privacy a { color: var(--accent); }
 .form-privacy { margin-top: 12px; font-size: 0.82rem; }
 
-/* main page footer: who runs the site, support address, privacy policy */
+/* main page footer */
 .footer-about {
   display: flex;
   justify-content: space-between;
@@ -740,14 +736,8 @@
   .hero { padding: 64px 0 48px; }
 }
 
-/* Phones: the nav has nine children (logo, three section links, XP, streak,
-   account, two toggles) and they do not fit on one 375px row — they used to
-   overflow off-screen, taking Sign in and both toggles with them and leaving
-   the whole page scrolling sideways.
-
-   `.nav-spacer` already sits between the section links and the account
-   controls, so giving it a full-width basis turns it into a flex line break:
-   row 1 keeps the logo + section links, row 2 holds the account controls. */
+/* Phones: wrap the nav onto two rows. A full-width .nav-spacer acts as a flex
+   line break between the section links and the account controls. */
 @media (max-width: 760px) {
   .container { width: min(1120px, 100% - 28px); }
 
@@ -763,7 +753,7 @@
     height: 0;
   }
 
-  /* Keep the logo mark, drop the wordmark — it alone costs ~120px. */
+  /* hide the wordmark (~120px), keep the logo mark */
   .logo { font-size: 0; gap: 0; }
   .logo-mark { font-size: 0.58rem; }
 
@@ -777,13 +767,12 @@
   .xp-pill { padding: 6px 9px; font-size: 0.8rem; }
 }
 
-/* Signed out (a closed school): the sign-in and privacy pages show no links
-   to the pages that need an account. */
+/* Signed out: hide links to pages that require a session. */
 .signed-out .nav-link:not([data-account]),
 .signed-out .xp-pill,
 .signed-out .streak-pill { display: none; }
 
-/* ---------- Announcements (posted in the admin panel; js/custom-content.js) ---------- */
+/* ---------- Announcements ---------- */
 .announcements { border-bottom: 1px solid var(--border); background: var(--accent-soft); }
 .announcement-row {
   display: flex;

@@ -1,10 +1,7 @@
-/* ============================================
-   1991 Academy — Armenian strings of the admin
-   panel (admin.html only; the rest of the site
-   doesn't need them). Load right after i18n.js.
-   The fixed server messages the panel can show
-   are here too.
-   ============================================ */
+/**
+ * Armenian strings for the admin panel, including server messages it can
+ * display. Loaded only on admin.html, after i18n.js.
+ */
 
 I18N.extend({
   /* access */
@@ -90,13 +87,13 @@ I18N.extend({
   "Signed out of {0} device.": "Դուրս է հանվել {0} սարքից։",
   "Signed out of {0} devices.": "Դուրս է հանվել {0} սարքից։",
 
-  /* adding students: temporary passwords (the site sends no email) */
+  /* adding students */
   "Add students": "Ավելացնել ուսանողներ",
   "Add": "Ավելացնել",
   "Or make the accounts yourself, when you know each student's email. One per line: an email, and optionally a username after a comma (otherwise it is made from the email). Each gets a temporary password: send it from your own email. The site sends no email.":
     "Կամ ստեղծի՛ր հաշիվներն ինքդ, երբ գիտես յուրաքանչյուր ուսանողի էլ. հասցեն։ Ամեն տողում՝ էլ. փոստ, և ցանկության դեպքում ստորակետից հետո՝ օգտանուն (հակառակ դեպքում այն կազմվում է էլ. փոստից)։ Յուրաքանչյուրը ստանում է ժամանակավոր գաղտնաբառ. ուղարկի՛ր այն քո էլ. փոստից։ Կայքը նամակներ չի ուղարկում։",
 
-  /* temporary (disposable) email addresses */
+  /* disposable email addresses */
   "temporary email": "ժամանակավոր էլ. հասցե",
   "with a temporary email (marked in Learners)": "ժամանակավոր էլ. հասցեով (նշված են «Սովորողներ»-ում)",
   "Temporary email addresses can't be used. Use an address you'll keep.":
@@ -151,7 +148,7 @@ I18N.extend({
   "This address starts with": "Այս հասցեն սկսվում է",
   "An admin's password is reset on the server (make password NAME=…), not here.": "Ադմինի գաղտնաբառը փոխվում է սերվերում (make password NAME=…), ոչ թե այստեղ։",
 
-  /* invitations */
+  /* legacy invitation strings */
   "Invite students": "Հրավիրել ուսանողների",
   "Only invited students can sign in. One per line: an email, and optionally a username after a comma (otherwise it is made from the email).":
     "Մուտք գործել կարող են միայն հրավիրված ուսանողները։ Ամեն տողում՝ էլ. փոստ, և ցանկության դեպքում ստորակետից հետո՝ օգտանուն (հակառակ դեպքում այն կազմվում է էլ. փոստից)։",
@@ -314,7 +311,7 @@ I18N.extend({
   "visible to learners": "տեսանելի է սովորողներին",
   "draft": "սևագիր",
 
-  /* fixed messages from the server */
+  /* server messages */
   "Admins only.": "Միայն ադմինների համար։",
   "not signed in": "մուտք գործած չես",
   "No such learner.": "Այդպիսի սովորող չկա։",

@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
-# Runs inside the app container: `make backup` (and `make restore`, before it
-# overwrites anything) call it with `docker compose exec`/`run`.
-#
-# Writes /data/backups/academy-<UTC time>.db.gz, in the same volume as the
-# database, and deletes backups there older than $ACADEMY_BACKUP_KEEP_DAYS
-# days. `make backup` then copies them out to backups/ on the host.
+# Online SQLite backup, run inside the app container (make backup / make restore).
+# Writes /data/backups/academy-<UTC timestamp>.db.gz and prunes backups older
+# than ACADEMY_BACKUP_KEEP_DAYS (default 30).
 set -euo pipefail
 
 db=${ACADEMY_DB:-/data/academy.db}
@@ -21,8 +18,7 @@ stamp=$(date -u +%Y%m%d-%H%M%S)
 tmp="$dest/.partial-$stamp.db"
 trap 'rm -f "$tmp" "$tmp.gz"' EXIT
 
-# .backup copies a transactionally consistent snapshot while the app keeps
-# serving; a plain cp of a WAL-mode database can capture a torn state.
+# Use .backup for a consistent snapshot; copying a WAL database file is unsafe.
 sqlite3 "$db" ".backup '$tmp'"
 check=$(sqlite3 "$tmp" "PRAGMA integrity_check")
 if [[ $check != ok ]]; then

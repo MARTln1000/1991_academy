@@ -1,8 +1,6 @@
-/* ============================================
-   1991 Academy — Landing page
-   Dashboard (goal ring, level, actions), track
-   cards, missions teaser, achievements strip.
-   ============================================ */
+/**
+ * Dashboard: goal ring, level, track cards, missions, achievements, leaderboard.
+ */
 
 function ringSVG(pct) {
   const r = 20;
@@ -21,7 +19,7 @@ function ringSVG(pct) {
 
 /* ---------- Dashboard ---------- */
 
-/* NOTE: never name a local `t` — that is the global translate function. */
+/* Do not name a local variable `t`: it shadows the global translate function. */
 function continueTarget() {
   const done = Progress.allDone();
   let fallback = null;
@@ -140,7 +138,7 @@ function renderBadges() {
   }).join("");
 }
 
-/* ---------- Leaderboard (opt-in, needs the backend) ---------- */
+/* ---------- Leaderboard (requires the backend) ---------- */
 
 async function renderLeaderboard(period) {
   const el = document.getElementById("leaderboard");
@@ -149,11 +147,11 @@ async function renderLeaderboard(period) {
   try {
     const { top, you, period: active } = await Auth.leaderboard(period);
 
-    // Only reveal the whole section once SOMEONE has opted in. If this period is
-    // empty, check all-time before hiding — an empty week isn't an empty board.
+    // Show the section once anyone has opted in. An empty week falls back to
+    // checking all-time standings before hiding.
     if (!top || !top.length) {
       const all = await Auth.leaderboard("all").catch(() => ({ top: [] }));
-      if (!all.top || !all.top.length) return; /* truly nobody yet — stay hidden */
+      if (!all.top || !all.top.length) return; /* no entries yet */
     }
 
     const levelName = (xp) => t(XP.levelNameFor(xp));
@@ -185,7 +183,7 @@ async function renderLeaderboard(period) {
     );
     section.hidden = false;
   } catch {
-    /* static serving / offline: no leaderboard, no error */
+    /* no backend: hide silently */
   }
 }
 
@@ -225,6 +223,5 @@ function renderAll() {
 renderAll();
 renderLeaderboard();
 
-/* Progress pulled from the account, or earned in another tab — the dashboard
-   is a pure function of that state, so just draw it again. */
+/* The dashboard is derived entirely from state: re-render on changes. */
 onStateChanged(renderAll);

@@ -1,28 +1,17 @@
 # syntax=docker/dockerfile:1
 
-# The site's files with normalized permissions: everything readable, folders
-# enterable. COPY keeps the host's permissions, and on the Mac the course
-# folders under assets/ are owner-only (drwx------), which the app's user
-# couldn't read. This is done with chmod in a stage of its own, not with
-# `COPY --chmod=u=rwX,go=rX`: BuildKit up to at least v0.20 (Docker 28)
-# ignores the X there and makes every folder unenterable, so the app could
-# serve no JS, CSS or PDFs. Only this stage's result reaches the final image.
+# Normalize permissions (files readable, directories traversable) regardless of
+# host modes. Done with chmod in a separate stage because BuildKit (<= 0.20)
+# ignores the X bit in `COPY --chmod`.
 FROM python:3.12-slim AS site
 COPY . /app
 RUN chmod -R u=rwX,go=rX /app
 
-# The whole of 1991 Academy in one image: app.py serves the API *and* the
-# frontend (the HTML/CSS/JS files next to it), and the database is a SQLite
-# file the app creates on first start. There is no separate frontend or
-# database server to run.
-#
-# The database lives in /data, which docker-compose.yml mounts as a named
-# volume so it survives rebuilds. Build and run it with `make up`, on a server
-# or on your own computer; README.md → "Run with Docker".
+# Runtime image: app.py serves both the API and the static frontend. The SQLite
+# database lives in /data (a named volume). See docs/deployment.md.
 FROM python:3.12-slim
 
-# sqlite3: the CLI deploy/backup.sh uses for consistent online backups (and
-# handy for inspecting the database from `make shell`).
+# sqlite3 CLI for online backups (deploy/backup.sh) and inspection.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends sqlite3 \
  && rm -rf /var/lib/apt/lists/*
@@ -33,29 +22,23 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_ROOT_USER_ACTION=ignore
 
-# The app runs as `academy` (uid and gid 10001), which owns /data and can't
-# write the code.
+# Unprivileged runtime user; owns /data only.
 RUN groupadd --system --gid 10001 academy \
  && useradd --system --uid 10001 --gid 10001 --home-dir /data --shell /usr/sbin/nologin academy \
  && install -d -o academy -g academy -m 700 /data
 
 WORKDIR /app
-# Dependencies first, so a code change doesn't reinstall them.
+# Install dependencies first for layer caching.
 COPY requirements.txt requirements.lock ./
 RUN pip install -r requirements.txt -c requirements.lock
 
-# The folder as it is on disk, uncommitted changes included, minus everything
-# .dockerignore excludes (the local database, .venv, .env, docs, tests), with
-# the permissions fixed in the `site` stage above.
 COPY --from=site /app /app
 
-# The commit this image was built from (the Makefile passes it). /api/health
-# reports it, so you can see which version is live. Empty = "dev".
+# Build revision (passed by the Makefile), reported by /api/health.
 ARG REVISION=""
 RUN printf '%s\n' "$REVISION" > REVISION
 
-# Production settings. docker-compose.yml sets the rest (proxy trust); none of
-# these should change on a public server. DEPLOYMENT.md §1 explains each one.
+# Production defaults; see docs/deployment.md for the full configuration.
 ENV ACADEMY_HOST=0.0.0.0 \
     PORT=8735 \
     ACADEMY_DB=/data/academy.db \

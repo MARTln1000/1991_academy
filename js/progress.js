@@ -1,8 +1,6 @@
-/* ============================================
-   1991 Academy — Progress
-   localStorage-backed lesson completion,
-   quiz scores and daily streak.
-   ============================================ */
+/**
+ * Lesson completion, quiz scores and daily streak, stored in localStorage.
+ */
 
 const Progress = (() => {
   const KEY = "1991_academy:progress:v1";
@@ -11,10 +9,8 @@ const Progress = (() => {
     return { done: {}, quiz: {}, streak: { count: 0, last: null } };
   }
 
-  /* A render pass asks "is this done?" once per lesson, plus trackStats and
-     badge checks on top — parsing the blob every time made a 22-lesson
-     sidebar do 40+ JSON.parse calls. Cache it; drop the cache whenever the
-     blob is replaced from outside (sync pull, another tab). */
+  /* Parsed-blob cache; invalidated when the blob is replaced externally
+     (sync pull, another tab). */
   let cache = null;
 
   function load() {
@@ -42,7 +38,7 @@ const Progress = (() => {
     cache = null;
   });
 
-  /* Local calendar day — matches what the learner sees on their clock. */
+  /* Local calendar day. */
   function dayKey(date) {
     const d = date || new Date();
     return (
@@ -73,7 +69,7 @@ const Progress = (() => {
       return load().done;
     },
 
-    /* Any XP-earning activity keeps the streak alive — bump once per day. */
+    /* Any XP-earning activity counts toward the streak, once per day. */
     noteActivity() {
       const data = load();
       const s = data.streak;
@@ -129,7 +125,7 @@ const Progress = (() => {
 
     getStreak() {
       const s = load().streak;
-      // A streak is alive only if the user studied today or yesterday
+      // The streak is alive if the user studied today or yesterday.
       if (s.last === today() || s.last === yesterday()) return s.count;
       return 0;
     },

@@ -1,8 +1,4 @@
-/* ============================================
-   1991 Academy — Design Tokens
-   Single source of truth for colors, type,
-   spacing, radii and shadows. Dark by default.
-   ============================================ */
+/* Design tokens: color, typography, radii, elevation, motion. Dark theme by default. */
 
 :root {
   /* Brand */
@@ -34,7 +30,7 @@
   --accent: #6366f1;
   --accent-soft: rgba(99, 102, 241, 0.14);
 
-  /* Typography — "Noto Sans Armenian" carries the hy content (falls back gracefully) */
+  /* Typography ("Noto Sans Armenian" covers Armenian text) */
   --font-display: "Space Grotesk", "Noto Sans Armenian", "Inter", system-ui, sans-serif;
   --font-body: "Inter", "Noto Sans Armenian", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;

@@ -1,10 +1,8 @@
-/* ============================================
-   1991 Academy — math typesetting (math track only)
-   typesetMath(el): render \( \) and \[ \] via KaTeX
-   auto-render. KaTeX loads deferred, after track.js
-   runs, so queue until it's ready. A file rather than
-   an inline <script>: the CSP allows no inline scripts.
-   ============================================ */
+/**
+ * typesetMath(el): renders \( \) and \[ \] with KaTeX auto-render (math track).
+ * KaTeX loads deferred, so calls are queued until it is ready. Kept in a file
+ * because the CSP disallows inline scripts.
+ */
 
 window.__mathQueue = [];
 window.typesetMath = function (el) {

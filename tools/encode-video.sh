@@ -1,15 +1,9 @@
 #!/bin/sh
-# Prepares a lecture video for the site (`make video SRC=… ID=…`):
-#   - an MP4 that every browser plays (H.264 video, AAC audio), at most 720p,
-#     arranged so playback starts before the whole file has downloaded;
-#   - a poster picture for the lesson's video card;
-# both named after the lecture's YouTube id (the `id` in the lesson's
-# `videos` list), in media/ by default. The lesson then plays this copy
-# instead of YouTube's. About 400–700 MB per hour of lecture.
+# Encode a lecture for self-hosting (make video SRC=... ID=...).
+# Produces <ID>.mp4 (H.264/AAC, max 720p, faststart) and an <ID>.jpg poster,
+# where ID is the lesson's YouTube video id. Requires ffmpeg.
 #
 #   tools/encode-video.sh "Lecture 05 - CNNs.mp4" ehvWj3Ir7yA [out-dir]
-#
-# Needs ffmpeg (macOS: brew install ffmpeg; Ubuntu: apt-get install ffmpeg).
 
 set -eu
 
@@ -28,7 +22,7 @@ mkdir -p "$out"
 tmp="$out/.$id.partial.mp4"
 trap 'rm -f "$tmp"' EXIT
 
-# CRF 26 suits lectures (slides and a speaker); -2 keeps the width even.
+# CRF 26 is sufficient for slide-based lectures; -2 keeps the width even.
 echo "==> Encoding $src -> $out/$id.mp4"
 ffmpeg -hide_banner -loglevel warning -stats -y -i "$src" \
     -map 0:v:0 -map '0:a:0?' \
@@ -38,7 +32,7 @@ ffmpeg -hide_banner -loglevel warning -stats -y -i "$src" \
     -movflags +faststart -f mp4 "$tmp"
 mv "$tmp" "$out/$id.mp4"
 
-# The poster: a frame a tenth of the way in (past any title card).
+# Poster frame at 10% of the duration, past any title card.
 duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out/$id.mp4" 2>/dev/null | cut -d. -f1)
 at=$(( ${duration:-0} / 10 ))
 ffmpeg -hide_banner -loglevel error -y -ss "$at" -i "$out/$id.mp4" -frames:v 1 -vf "scale=640:-2" -q:v 4 "$out/$id.jpg"

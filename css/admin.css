@@ -1,8 +1,4 @@
-/* ============================================
-   1991 Academy — Admin panel (admin.html)
-   Builds on the shared components: .stat-chip,
-   .lb-tabs, .form-card look, .btn, .field.
-   ============================================ */
+/* Admin panel (admin.html). Extends the shared components. */
 
 .admin-shell { padding: 36px 0 80px; }
 
@@ -38,7 +34,7 @@
 }
 .admin-two > .admin-card { margin-bottom: 18px; }
 
-/* tables scroll sideways inside their card, never the page */
+/* tables scroll horizontally within their card */
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .admin-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .admin-table th {
@@ -220,7 +216,7 @@ select.admin-input { max-width: 100%; }
   .admin-facts dd { margin-bottom: 6px; }
 }
 
-/* ---------- new students' temporary passwords ---------- */
+/* ---------- temporary passwords ---------- */
 .admin-temps { display: grid; gap: 8px; margin: 12px 0; }
 .admin-temp {
   display: grid;
@@ -240,7 +236,7 @@ select.admin-input { max-width: 100%; }
   .admin-temp > div:first-child { grid-column: 1 / -1; }
 }
 
-/* invitation links (Learners) */
+/* invitation links */
 .admin-link { font-size: 0.82rem; letter-spacing: 0; overflow-wrap: anywhere; }
 .admin-table [data-cancel-link] { padding: 5px 10px; font-size: 0.8rem; }
 [data-links-list] h4 { margin-top: 18px; }

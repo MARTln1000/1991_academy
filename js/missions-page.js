@@ -1,9 +1,7 @@
-/* ============================================
-   1991 Academy — Missions page
-   Card list with prerequisite locks + a detail
-   view: the brief, the mission's Google Colab
-   notebook (Python), hints and XP.
-   ============================================ */
+/**
+ * Missions: list with prerequisite locks and a detail view (brief, Colab
+ * notebook, hints, XP).
+ */
 
 (function () {
   const root = document.getElementById("missions-root");
@@ -79,7 +77,7 @@
       : '<a class="mission-card unlocked" href="' + base + "missions.html#" + m.id + '">' + inner + "</a>";
   };
 
-  if (!root) return; /* included on other pages just for renderMissionCard */
+  if (!root) return; /* other pages include this file only for renderMissionCard */
 
   /* ---------- List view ---------- */
 
@@ -138,8 +136,7 @@
   }
 
   window.addEventListener("hashchange", render);
-  /* Keep the lock states honest when progress arrives from a sync or another
-     tab. An open mission is left as it is. */
+  /* Update lock states on external progress changes; an open mission is left as is. */
   onStateChanged(() => {
     if (location.hash.replace("#", "")) {
       renderStreakPill();

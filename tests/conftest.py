@@ -1,5 +1,4 @@
-"""Test configuration — point the app at a throwaway DB BEFORE app.py is
-imported, so tests never touch 1991_academy.db."""
+"""Point the app at a temporary database before app.py is imported."""
 import os
 import tempfile
 

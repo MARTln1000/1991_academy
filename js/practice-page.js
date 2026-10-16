@@ -1,8 +1,6 @@
-/* ============================================
-   1991 Academy — Practice page
-   Short spaced-repetition sessions built from
-   the quizzes of lessons you've completed.
-   ============================================ */
+/**
+ * Practice: short spaced-repetition sessions from completed lessons' quizzes.
+ */
 
 (function () {
   const root = document.getElementById("practice-root");
@@ -68,7 +66,7 @@
     const card = queue[index];
     const resolved = Review.resolve(card);
     if (!resolved) {
-      /* stale card (content edited) — skip it */
+      /* stale card: skip */
       index += 1;
       return renderCard();
     }
@@ -141,8 +139,7 @@
   XP.renderPill();
   start();
 
-  /* A session in progress owns the screen — only refresh the pills when state
-     arrives from elsewhere, never restart the queue mid-question. */
+  /* Never restart an in-progress session on external changes; refresh pills only. */
   onStateChanged(() => {
     renderStreakPill();
     XP.renderPill();

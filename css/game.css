@@ -1,8 +1,4 @@
-/* ============================================
-   1991 Academy — Game layer
-   XP pill, daily goal, levels, achievements,
-   interactive exercises, missions, practice.
-   ============================================ */
+/* Gamification and activities: XP, goals, achievements, exercises, missions, practice. */
 
 /* ---------- Nav additions ---------- */
 .nav-link {
@@ -287,7 +283,7 @@
 .lb-empty { color: var(--text-muted); font-size: 0.9rem; padding: 8px 2px; }
 
 /* account: danger zone, extra buttons */
-/* one card (sign in, reset, welcome): one column, not half of two */
+/* single-card layout */
 .auth-grid.auth-grid-single { max-width: 460px; grid-template-columns: 1fr; }
 .link-btn { display: inline-block; margin-top: 10px; padding: 0; background: none;
   border: none; color: var(--accent); font: inherit; font-size: 0.85rem;
@@ -354,7 +350,7 @@
   margin-bottom: 10px;
 }
 
-/* KaTeX display math: keep it scrollable on narrow screens, breathing room */
+/* KaTeX display math: horizontal scroll on narrow screens */
 .katex-display {
   margin: 14px 0;
   overflow-x: auto;
@@ -687,7 +683,7 @@
   .auth-grid { grid-template-columns: 1fr; }
 }
 
-/* Crowded nav on small screens: streak lives on the dashboard anyway */
+/* small screens: hide the streak pill (shown on the dashboard) */
 .streak-pill { white-space: nowrap; }
 @media (max-width: 820px) {
   .nav .streak-pill { display: none; }
@@ -699,7 +695,7 @@
   .match-grid { grid-template-columns: 1fr; }
 }
 
-/* ---------- Signed out: sign in, invitation, new password (js/account-page.js) ---------- */
+/* ---------- Auth pages: sign-in, invitation, new password ---------- */
 .auth-center { max-width: 440px; margin: 0 auto; padding: 8px 0 24px; }
 .auth-brand {
   display: flex;
@@ -720,7 +716,7 @@
 .auth-help { margin: 14px 0 0; text-align: center; font-size: 0.84rem; color: var(--text-muted); }
 .auth-card .form-error:empty { min-height: 0; margin: 0; }
 
-/* whose account this is */
+/* account identity */
 .auth-identity {
   display: flex;
   align-items: center;
@@ -757,7 +753,7 @@
 }
 .pw-toggle:hover { background: var(--accent-soft); }
 
-/* the live checklist under a new password */
+/* password rule checklist */
 .pw-rules { list-style: none; margin: -4px 0 20px; padding: 0; display: grid; gap: 6px; font-size: 0.85rem; color: var(--text-muted); }
 .pw-rules li::before { content: "○"; display: inline-block; width: 1.5em; color: var(--text-faint); }
 .pw-rules li.ok { color: var(--success); }

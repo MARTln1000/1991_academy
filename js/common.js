@@ -1,20 +1,15 @@
-/* ============================================
-   1991 Academy — Common
-   Namespace, theme toggle, toast, store
-   invalidation, helpers.
-   Loaded first on every page.
-   ============================================ */
+/**
+ * Shared utilities, loaded first on every page: namespace, storage migration,
+ * theme, toasts, state-change events and HTML helpers.
+ */
 
 window.ACADEMY_1991 = window.ACADEMY_1991 || { tracks: {}, order: [] };
 
 const M = window.ACADEMY_1991;
 
 /* ---------- Storage prefix ----------
-   Everything this site keeps in localStorage (progress, XP, reviews, settings,
-   code drafts) lives under STORE_PREFIX. Until the project was renamed the
-   prefix was "martinium:", so a returning visitor's data is moved over once,
-   here, before any other script reads it. auth.js renames old keys arriving
-   from the server with currentStoreKey(), and the server does the same. */
+   All localStorage keys use STORE_PREFIX. Keys with the legacy prefix are
+   migrated once on load, before other scripts read them. */
 const STORE_PREFIX = "1991_academy:";
 const LEGACY_STORE_PREFIX = "martinium:";
 
@@ -35,7 +30,7 @@ function currentStoreKey(key) {
       localStorage.removeItem(k);
     }
   } catch {
-    /* storage blocked (private mode, settings): nothing to migrate */
+    /* storage unavailable */
   }
 })();
 
@@ -61,14 +56,12 @@ function initTheme() {
 }
 
 /* ---------- Store invalidation ----------
-   Progress/XP/Review cache their parsed localStorage blob so a render pass
-   doesn't re-parse it dozens of times. Anything that writes those keys from
-   OUTSIDE those modules (a sync pull, or another tab) must announce it:
+   Progress, XP and Review cache their parsed blobs. Writers outside those
+   modules (sync pulls, other tabs) must call notifyStateChanged(), which
+   dispatches:
 
-     1991_academy:store-invalidate → caches drop, no re-render
-     1991_academy:state-changed    → page controllers re-render
-
-   `notifyStateChanged()` fires both, in that order. */
+     1991_academy:store-invalidate   drop caches
+     1991_academy:state-changed      re-render */
 
 function invalidateStores() {
   document.dispatchEvent(new CustomEvent("1991_academy:store-invalidate"));
@@ -79,13 +72,12 @@ function notifyStateChanged() {
   document.dispatchEvent(new CustomEvent("1991_academy:state-changed"));
 }
 
-/* Page controllers call this instead of wiring the listener by hand. */
+/* Subscribe a page controller to state changes. */
 function onStateChanged(handler) {
   document.addEventListener("1991_academy:state-changed", handler);
 }
 
-/* Another tab wrote our keys — adopt its view. Debounced because a sync pull
-   rewrites every key in a burst and each one fires its own storage event. */
+/* Cross-tab updates. Debounced: a sync pull rewrites many keys at once. */
 (function watchOtherTabs() {
   let timer = null;
   window.addEventListener("storage", (e) => {
@@ -95,7 +87,7 @@ function onStateChanged(handler) {
   });
 })();
 
-/* ---------- Toast (queued, so rewards don't overwrite each other) ---------- */
+/* ---------- Toast (queued) ---------- */
 const toastQueue = [];
 let toastActive = false;
 
@@ -129,17 +121,14 @@ function nextToast() {
 
 /* ---------- Helpers ---------- */
 
-/* Escapes every character that can break out of an HTML text node OR an
-   attribute value — single quotes included, since not every template here
-   uses double quotes. */
+/* Escape for HTML text and attribute contexts (including single quotes). */
 const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
 function esc(str) {
   return String(str).replace(/[&<>"']/g, (ch) => ESC_MAP[ch]);
 }
 
-/* Quiz/practice answer keys: A, B, C … Z, then AA, AB … so a question with
-   more than four options never renders "undefined". */
+/* Option labels: A..Z, then AA, AB, ... */
 function optionLetter(i) {
   let out = "";
   let n = i;
@@ -164,10 +153,7 @@ function renderStreakPill() {
 initTheme();
 
 /* ---------- Credit ----------
-   The courses' lectures, slides and homework were created by FAST Foundation.
-   One very small line at the foot of every page says so; i18n.js translates
-   it. (Who runs the site, the support address and the privacy policy link
-   are in the main page's footer.) */
+   Attribution footer for FAST Foundation course materials. */
 (function fastCredit() {
   const credit = document.createElement("p");
   credit.className = "fast-credit";

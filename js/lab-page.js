@@ -1,11 +1,7 @@
-/* ============================================
-   1991 Academy — The Lab
-   LeetCode-style problems + from-scratch ML/DL
-   builds, in Python. Each one is solved in
-   Google Colab (colab.js): task, starter code,
-   tests and a plot of what the learner's code
-   does.
-   ============================================ */
+/**
+ * The Lab: algorithm and from-scratch ML problems in Python, solved in Google
+ * Colab (see colab.js).
+ */
 
 (function () {
   const root = document.getElementById("lab-root");
@@ -126,9 +122,8 @@
   }
 
   window.addEventListener("hashchange", render);
-  /* A sync pull or another tab changed our XP/progress: refresh the pills and
-     the solved badges rather than showing stale state. Skipped while a detail
-     view is open, which has nothing that depends on them. */
+  /* Refresh pills and solved badges on external state changes; the detail
+     view does not depend on them and is left as is. */
   onStateChanged(() => {
     if (location.hash.replace("#", "")) {
       renderStreakPill();

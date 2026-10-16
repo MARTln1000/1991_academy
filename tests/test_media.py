@@ -1,9 +1,4 @@
-"""Lesson videos hosted on the server (media/, README.md → "Lesson videos").
-
-On a server Caddy serves /media itself; the app serves it too (your own
-computer, an external web server), and tells every page which videos are
-hosted, so the player uses them instead of YouTube.
-"""
+"""Self-hosted media under /media and its listing in /api/content.js."""
 import json
 import sys
 from pathlib import Path

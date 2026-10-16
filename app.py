@@ -1,74 +1,20 @@
 #!/usr/bin/env python3
-"""
-1991 Academy backend — FastAPI.
+"""1991 Academy: web application backend.
 
-    .venv/bin/python app.py                # http://localhost:8735
-    .venv/bin/uvicorn app:app --port 8735  # equivalent (schema set up on startup)
+A single FastAPI application that serves the JSON API and the static frontend.
+Storage is one SQLite database. See docs/architecture.md for the design and
+docs/api.md for the endpoint reference.
 
-Serves the static site and the JSON API.
+Run:
+    python app.py                       # http://localhost:8735
+    uvicorn app:app --port 8735         # equivalent; schema setup runs in lifespan
+    python app.py admin add NAME EMAIL  # administration CLI, see cli()
 
-Design notes that matter if you touch this file:
-
-* **Nothing blocking runs on the event loop.** SQLite calls and scrypt hashing
-  go through `run_in_threadpool`.
-* **Static serving is an allowlist, not a blocklist.** Only `/`, the seven page
-  files, robots.txt, and the css/js/tracks/assets trees are reachable. An extension
-  blocklist could be walked around by case (`/APP.PY` on macOS) and wrongly
-  404'd the `.py` starter files under `assets/courses/`.
-* **Schema setup + expiry sweeping live in the lifespan handler**, so they run
-  under any ASGI server, not just `python app.py`.
-
-Environment:
-    PORT           listen port                      (default 8735)
-    ACADEMY_HOST   bind address                     (default 0.0.0.0 — reachable on
-                   your LAN; in Docker, compose publishes it on 127.0.0.1 only)
-    ACADEMY_DB     SQLite path                      (default ./1991_academy.db)
-    ACADEMY_MEDIA  folder of hosted lesson videos   (default ./media)
-    ACADEMY_DEBUG  1 = dev mode: no-store caching   (default 1)
-    ACADEMY_SECURE_COOKIES  1 = Secure (HTTPS-only) session cookie
-                   (default: on unless ACADEMY_DEBUG=1)
-    ACADEMY_TRUST_PROXY     1 = read client IP from X-Forwarded-For
-                   (set ONLY behind a trusted reverse proxy)
-
-API:
-    POST /api/login               {identifier, password}
-    POST /api/first-password      {identifier, password, newPassword}  (temporary -> own password)
-    POST /api/join/check          {token}   is this invitation link still good?
-    POST /api/join                {token, email, username?} -> {username, password, days}
-    POST /api/logout
-    GET  /api/me
-    GET  /api/state               -> {"data": {...}|null, "updated": ts|null}
-    PUT  /api/state               {"data": {...}}   (also snapshots XP)
-    GET  /api/leaderboard[?period=week|all] -> {"top": [{username, xp}...], "you": rank|null, "period"}
-    POST /api/leaderboard-optin   {"optIn": bool}
-    POST /api/change-password     {currentPassword, newPassword}
-    POST /api/delete-account      {password}
-    GET  /api/health
-    GET  /api/auth-check          204 when signed in, else 401 (Caddy asks it before serving videos)
-    GET  /api/content.js          lessons and announcements added in the admin panel,
-                                  and the lesson videos hosted here (ACADEMY_MEDIA)
-
-There is no open sign-up, and the site sends no email. An admin either adds
-students (each gets a temporary password, shown to the admin once) or makes
-invitation links and sends them from their own mailbox: whoever opens a link
-types the email they want and gets a temporary password, once, within 7 days.
-A temporary password works for 14 days and only to choose one's own. The
-first admin is made on the server: `python app.py admin add NAME EMAIL`;
-`python app.py password NAME` gives any account a new temporary password.
-
-Admin (accounts with users.is_admin; `python app.py admin add NAME` grants it):
-    GET  /api/admin/overview      site statistics
-    POST /api/admin/students      {students: [{email, username?}]} -> accounts + temporary passwords
-    GET  /api/admin/join-links    POST /api/admin/join-links {sentTo: [...]}  POST .../ID/cancel
-    GET  /api/admin/users[?q=&sort=created|active|xp|name&offset=]
-    GET  /api/admin/users/NAME    one learner, with their progress
-    POST /api/admin/users/NAME/temp-password | sign-out | delete
-    GET  /api/admin/lessons       PUT|DELETE /api/admin/lessons/ID   POST .../ID/preview
-    GET  /api/admin/announcements POST /api/admin/announcements  PUT|DELETE .../ID
-    GET  /api/admin/log           what admins changed
-    GET  /api/admin/media         which lesson videos are hosted here
-
-ACADEMY_BASE_URL: the site's address, which admins send to new students.
+Conventions:
+    * Blocking work (SQLite, scrypt) runs in the thread pool, never on the event loop.
+    * Static files are served from an explicit allowlist (static_allowed).
+    * Schema migrations and the expiry sweep run in the lifespan handler, so they
+      apply under any ASGI server.
 """
 
 import asyncio
@@ -102,71 +48,48 @@ VERSION = "2.3"
 
 ROOT = Path(__file__).resolve().parent
 PORT = int(os.environ.get("PORT", 8735))
-# Only used by `python app.py`. Behind a reverse proxy, nothing but the proxy
-# may reach this port: with ACADEMY_TRUST_PROXY=1, anyone who can reach it
-# directly could forge X-Forwarded-For and walk around the per-IP rate limits.
-# In Docker the container binds 0.0.0.0 and docker-compose.yml publishes the
-# port on 127.0.0.1 only, so just Caddy and the host itself can reach it.
+# With ACADEMY_TRUST_PROXY=1 this port must be reachable only by the proxy,
+# otherwise clients can forge X-Forwarded-For. Docker publishes it on 127.0.0.1.
 HOST = os.environ.get("ACADEMY_HOST", "0.0.0.0")
 DB_PATH = os.environ.get("ACADEMY_DB", str(ROOT / "1991_academy.db"))
-# The lesson videos hosted here instead of streamed from YouTube, named after
-# the lecture's YouTube id: <id>.mp4 (or .webm), with an optional <id>.jpg
-# poster. Not in git or the image; docker-compose.yml mounts MEDIA_DIR here.
-# README.md → "Lesson videos".
+# Self-hosted lesson videos: <youtube-id>.mp4|webm with an optional <youtube-id>.jpg
+# poster. Mounted at runtime; see docs/content.md.
 MEDIA_DIR = Path(os.environ.get("ACADEMY_MEDIA", str(ROOT / "media")))
 DEBUG = os.environ.get("ACADEMY_DEBUG", "1") == "1"
 
-# Mark the session cookie Secure (HTTPS-only) in production. Defaults to the
-# opposite of DEBUG so local http://localhost dev still works, prod does not
-# leak the cookie over plain HTTP. Override with ACADEMY_SECURE_COOKIES=0/1.
+# Secure (HTTPS-only) session cookie; on by default outside debug mode.
 SECURE_COOKIES = os.environ.get("ACADEMY_SECURE_COOKIES", "0" if DEBUG else "1") == "1"
-# Behind a reverse proxy (nginx/Caddy), request.client.host is the proxy, so
-# per-IP rate limiting would collapse to one bucket. Set ACADEMY_TRUST_PROXY=1
-# ONLY when a trusted proxy sets X-Forwarded-For (else a client could spoof it).
+# Read the client IP from X-Forwarded-For. Enable only behind a trusted proxy
+# that overwrites the header; otherwise per-IP rate limits can be bypassed.
 TRUST_PROXY = os.environ.get("ACADEMY_TRUST_PROXY", "0") == "1"
 
-SESSION_TTL = 30 * 86400          # 30 days
-MAX_BODY = 300_000                # bytes, hard cap for any request body
-TEMP_PASSWORD_TTL = 14 * 86400   # a temporary password works for 14 days, once
-JOIN_LINK_TTL = 7 * 86400         # an invitation link works for 7 days, once
-JOIN_LINKS_KEPT = 30 * 86400      # the panel lists links this long after they expire
-# pass_hash of an account that has no usable password (created before
-# temporary passwords existed): nothing matches it.
-NO_PASSWORD = "!"
-SWEEP_INTERVAL = 3600             # expired sessions / reset tokens, hourly
-# Ceiling for the leaderboard XP snapshot. The whole curriculum is worth a few
-# thousand XP, so anything past this is a corrupt or forged blob. Clamping also
-# keeps the value inside SQLite's 8-byte INTEGER, which an unclamped one need
-# not be.
+SESSION_TTL = 30 * 86400
+MAX_BODY = 300_000                # bytes, per request
+TEMP_PASSWORD_TTL = 14 * 86400
+JOIN_LINK_TTL = 7 * 86400
+JOIN_LINKS_KEPT = 30 * 86400      # retention of expired links for the admin view
+NO_PASSWORD = "!"                 # pass_hash sentinel: account has no usable password
+SWEEP_INTERVAL = 3600
+# Upper bound for the XP snapshot; also keeps it within SQLite's 64-bit INTEGER.
 MAX_XP = 10_000_000
 
-# The browser keeps a learner's progress in localStorage under this prefix, and
-# the synced state blob mirrors those keys. Until the project was renamed the
-# prefix was "martinium:". Old keys are renamed wherever they turn up: stored
-# blobs once at startup (init_db), and blobs sent by a page that was loaded
-# before the rename.
+# localStorage key prefix mirrored by the synced state blob. Keys with the
+# legacy prefix are migrated on read and write (current_keys).
 STORE_PREFIX = "1991_academy:"
 LEGACY_STORE_PREFIX = "martinium:"
 XP_KEY = STORE_PREFIX + "xp:v1"
 
-# The site sends no email at all: admins send each new student, from their own
-# mailbox, the site's address, a username and a temporary password (the admin
-# panel writes that message). BASE_URL is the address in it, e.g.
-# https://academy.example.com (docker-compose.yml sets it from DOMAIN).
+# Public site URL used in invitation links and onboarding messages.
 BASE_URL = os.environ.get("ACADEMY_BASE_URL", f"http://localhost:{PORT}").rstrip("/")
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,20}$")
-# No whitespace, control characters, or characters that mean something in HTML
-# or in a mail header: an address can never carry markup onto a page.
+# Excludes whitespace, control characters and HTML/header metacharacters.
 _EMAIL_CHAR = r"[^@\s\x00-\x1f\x7f<>\"'`()\[\]\\,;:]"
 EMAIL_RE = re.compile(rf"^{_EMAIL_CHAR}+@{_EMAIL_CHAR}+\.{_EMAIL_CHAR}+$")
-MAX_EMAIL = 254                   # the longest valid email address
+MAX_EMAIL = 254                   # RFC 5321 limit
 DISPOSABLE_FILE = ROOT / "disposable_email_domains.txt"
 
-# The git commit this image was built from ("-dirty" = with uncommitted
-# changes). The Dockerfile writes the file from the REVISION build argument the
-# Makefile passes; /api/health reports it, so `make status` shows which
-# version is live. Absent in a plain checkout.
+# Build revision written by the Dockerfile; reported by /api/health.
 try:
     REVISION = (ROOT / "REVISION").read_text().strip() or None
 except OSError:
@@ -183,19 +106,16 @@ log = logging.getLogger("academy")
 
 # ------------------------------------------------------- static allowlist
 
-# Everything the browser may fetch, by construction. An allowlist cannot be
-# defeated by case ("/APP.PY" resolves to app.py on a case-insensitive volume)
-# or by an extension nobody thought to block.
+# Allowlist of servable paths. A blocklist would be bypassable through case
+# folding on case-insensitive filesystems (e.g. /APP.PY).
 PAGE_FILES = {
-    "",  # "/" → index.html via StaticFiles(html=True)
+    "",  # "/" resolves to index.html
     "index.html", "lab.html", "missions.html", "practice.html", "account.html", "privacy.html",
     "admin.html", "robots.txt",
 }
-# Course materials are whatever the lecturer published — PDFs, notebooks, CSVs,
-# images, zips and .py starter files — so that tree can't be extension-limited.
-ANY_EXTENSION = object()
+ANY_EXTENSION = object()           # course materials come in arbitrary formats
 
-# directory → permitted extensions
+# top-level directory -> permitted extensions
 STATIC_TREES = {
     "css": {".css"},
     "js": {".js"},
@@ -204,7 +124,6 @@ STATIC_TREES = {
 }
 
 
-# /media/<name>.<ext>: one flat folder of videos, posters and subtitles.
 MEDIA_PATH_RE = re.compile(r"^/media/[A-Za-z0-9_-]{1,64}\.(?:mp4|webm|jpg|vtt)$")
 YOUTUBE_FILE_RE = re.compile(r"^([A-Za-z0-9_-]{11})\.(mp4|webm|jpg)$")
 
@@ -214,10 +133,8 @@ def static_allowed(path: str) -> bool:
     if rel in PAGE_FILES:
         return True
     segments = rel.split("/")
-    # must name a known tree plus at least one segment inside it
     if len(segments) < 2 or segments[0] not in STATIC_TREES:
         return False
-    # reject empty, relative and hidden segments anywhere in the path
     if any(seg in ("", ".", "..") or seg.startswith(".") for seg in segments):
         return False
     allowed_exts = STATIC_TREES[segments[0]]
@@ -230,13 +147,13 @@ def static_allowed(path: str) -> bool:
 
 @contextmanager
 def db():
-    """A connection that is always closed. Callers commit their own writes."""
+    """Yield a configured connection; callers are responsible for commit."""
     conn = sqlite3.connect(DB_PATH, timeout=5)
     try:
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA busy_timeout = 5000")   # wait, don't fail, on a locked DB
-        conn.execute("PRAGMA synchronous = NORMAL")  # safe + fast under WAL
-        conn.execute("PRAGMA foreign_keys = ON")     # per-connection; off by default
+        conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute("PRAGMA synchronous = NORMAL")  # durable enough under WAL
+        conn.execute("PRAGMA foreign_keys = ON")     # per-connection setting
         yield conn
     finally:
         conn.close()
@@ -244,9 +161,7 @@ def db():
 
 def init_db():
     with db() as conn:
-        # WAL lets readers and a writer proceed concurrently — important once
-        # many users sync progress at once (a single-writer rollback journal
-        # would serialize them). Persists on the DB file after being set once.
+        # WAL: concurrent readers alongside the single writer. Persistent per file.
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(
             """
@@ -274,10 +189,9 @@ def init_db():
                 created REAL NOT NULL,
                 expires REAL NOT NULL
             );
-            -- Lessons written in the admin panel. An id that matches a built-in
-            -- lesson (js/data/) replaces its text; any other id is a new lesson,
-            -- placed in `module` after `after` (NULL: at the end). `data` is the
-            -- lesson as JSON, already validated and sanitized (parse_lesson).
+            -- Admin-authored lessons. An id matching a built-in lesson overrides
+            -- it; otherwise the lesson is inserted after `after` (NULL = last).
+            -- `data` is validated and sanitized JSON (parse_lesson).
             CREATE TABLE IF NOT EXISTS lessons (
                 id TEXT PRIMARY KEY,
                 track TEXT NOT NULL,
@@ -289,7 +203,6 @@ def init_db():
                 updated REAL NOT NULL,
                 updated_by TEXT NOT NULL
             );
-            -- The banners shown at the top of every page while active.
             CREATE TABLE IF NOT EXISTS announcements (
                 id INTEGER PRIMARY KEY,
                 text TEXT NOT NULL,
@@ -299,10 +212,8 @@ def init_db():
                 created REAL NOT NULL,
                 created_by TEXT NOT NULL
             );
-            -- Invitation links an admin sends from their own mailbox. Whoever
-            -- opens one types the email they want and gets an account, once.
-            -- Only the token's hash is stored. `sent_to` is the admin's own
-            -- note of who got the link; `used_by` the username it made.
+            -- Single-use invitation links; only the SHA-256 of the token is stored.
+            -- sent_to: admin's note on the recipient; used_by: resulting username.
             CREATE TABLE IF NOT EXISTS join_links (
                 id INTEGER PRIMARY KEY,
                 token_hash TEXT UNIQUE NOT NULL,
@@ -314,8 +225,7 @@ def init_db():
                 used_by TEXT,
                 cancelled REAL
             );
-            -- Every change made through the admin panel or `app.py admin`.
-            -- Names, not user ids: the record outlives deleted accounts.
+            -- Audit trail. Stores names rather than ids so entries survive deletions.
             CREATE TABLE IF NOT EXISTS admin_log (
                 id INTEGER PRIMARY KEY,
                 ts REAL NOT NULL,
@@ -326,7 +236,7 @@ def init_db():
             );
             """
         )
-        # migrate pre-leaderboard databases in place
+        # Additive, idempotent migrations.
         cols = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
         if "leaderboard_opt_in" not in cols:
             conn.execute("ALTER TABLE users ADD COLUMN leaderboard_opt_in INTEGER NOT NULL DEFAULT 0")
@@ -336,30 +246,24 @@ def init_db():
             conn.execute("ALTER TABLE users ADD COLUMN xp_updated REAL")
             log.info("migration: added users.xp_total / xp_updated")
         if "week_id" not in cols:
-            # weekly league: xp_week_start = lifetime XP when the current week began;
-            # weekly XP = xp_total - xp_week_start (see api_put_state).
+            # weekly XP = xp_total - xp_week_start (rebased in _put_state)
             conn.execute("ALTER TABLE users ADD COLUMN xp_week_start INTEGER NOT NULL DEFAULT 0")
             conn.execute("ALTER TABLE users ADD COLUMN week_id TEXT")
             log.info("migration: added users.xp_week_start / week_id")
         if "must_change_password" not in cols:
-            # a temporary password (from an admin) works once, until it expires,
-            # and only to choose the account's own password
             conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
             conn.execute("ALTER TABLE users ADD COLUMN temp_password_expires REAL")
             log.info("migration: added users.must_change_password / temp_password_expires")
-        # accounts made before temporary passwords never got a usable
-        # password: they wait for a temporary one from an admin
+        # Accounts without a usable password must be issued a temporary one.
         conn.execute("UPDATE users SET must_change_password = 1 WHERE pass_hash = ? AND must_change_password = 0",
                      (NO_PASSWORD,))
         if "is_admin" not in cols:
             conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
             log.info("migration: added users.is_admin")
 
-        # Login accepts username OR email case-insensitively, but the UNIQUE
-        # constraints above are BINARY — so "Alice" and "alice" could both be
-        # registered and the login lookup would then pick one arbitrarily.
-        # A UNIQUE NOCASE index is the actual fix; fall back to a plain index
-        # if an existing database already contains such a pair.
+        # Login matches username/email case-insensitively, so uniqueness must be
+        # case-insensitive too. Fall back to a plain index if legacy data
+        # already contains case-duplicates.
         for name, expr in (("username", "username COLLATE NOCASE"), ("email", "email COLLATE NOCASE")):
             try:
                 conn.execute(
@@ -376,31 +280,24 @@ def init_db():
 
         conn.executescript(
             """
-            -- leaderboard: filter opted-in rows and sort by XP without a full scan.
             CREATE INDEX IF NOT EXISTS idx_users_leaderboard
                 ON users(leaderboard_opt_in, xp_total DESC);
-            -- "all sessions for a user" (logout-everywhere / account deletion).
             CREATE INDEX IF NOT EXISTS idx_sessions_user
                 ON sessions(user_id);
-            -- the hourly sweep deletes by age.
             CREATE INDEX IF NOT EXISTS idx_sessions_created
                 ON sessions(created);
-            -- weekly leaderboard filters on the current ISO-week id.
             CREATE INDEX IF NOT EXISTS idx_users_week
                 ON users(leaderboard_opt_in, week_id);
-            -- expiring reset tokens are looked up / swept by user + expiry.
             CREATE INDEX IF NOT EXISTS idx_resets_user
                 ON password_resets(user_id);
             CREATE INDEX IF NOT EXISTS idx_resets_expires
                 ON password_resets(expires);
-            -- the activity log is read newest first.
             CREATE INDEX IF NOT EXISTS idx_admin_log_ts
                 ON admin_log(ts);
             """
         )
 
-        # Blobs stored before the "martinium:" → "1991_academy:" rename. Values
-        # are untouched (a code draft may contain the old word); only keys move.
+        # Rename legacy-prefixed keys in stored state; values are left untouched.
         legacy = conn.execute(
             "SELECT user_id, data FROM state WHERE data LIKE ?", (f'%"{LEGACY_STORE_PREFIX}%',)
         ).fetchall()
@@ -423,9 +320,11 @@ def init_db():
 
 
 def current_keys(data: dict) -> dict:
-    """The state blob with legacy "martinium:" keys renamed to STORE_PREFIX.
-    Returns the same dict when there is nothing to rename. If both spellings of
-    a key are present, the current one wins."""
+    """Return `data` with legacy-prefixed keys renamed to STORE_PREFIX.
+
+    Returns the input object unchanged when nothing needs renaming. If both
+    forms of a key exist, the current one wins.
+    """
     if not any(k.startswith(LEGACY_STORE_PREFIX) for k in data):
         return data
     out = {k: v for k, v in data.items() if not k.startswith(LEGACY_STORE_PREFIX)}
@@ -436,9 +335,7 @@ def current_keys(data: dict) -> dict:
 
 
 def sweep_expired():
-    """Sessions past their TTL and used/expired reset tokens are only ever
-    deleted when that exact row is touched again, so they accumulate forever.
-    Clear them out on startup and hourly after that."""
+    """Delete expired sessions and tokens. Runs at startup and hourly."""
     now = time.time()
     with db() as conn:
         sessions = conn.execute(
@@ -461,8 +358,8 @@ def hash_password(password: str, salt: bytes) -> str:
 
 
 def verify_password(row, password: str) -> bool:
-    """Constant-time check of a plaintext password against a user row."""
-    if row["pass_hash"] == NO_PASSWORD:  # no usable password: nothing matches
+    """Constant-time comparison of `password` against the row's hash."""
+    if row["pass_hash"] == NO_PASSWORD:
         burn_password_time(password)
         return False
     return hmac.compare_digest(
@@ -470,21 +367,17 @@ def verify_password(row, password: str) -> bool:
     )
 
 
-# Salt for the decoy hash below. Random per process; its only job is to make
-# the work look identical, so it never needs to be stable or stored.
 _DECOY_SALT = secrets.token_bytes(16)
 
 
 def burn_password_time(password: str) -> None:
-    """Hash against a throwaway salt when the account doesn't exist.
-
-    Without this, a missing user returns in ~1 ms while a real one costs the
-    ~30 ms of scrypt — a reliable oracle for enumerating who has an account."""
+    """Spend the cost of a real hash so response time doesn't reveal whether an
+    account exists."""
     hash_password(password, _DECOY_SALT)
 
 
 def current_week_id(now: float | None = None) -> str:
-    """ISO year-week, e.g. '2026-W28'. Weeks roll over Monday 00:00 UTC."""
+    """ISO year-week, e.g. '2026-W28' (UTC)."""
     return time.strftime("%G-W%V", time.gmtime(now if now is not None else time.time()))
 
 
@@ -496,7 +389,7 @@ def err(message: str, status: int = 400) -> JSONResponse:
 
 
 class Invalid(ValueError):
-    """Input to send back with its message: a lesson, an announcement, an invitation."""
+    """Validation error whose message is safe to return to the client."""
 
 
 def public_user(row) -> dict:
@@ -515,7 +408,7 @@ def session_token(request: Request):
 
 
 def current_user(token, conn):
-    """Resolve a session cookie to its user row. Runs inside the worker thread."""
+    """Return the user row for a session token, or None. Expired sessions are deleted."""
     if not token:
         return None
     row = conn.execute(
@@ -556,9 +449,7 @@ def clear_session_cookie(response: JSONResponse):
 
 
 async def json_body(request: Request):
-    """The request's JSON object, or None. Every endpoint takes an object, so a
-    list or a bare number is as invalid as malformed JSON (and must not reach
-    the handlers' body.get() as a 500)."""
+    """Parse the body as a JSON object; None if oversized, malformed or not an object."""
     try:
         body = await request.body()
         if len(body) > MAX_BODY:
@@ -571,13 +462,11 @@ async def json_body(request: Request):
 # --------------------------------------------------------------- rate limit
 
 _BUCKETS: dict = defaultdict(deque)
-_BUCKET_CAP = 4096  # distinct ip:bucket keys before we prune idle ones
+_BUCKET_CAP = 4096  # prune idle keys beyond this many
 
 
 def client_ip(request: Request) -> str:
-    """Best-effort client IP. Trusts X-Forwarded-For only when ACADEMY_TRUST_PROXY
-    is set (a trusted proxy is in front); otherwise uses the direct peer, so a
-    client cannot spoof its way out of rate limits by sending a fake header."""
+    """Client IP; honours X-Forwarded-For only when TRUST_PROXY is set."""
     if TRUST_PROXY:
         xff = request.headers.get("x-forwarded-for")
         if xff:
@@ -586,10 +475,8 @@ def client_ip(request: Request) -> str:
 
 
 def _recent(key: str, window_s: int):
-    """The timestamps under `key` within the window (a sliding window)."""
+    """Sliding window: the deque of timestamps for `key` within `window_s`."""
     now = time.time()
-    # The dict grew one entry per distinct key forever; drop idle ones when it
-    # gets large rather than letting a long-lived process leak them.
     if len(_BUCKETS) > _BUCKET_CAP:
         for k in [k for k, dq in _BUCKETS.items() if not dq or dq[-1] < now - 3600]:
             del _BUCKETS[k]
@@ -600,17 +487,16 @@ def _recent(key: str, window_s: int):
 
 
 def failures(request: Request, bucket: str, window_s: int):
-    """This address's recent failures in `bucket`. Only failures count: a
-    classroom shares one public address, and thirty students signing in or
-    accepting their invitations at once must not lock each other out."""
+    """Recent failures for this client IP. Only failures are counted, so many
+    users behind one NAT (a classroom) can sign in concurrently."""
     return _recent(f"{client_ip(request)}:{bucket}", window_s)
 
 
-IP_LOGIN_FAILS = 10          # wrong passwords per minute per address
+IP_LOGIN_FAILS = 10          # per IP per minute
 
 
 def rate_limited(request: Request, bucket: str, limit: int, window_s: int) -> bool:
-    """Sliding-window limiter, per client IP. True = over the limit."""
+    """Per-IP sliding-window limiter; True when the limit is exceeded."""
     ip = client_ip(request)
     dq, now = _recent(f"{ip}:{bucket}", window_s)
     if len(dq) >= limit:
@@ -620,9 +506,7 @@ def rate_limited(request: Request, bucket: str, limit: int, window_s: int) -> bo
     return False
 
 
-# Per account rather than per IP: an attacker with many addresses gets around
-# the IP limits, but not this one. 20 wrong passwords in 15 minutes pause that
-# account's sign-in for 15 minutes.
+# Per-account lockout, independent of the client IP.
 LOGIN_FAILS, LOGIN_FAIL_WINDOW = 20, 900
 
 
@@ -634,8 +518,6 @@ def account_key(kind: str, name: str) -> str:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # Runs under `python app.py` AND any external ASGI server, so a uvicorn/
-    # gunicorn deployment can never come up against an un-migrated database.
     await run_in_threadpool(init_db)
     await run_in_threadpool(sweep_expired)
     if not DEBUG and links_warning():
@@ -646,7 +528,7 @@ async def lifespan(_app: FastAPI):
             await asyncio.sleep(SWEEP_INTERVAL)
             try:
                 await run_in_threadpool(sweep_expired)
-            except Exception:  # noqa: BLE001 — a failed sweep must not kill the task
+            except Exception:  # noqa: BLE001 - keep the task alive
                 log.exception("sweep failed")
 
     task = asyncio.create_task(sweeper())
@@ -663,16 +545,9 @@ app = FastAPI(
     openapi_url="/api/openapi.json" if DEBUG else None,
 )
 
-# Tuned to what the site actually loads: KaTeX from jsDelivr, Google Fonts,
-# YouTube thumbnails and no-cookie embeds. No eval and no workers: learners'
-# code runs in Google Colab, never in these pages.
-#
-# Scripts: only files from this site and the one KaTeX release, never inline
-# code. So even if markup were ever injected into a page, an inline
-# <script> or onclick= in it would not run. jsDelivr is pinned to the KaTeX
-# path (it also serves any npm package or GitHub repo, which an attacker
-# could publish), and tracks/math.html adds integrity= hashes on top.
-# 'unsafe-inline' stays for styles only: the renderers emit style attributes.
+# Content-Security-Policy. No inline scripts, eval or workers. jsDelivr is
+# restricted to the pinned KaTeX path (tracks/math.html adds SRI hashes);
+# 'unsafe-inline' is allowed for styles only, which the renderers emit.
 KATEX = "https://cdn.jsdelivr.net/npm/katex@0.16.11/"
 CSP = "; ".join([
     "default-src 'self'",
@@ -690,16 +565,11 @@ CSP = "; ".join([
 ])
 
 
-# The frontend is ~930 KB of uncompressed JS/CSS on the heaviest page (the
-# content and the Armenian packs dominate) and there is no build step to
-# shrink it. gzip takes that to ~275 KB. Doing it here rather than relying on
-# the reverse proxy means it holds however the app is fronted — neither the
-# nginx nor the Caddy config in DEPLOYMENT.md compresses proxied responses by
-# default. Safe against BREACH: no secret is ever reflected into a response
-# body (the session lives in an HttpOnly cookie).
+# Compress in-app (~930 KB -> ~275 KB on the heaviest page) so it does not depend
+# on proxy configuration. BREACH does not apply: no secret is reflected in bodies.
 class GZipExceptMedia(GZipMiddleware):
-    """Videos are compressed already, and gzip would break the byte ranges a
-    player asks for when it seeks."""
+    """GZip middleware that skips /media: video is already compressed and range
+    requests must be served byte-exact."""
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and scope["path"].startswith("/media/"):
@@ -717,11 +587,8 @@ async def unhandled_error(request: Request, exc: Exception):
     return JSONResponse({"error": "Something went wrong on our end."}, status_code=500)
 
 
-# 1991 Academy is a closed school: only its students (accounts an admin
-# added) see anything. Without a session a visitor reaches the sign-in page
-# and what it needs: its scripts and styles, and the privacy policy. Lessons
-# (js/data/), course files (assets/), videos (media/) and every other page
-# need one. API endpoints check the session themselves.
+# Paths served without a session. Everything else requires one; API endpoints
+# perform their own authentication.
 PUBLIC_PATHS = {"/account.html", "/privacy.html", "/robots.txt"}
 
 
@@ -740,22 +607,19 @@ def session_valid(token) -> bool:
 
 
 def gate(request: Request, path: str):
-    """The response that stops this request, or None to let it through."""
+    """Return an error response for disallowed requests, or None."""
     if path.startswith("/media/"):
         if not MEDIA_PATH_RE.match(path) or not MEDIA_DIR.is_dir():
             return err("not found", 404)
     elif not path.startswith("/api/") and not static_allowed(path):
         return err("not found", 404)
-    # Cross-site request forgery: a form or <img> on another site can only send
-    # form or text bodies. A JSON body from another origin needs a CORS
-    # preflight, which this API never grants. Requiring JSON on every API write
-    # therefore also covers same-site pages (other subdomains), where the
-    # SameSite=Lax cookie alone would still be sent.
+    # CSRF: cross-origin forms cannot send application/json without a CORS
+    # preflight, which is never granted. Also covers same-site subdomains.
     if path.startswith("/api/") and request.method in ("POST", "PUT", "PATCH", "DELETE"):
         ctype = request.headers.get("content-type", "").split(";")[0].strip().lower()
         if ctype != "application/json":
             return err("Send the request as JSON.", 415)
-    # global body-size cap (cheap check via header; body() re-checks)
+    # Early rejection by Content-Length; json_body() enforces the limit as well.
     cl = request.headers.get("content-length")
     if cl and cl.isdigit() and int(cl) > MAX_BODY:
         return err("Request too large.", 413)
@@ -769,7 +633,6 @@ async def guard(request: Request, call_next):
     if response is None and not path.startswith("/api/") and not public_path(path):
         if not await run_in_threadpool(session_valid, session_token(request)):
             if path == "/" or path.endswith(".html"):
-                # a page: to the sign-in page, and back here afterwards
                 response = RedirectResponse("/account.html?next=" + quote(path, safe="/"), status_code=303)
             else:
                 response = err("Sign in first.", 401)
@@ -782,10 +645,8 @@ async def guard(request: Request, call_next):
     if DEBUG or path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     elif path.startswith("/assets/colab/"):
-        # the exercise notebooks change with the exercises: always revalidate
         response.headers["Cache-Control"] = "no-cache"
     elif path.startswith(("/assets/", "/media/")):
-        # private: only the student's own browser keeps a copy, never a proxy
         response.headers["Cache-Control"] = "private, max-age=86400"
     else:
         response.headers["Cache-Control"] = "no-cache"
@@ -794,9 +655,8 @@ async def guard(request: Request, call_next):
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Content-Security-Policy"] = CSP
-    if SECURE_COOKIES:  # only meaningful (and only sent) over HTTPS in production
+    if SECURE_COOKIES:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # A closed school: search engines index nothing (robots.txt says so too).
     response.headers["X-Robots-Tag"] = "noindex, nofollow"
 
     if path.startswith("/api/"):
@@ -806,9 +666,7 @@ async def guard(request: Request, call_next):
 # ---------------------------------------------------------------- auth
 
 
-# Temporary passwords: 12 characters in three groups, from an alphabet without
-# look-alikes (no 0/o, 1/l/i), so they survive being typed from an email.
-# About 59 bits: with the login limits, guessing one is out of the question.
+# Temporary passwords: 3x4 characters from an alphabet without look-alikes (~59 bits).
 TEMP_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 
 
@@ -817,10 +675,11 @@ def temp_password() -> str:
 
 
 def issue_temp_password(conn, uid: int) -> str:
-    """Give the account a new temporary password: it works for
-    TEMP_PASSWORD_TTL and only to choose the account's own password. Every
-    session of the account ends. Only its hash is stored; the admin sees the
-    password once. The caller commits."""
+    """Set and return a new temporary password and revoke all sessions.
+
+    The password is valid for TEMP_PASSWORD_TTL and only for choosing a new
+    one (/api/first-password). Only its hash is stored. Caller commits.
+    """
     password = temp_password()
     salt = secrets.token_bytes(16)
     conn.execute(
@@ -844,18 +703,18 @@ DISPOSABLE_DOMAINS = load_disposable_domains()
 
 
 def disposable_email(email: str) -> bool:
-    """An address at a temporary-email service (mailinator.com, or any
-    subdomain of one: x.mailinator.com)."""
+    """True if the address belongs to a disposable-email domain or a subdomain of one."""
     parts = email.rsplit("@", 1)[-1].strip().lower().rstrip(".").split(".")
     return any(".".join(parts[i:]) in DISPOSABLE_DOMAINS for i in range(len(parts) - 1))
 
 
 def create_account(conn, username: str, email: str, password: str | None = None) -> int:
-    """A new account (its id), or Invalid. There is no open sign-up: admins
-    add students, or send them an invitation link. Without a password the
-    account has none usable yet; the caller gives it a temporary one
-    (issue_temp_password). New accounts are on the leaderboard; each student
-    can hide themselves on their account page. The caller commits."""
+    """Insert a user and return its id; raises Invalid on bad or duplicate input.
+
+    With password=None the account has no usable password until the caller
+    issues a temporary one. New accounts are opted in to the leaderboard.
+    Caller commits.
+    """
     if not USERNAME_RE.match(username):
         raise Invalid("Username must be 3-20 characters: letters, digits, underscore.")
     if len(email) > MAX_EMAIL or not EMAIL_RE.match(email):
@@ -877,22 +736,21 @@ def create_account(conn, username: str, email: str, password: str | None = None)
             "leaderboard_opt_in) VALUES (?, ?, ?, ?, ?, ?, 1)",
             (username, email, pass_hash, salt, time.time(), int(password is None)),
         )
-    except sqlite3.IntegrityError:            # a concurrent request for the same name
+    except sqlite3.IntegrityError:            # lost a race with a concurrent insert
         raise Invalid(f"The username {username} or {email} is taken.") from None
     return cur.lastrowid
 
 
 def _login(identifier: str, password: str):
-    """(row, session token) for a correct password; (row, None) when it is a
-    temporary password, which gives no session: it only lets the student
-    choose their own password (/api/first-password); (None, None) otherwise."""
+    """Return (row, token) on success, (row, None) for a temporary password
+    (no session is issued), or (None, None)."""
     with db() as conn:
         row = conn.execute(
             "SELECT * FROM users WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE",
             (identifier, identifier),
         ).fetchone()
         if row is None:
-            burn_password_time(password)  # same cost as a real check
+            burn_password_time(password)
             return None, None
         if not verify_password(row, password):
             return None, None
@@ -925,12 +783,12 @@ async def api_login(request: Request):
         return err("Too many wrong passwords for this account — wait 15 minutes.", 429)
     row, token = await run_in_threadpool(_login, identifier, password)
     if row is None:
-        fails.append(now)        # unknown names count too: no difference to probe
+        fails.append(now)        # count unknown identifiers too, to avoid enumeration
         ip_fails.append(now)
         log.info("login-failed identifier=%s", identifier[:64])
         return err("Wrong credentials.", 401)
     fails.clear()
-    if token is None:            # a temporary password: no session, choose your own first
+    if token is None:            # temporary password: must set a new one first
         if temp_expired(row):
             return err("This temporary password has expired. Ask your instructor for a new one.", 401)
         return JSONResponse({"error": "Choose your own password to continue.", "mustChangePassword": True,
@@ -942,11 +800,13 @@ async def api_login(request: Request):
 
 
 def _first_password(identifier: str, temporary: str, new: str):
-    """The student's own password, set with the temporary one: (user row,
-    session token), or a reason it can't be. Checked and changed in one
-    write, so one temporary password can't be used twice."""
+    """Replace a temporary password. Returns (user, token) or (None, reason).
+
+    The check and the update are a single conditional UPDATE, so a temporary
+    password cannot be redeemed twice by concurrent requests.
+    """
     salt = secrets.token_bytes(16)
-    new_hash = hash_password(new, salt)          # the slow part, before taking the write lock
+    new_hash = hash_password(new, salt)          # hash before taking the write lock
     with db() as conn:
         row = conn.execute(
             "SELECT * FROM users WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE",
@@ -958,7 +818,7 @@ def _first_password(identifier: str, temporary: str, new: str):
         if not verify_password(row, temporary):
             return None, "wrong"
         if not row["must_change_password"]:
-            return None, "wrong"                  # not a temporary password (any more)
+            return None, "wrong"                  # not (or no longer) a temporary password
         if temp_expired(row):
             return None, "expired"
         if hmac.compare_digest(new, temporary):
@@ -968,7 +828,7 @@ def _first_password(identifier: str, temporary: str, new: str):
             "WHERE id = ? AND must_change_password = 1 AND pass_hash = ?",
             (new_hash, salt.hex(), row["id"], row["pass_hash"]),
         ).rowcount
-        if not changed:                           # a second submission won the race
+        if not changed:                           # lost the race to a concurrent request
             conn.rollback()
             return None, "wrong"
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],))
@@ -980,7 +840,7 @@ def _first_password(identifier: str, temporary: str, new: str):
 
 @app.post("/api/first-password")
 async def api_first_password(request: Request):
-    """Sign in with a temporary password and choose one's own, in one step."""
+    """Exchange a temporary password for a user-chosen one and sign in."""
     ip_fails, _ = failures(request, "login-fail", 60)
     if len(ip_fails) >= IP_LOGIN_FAILS:
         return err("Too many login attempts — wait a minute.", 429)
@@ -1067,13 +927,11 @@ async def api_get_state(request: Request):
 
 
 def xp_snapshot(data: dict):
-    """Pull the leaderboard XP total out of the client-shaped blob.
+    """Extract the XP total from a state blob, or None if it is not a valid number.
 
-    Returns None whenever the value isn't a usable number. That matters: this
-    runs inside the same transaction as the state write, so an exception here
-    (a corrupt blob carrying Infinity, NaN or an oversized int) used to abort
-    the write and hand the learner a 500 — their progress silently stopped
-    syncing. A bad XP value must cost the leaderboard entry, nothing more."""
+    Never raises: it runs inside the state-write transaction, and a malformed
+    value must not prevent the progress itself from being saved.
+    """
     try:
         raw = json.loads(data.get(XP_KEY) or "{}")
     except (json.JSONDecodeError, TypeError, ValueError):
@@ -1081,7 +939,7 @@ def xp_snapshot(data: dict):
     if not isinstance(raw, dict):
         return None
     total = raw.get("total")
-    # bool is an int subclass; reject it explicitly
+    # bool is a subclass of int
     if isinstance(total, bool) or not isinstance(total, (int, float)):
         return None
     if isinstance(total, float) and not math.isfinite(total):
@@ -1107,9 +965,7 @@ def _put_state(token, data: dict):
         )
         xp_total = xp_snapshot(data)
         if xp_total is not None:
-            # weekly league: when the user's stored week differs from the
-            # current ISO week, rebase the weekly baseline to last week's
-            # ending total so this week's counter restarts near zero.
+            # On the first sync of a new ISO week, rebase the weekly baseline.
             wk = current_week_id()
             week_start = user["xp_total"] if user["week_id"] != wk else user["xp_week_start"]
             conn.execute(
@@ -1126,13 +982,11 @@ async def api_put_state(request: Request):
     if body is None or not isinstance(body.get("data"), dict):
         return err("invalid request body")
     data = body["data"]
-    # The blob mirrors localStorage, so every value is a string. Enforcing that
-    # keeps non-round-trippable JSON (bare NaN / Infinity) out of the database —
-    # stored once, it came back as something the browser's JSON.parse rejects,
-    # permanently breaking that account's sync.
+    # Values mirror localStorage and must be strings; this also keeps NaN/Infinity,
+    # which JSON.parse cannot read back, out of storage.
     if not all(isinstance(k, str) and isinstance(v, str) for k, v in data.items()):
         return err("invalid request body")
-    data = current_keys(data)  # from a page loaded before the storage-prefix rename
+    data = current_keys(data)
     ok = await run_in_threadpool(_put_state, session_token(request), data)
     if not ok:
         return err("not signed in", 401)
@@ -1230,8 +1084,7 @@ def _change_password(token, current: str, new: str):
             "UPDATE users SET pass_hash = ?, salt = ? WHERE id = ?",
             (hash_password(new, salt), salt.hex(), user["id"]),
         )
-        # keep the caller signed in, drop every OTHER session (a changed password
-        # should log out other devices).
+        # Revoke all other sessions; keep the current one.
         conn.execute(
             "DELETE FROM sessions WHERE user_id = ? AND token != ?", (user["id"], token)
         )
@@ -1258,14 +1111,12 @@ async def api_change_password(request: Request):
 
 
 def site_address() -> str:
-    """Where students sign in: the address in the message an admin sends."""
+    """Sign-in URL included in onboarding messages."""
     return f"{BASE_URL}/account.html"
 
 
 def links_warning() -> str | None:
-    """An address that only works on this computer: a server whose
-    ACADEMY_BASE_URL (DOMAIN in .env) isn't set would give students a useless
-    address."""
+    """Warning text if BASE_URL points at a loopback host, else None."""
     host = BASE_URL.split("://", 1)[-1].split("/", 1)[0].split(":")[0]
     if host in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
         return f"This address starts with {BASE_URL}, which works only on the computer running the site."
@@ -1273,8 +1124,7 @@ def links_warning() -> str | None:
 
 
 def delete_user_rows(conn, uid: int):
-    """Remove an account and everything stored for it. The caller commits."""
-    # child rows first: foreign keys are enforced on this connection.
+    """Delete a user and all dependent rows (children first). Caller commits."""
     conn.execute("DELETE FROM state WHERE user_id = ?", (uid,))
     conn.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
     conn.execute("DELETE FROM password_resets WHERE user_id = ?", (uid,))
@@ -1311,12 +1161,8 @@ async def api_delete_account(request: Request):
 
 # ---------------------------------------------------------------- admin
 #
-# Admins are ordinary accounts with users.is_admin = 1. Only the command line
-# on the server grants or removes it (`make admin NAME=...` runs
-# `python app.py admin add NAME`). Nothing reachable over HTTP can make an
-# admin, so a stolen admin session can't mint more of them. Every admin
-# endpoint checks the flag on each request, and every change an admin makes
-# is written to admin_log as well as the app log.
+# Admin is a flag on users (is_admin), granted only through the server CLI,
+# never over HTTP. It is checked on every request; all changes are audited.
 
 
 class AdminError(Exception):
@@ -1337,8 +1183,8 @@ def _as_admin(token, fn, *args):
 
 
 async def admin_call(request: Request, fn, *args):
-    """fn(conn, admin_row, *args) in the thread pool, for a signed-in admin
-    only. AdminError becomes the matching JSON error response."""
+    """Run fn(conn, admin, *args) in the thread pool for an authenticated admin;
+    AdminError is mapped to a JSON error response."""
     try:
         return await run_in_threadpool(_as_admin, session_token(request), fn, *args)
     except AdminError as e:
@@ -1346,9 +1192,11 @@ async def admin_call(request: Request, fn, *args):
 
 
 async def admin_gate(request: Request):
-    """The 401/403 for anyone but an admin, or None. Endpoints that read a
-    body check this first, so a non-admin learns nothing about what they would
-    accept."""
+    """Return a 401/403 response for non-admins, or None.
+
+    Called before reading the body so validation errors are never shown to
+    unauthorized clients.
+    """
     try:
         await run_in_threadpool(_as_admin, session_token(request), lambda conn, admin: None)
     except AdminError as e:
@@ -1357,7 +1205,7 @@ async def admin_gate(request: Request):
 
 
 def audit(conn, admin_name: str, action: str, target: str | None = None, detail: str | None = None):
-    """Record an admin's change. The caller commits (with the change itself)."""
+    """Append an audit entry. Caller commits together with the change."""
     conn.execute(
         "INSERT INTO admin_log (ts, admin, action, target, detail) VALUES (?, ?, ?, ?, ?)",
         (time.time(), admin_name, action, target, detail),
@@ -1366,9 +1214,8 @@ def audit(conn, admin_name: str, action: str, target: str | None = None, detail:
 
 
 def learner_progress(data_json) -> dict:
-    """What a learner has done, read from their synced state blob: the
-    browser's localStorage keys (js/progress.js, js/xp.js). Anything
-    malformed counts as nothing."""
+    """Summarize progress from a state blob (see js/progress.js, js/xp.js).
+    Malformed entries are ignored."""
     def obj(raw):
         try:
             value = json.loads(raw) if isinstance(raw, str) else raw
@@ -1381,7 +1228,7 @@ def learner_progress(data_json) -> dict:
     awards = obj(obj(blob.get(XP_KEY)).get("awards"))
     streak = obj(progress.get("streak"))
 
-    def when(v):  # completion time in ms; very old progress stored `true`
+    def when(v):  # epoch ms; legacy entries are `true`
         return v if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) else None
 
     def ids(prefix):
@@ -1426,8 +1273,8 @@ def learner_summary(row, wk: str) -> dict:
         "weekXp": week_xp(row, wk),
         "optIn": bool(row["leaderboard_opt_in"]),
         "admin": bool(row["is_admin"]),
-        "new": bool(row["must_change_password"]),   # hasn't chosen their own password yet
-        "tempEmail": disposable_email(row["email"]),  # made before such addresses were refused
+        "new": bool(row["must_change_password"]),
+        "tempEmail": disposable_email(row["email"]),
     }
 
 
@@ -1443,8 +1290,7 @@ def _overview(conn, _admin):
         (now - 30 * day,),
     ).fetchall())
 
-    # Progress lives in each learner's blob, so add them up. Lesson ids start
-    # with their track's id ("web-2-4"), which is how completions map to tracks.
+    # Aggregate per-user blobs. Lesson ids are prefixed with their track id.
     lessons, labs, missions, completions = Counter(), Counter(), Counter(), Counter()
     starters, track_done = Counter(), Counter()
     with_progress = 0
@@ -1491,7 +1337,7 @@ async def api_admin_overview(request: Request):
 
 # --- learners
 
-# ORDER BY clauses by name. The request picks a key; its text never reaches SQL.
+# Whitelisted ORDER BY clauses; client input selects a key, never SQL text.
 LEARNER_SORTS = {
     "created": "u.created DESC",
     "active": "COALESCE(s.updated, 0) DESC, u.created DESC",
@@ -1502,8 +1348,7 @@ LEARNERS_PAGE = 50
 
 
 def like_pattern(text: str) -> str:
-    """`text` as a literal substring for LIKE ... ESCAPE '\\': its own % and _
-    match only themselves."""
+    """LIKE pattern matching `text` literally (escapes %, _ and backslash)."""
     return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
@@ -1557,9 +1402,8 @@ async def api_admin_user(request: Request, username: str):
 
 
 def _learner_temp_password(conn, admin, username: str):
-    """A new temporary password for a student who forgot theirs (or never
-    used the first one). Not for admins: one admin could take over another's
-    account (an admin's password is reset on the server: make password)."""
+    """Issue a temporary password to a student. Refused for admin accounts to
+    prevent admin-to-admin takeover; use the server CLI for those."""
     row = find_learner(conn, username)
     if row["is_admin"]:
         raise AdminError("An admin's password is reset on the server (make password NAME=…), not here.", 409)
@@ -1581,7 +1425,7 @@ MAX_NEW_STUDENTS = 200   # per request
 
 
 def username_from(conn, email: str) -> str:
-    """A free username made from an email address: anna.k@x.am -> anna_k."""
+    """Derive an available username from an email address (anna.k@x.am -> anna_k)."""
     base = re.sub(r"[^A-Za-z0-9_]", "_", email.split("@")[0])[:16].strip("_") or "student"
     base = base if len(base) >= 3 else (base + "___")[:3]
     name, n = base, 1
@@ -1610,10 +1454,11 @@ def _add_students(conn, admin, students: list):
 
 @app.post("/api/admin/students")
 async def api_admin_students(request: Request):
-    """Accounts for new students, each with a temporary password that works
-    for TEMP_PASSWORD_TTL, only to choose their own. The site sends no email:
-    the admin sends each student the address, username and password (the
-    panel writes the message). The passwords are shown this once."""
+    """Create student accounts with temporary passwords.
+
+    The passwords are returned once for the admin to distribute; the
+    application does not send email.
+    """
     if denied := await admin_gate(request):
         return denied
     body = await json_body(request)
@@ -1640,13 +1485,11 @@ async def api_admin_students(request: Request):
 
 # --- invitation links
 #
-# The admin sends each student a link from their own mailbox. The link isn't
-# tied to an address: the student may want another one, so whoever opens it
-# types the email they want. That is why a link works only once: a forwarded
-# or leaked link makes at most one account, and the admin sees whose.
+# Links are not bound to an email address (the recipient chooses one), so each
+# is single-use: a leaked link yields at most one account, visible to admins.
 
 MAX_JOIN_LINKS = 200     # per request
-MAX_SENT_TO = 120        # characters of the admin's note
+MAX_SENT_TO = 120        # max length of the recipient note
 
 
 def token_hash(token: str) -> str:
@@ -1654,7 +1497,7 @@ def token_hash(token: str) -> str:
 
 
 def join_address(token: str) -> str:
-    # in the fragment: browsers never send it to the server or in a Referer
+    # Token in the fragment: never sent to servers or leaked via Referer.
     return f"{BASE_URL}/account.html#join={token}"
 
 
@@ -1687,8 +1530,7 @@ def _make_join_links(conn, admin, sent_to: list):
 
 @app.post("/api/admin/join-links")
 async def api_admin_join_links(request: Request):
-    """Invitation links, one per entry in sentTo (the admin's note of who
-    gets it: an email or a name). The links are shown this once."""
+    """Create one invitation link per entry in sentTo. Links are returned once."""
     if denied := await admin_gate(request):
         return denied
     body = await json_body(request)
@@ -1740,7 +1582,7 @@ JOIN_PROBLEMS = {
 
 
 def join_problem(conn, token: str):
-    """None if the link can make an account, else what is wrong with it."""
+    """Return None if the link is usable, else the reason it is not."""
     row = conn.execute("SELECT * FROM join_links WHERE token_hash = ?", (token_hash(token),)).fetchone()
     if row is None:
         return "unknown"
@@ -1754,10 +1596,12 @@ def _check_join(token: str):
 
 
 def _join(token: str, email: str, username: str):
-    """An account for whoever opened the link: (result, None) or (None,
-    problem). The link is claimed and the account made in one transaction,
-    so a link makes one account even if it is submitted twice at once; a
-    rejected email or username leaves the link unused."""
+    """Redeem a link: returns (result, None) or (None, problem).
+
+    The claim and the account creation share one transaction, so concurrent
+    submissions create at most one account, and a validation error leaves
+    the link unused.
+    """
     with db() as conn:
         problem = join_problem(conn, token)
         if problem:
@@ -1767,7 +1611,7 @@ def _join(token: str, email: str, username: str):
             "UPDATE join_links SET used = ? WHERE token_hash = ? AND used IS NULL AND cancelled IS NULL AND expires >= ?",
             (now, token_hash(token), now),
         ).rowcount
-        if not claimed:                          # another submission got there first
+        if not claimed:                          # lost the race to a concurrent request
             conn.rollback()
             return None, "used"
         try:
@@ -1783,9 +1627,8 @@ def _join(token: str, email: str, username: str):
 
 
 async def join_token(request: Request):
-    """(body, token, ip failure list) or (error response, None, None). A
-    wrong token counts like a wrong password: tokens can't be guessed, but
-    nobody gets to try."""
+    """Return (body, token, ip_failures) or (error_response, None, None).
+    Invalid tokens count toward the same per-IP limit as failed logins."""
     ip_fails, _ = failures(request, "join-fail", 60)
     if len(ip_fails) >= IP_LOGIN_FAILS:
         log.warning("rate-limit ip=%s bucket=join-fail", client_ip(request))
@@ -1816,8 +1659,7 @@ async def api_join_check(request: Request):
 
 @app.post("/api/join")
 async def api_join(request: Request):
-    """Whoever opened an invitation link: an account for the email they type,
-    with a temporary password (shown on their screen) to choose their own."""
+    """Create an account from an invitation link and return its temporary password."""
     body, token, ip_fails = await join_token(request)
     if token is None:
         return body
@@ -1863,14 +1705,12 @@ async def api_admin_delete(request: Request, username: str):
 
 # --- lessons
 
-LESSON_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)+$")   # web-2-4: track, then the rest
+LESSON_ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)+$")   # <track>-<module>-<n>, e.g. web-2-4
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 YOUTUBE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
-# The HTML a lesson may contain: what the built-in lessons use, plus a few
-# harmless extras. Everything else (scripts, styles, event handlers, iframes,
-# javascript: links) is removed when the lesson is saved, so even a stolen
-# admin account can't put code on the pages learners read.
+# Allowed tags for admin-authored lesson HTML. Scripts, styles, event handlers,
+# frames and javascript: URLs are stripped on save.
 LESSON_TAGS = {
     "p", "h3", "h4", "ul", "ol", "li", "strong", "em", "b", "i", "u", "code", "pre",
     "div", "span", "br", "hr", "blockquote", "a", "sub", "sup", "kbd",
@@ -1963,7 +1803,7 @@ def _video(v, n: int) -> dict:
 
 
 def parse_lesson(lesson_id: str, body: dict) -> dict:
-    """A lesson from the admin panel, checked and with its HTML sanitized."""
+    """Validate an admin-submitted lesson and sanitize its HTML."""
     if len(lesson_id) > 40 or not LESSON_ID_RE.match(lesson_id):
         raise Invalid("Lesson id: lowercase letters, digits and dashes, like web-2-4.")
     track, module, after = body.get("track"), body.get("module"), body.get("after") or None
@@ -2049,8 +1889,7 @@ def _lesson_preview(_conn, _admin, rec: dict):
 
 @app.post("/api/admin/lessons/{lesson_id}/preview")
 async def api_admin_lesson_preview(request: Request, lesson_id: str):
-    """The lesson exactly as saving it would store it (checked and sanitized),
-    without saving anything."""
+    """Return the validated, sanitized lesson without persisting it."""
     if denied := await admin_gate(request):
         return denied
     body = await json_body(request)
@@ -2178,12 +2017,10 @@ async def api_admin_log(request: Request):
     return await admin_call(request, _admin_log)
 
 
-# --- lesson videos hosted here
+# --- self-hosted media
 
 def hosted_media() -> dict:
-    """The lesson videos in MEDIA_DIR, by YouTube id:
-    {id: {"video": "/media/<id>.mp4", "poster": "/media/<id>.jpg" or None}}.
-    The pages play these instead of the YouTube embed."""
+    """Map YouTube id -> {"video": url, "poster": url | None} for files in MEDIA_DIR."""
     try:
         names = sorted(os.listdir(MEDIA_DIR))
     except OSError:
@@ -2215,10 +2052,10 @@ async def api_admin_media(request: Request):
     return await admin_call(request, _admin_media)
 
 
-# --- what every page loads: published lessons, active announcements, hosted videos
+# --- public content: published lessons, active announcements, hosted media
 
 def _public_content(signed_in: bool):
-    if not signed_in:          # the sign-in page: just the announcements
+    if not signed_in:          # anonymous: announcements only
         with db() as conn:
             rows = conn.execute("SELECT * FROM announcements WHERE active = 1 ORDER BY created DESC")
             return {"lessons": [], "media": {}, "announcements": [
@@ -2238,10 +2075,10 @@ def _public_content(signed_in: bool):
 
 @app.get("/api/content.js")
 async def api_content_js(request: Request):
-    """A script, so pages get it before they render (js/custom-content.js
-    applies it). json.dumps escapes every non-ASCII character and quote, so
-    the data can only ever be a JavaScript value. Lessons and videos only for
-    a signed-in student; the sign-in page gets the announcements."""
+    """Serve dynamic content as a script so it is available before first render
+    (applied by js/custom-content.js). json.dumps output is safe to embed as
+    a JavaScript literal.
+    """
     signed_in = await run_in_threadpool(session_valid, session_token(request))
     content = await run_in_threadpool(_public_content, signed_in)
     return Response(
@@ -2250,17 +2087,19 @@ async def api_content_js(request: Request):
     )
 
 
-# ------------------------------------------------------- command line (admins)
+# ---------------------------------------------------------------- CLI
 
 
 def cli(args: list) -> int:
-    """python app.py admin add NAME [EMAIL] | admin remove NAME | admin list
-    python app.py password NAME
+    """Administration commands.
 
-    With EMAIL, a NAME that has no account yet gets one, with a temporary
-    password: how the first admin starts, since there is no sign-up.
-    `password NAME` gives any account a new temporary password: the way back
-    in for an admin who forgot theirs (the site sends no email)."""
+        python app.py admin add NAME [EMAIL]   grant admin; creates the account if EMAIL is given
+        python app.py admin remove NAME
+        python app.py admin list
+        python app.py password NAME            issue a temporary password
+
+    Returns the process exit code.
+    """
     usage = ("usage: python app.py admin add NAME [EMAIL] | admin remove NAME | admin list\n"
              "       python app.py password NAME")
     if args[:1] == ["password"] and len(args) == 2:
@@ -2326,7 +2165,7 @@ def cli(args: list) -> int:
 
 @app.get("/api/auth-check")
 async def api_auth_check(request: Request):
-    """Caddy asks this (forward_auth) before serving a video itself."""
+    """Session check for Caddy's forward_auth on /media."""
     if await run_in_threadpool(session_valid, session_token(request)):
         return Response(status_code=204)
     return err("Sign in first.", 401)
@@ -2345,20 +2184,16 @@ async def api_health():
         "revision": REVISION,
     }
 
-# Lesson videos. On a server with Caddy, Caddy serves /media itself (faster);
-# this covers your own computer and an external web server. StaticFiles
-# answers byte-range requests, so the player can seek.
+# Fallback for /media when not served by Caddy (supports range requests).
 app.mount("/media", StaticFiles(directory=str(MEDIA_DIR), check_dir=False), name="media")
 
-# static site LAST so /api/* wins (the guard middleware has already restricted
-# which paths can reach it)
+# Mounted last so API routes take precedence; paths are pre-filtered by guard().
 app.mount("/", StaticFiles(directory=str(ROOT), html=True), name="site")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:   # python app.py admin ... (see cli)
+    if len(sys.argv) > 1:
         sys.exit(cli(sys.argv[1:]))
     log.info("1991 Academy backend on http://localhost:%d  [debug=%s, secure_cookies=%s, trust_proxy=%s, rev=%s]",
              PORT, DEBUG, SECURE_COOKIES, TRUST_PROXY, (REVISION or "dev")[:7])
-    # server_header=False: no "server: uvicorn" banner for scanners to match on
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning", server_header=False)

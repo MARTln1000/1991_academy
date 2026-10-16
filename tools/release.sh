@@ -1,14 +1,9 @@
 #!/bin/sh
-# make release: publish the current branch's commits to dev and master on GitHub.
+# make release: run the tests, then fast-forward dev and master to the current
+# branch and push all three atomically. Servers deploy master.
 #
-# master is what servers run: with `make auto-update-on` they install a new
-# master within 5 minutes; others run `make update`. After a release dev and
-# master both equal your branch, so all three are up to date. Day-to-day work
-# happens on your own branch (e.g. martin).
-#
-# Changes nothing, and says why, when there are uncommitted changes, when dev
-# or master has commits your branch doesn't (merge them first), or when the
-# tests fail. The three branches are pushed all at once or not at all.
+# Aborts without changes if the tree is dirty, if dev or master contain commits
+# not in this branch, or if tests fail.
 
 set -eu
 cd "$(dirname "$0")/.."
