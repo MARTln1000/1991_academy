@@ -65,7 +65,6 @@ I18N.extend({
   "{0} devices": "{0} սարքում",
   "Last studied": "Վերջին անգամ սովորել է",
   "Account": "Հաշիվ",
-  "Send a password-reset link": "Ուղարկել գաղտնաբառի վերականգնման հղում",
   "Sign out on every device": "Դուրս հանել բոլոր սարքերից",
   "Admin accounts can't be deleted here. Remove the admin rights on the server first (make admin-remove).":
     "Ադմինի հաշիվներն այստեղ չեն ջնջվում։ Սկզբում սերվերում հանի՛ր ադմինի իրավունքները (make admin-remove)։",
@@ -78,9 +77,6 @@ I18N.extend({
   "Nothing completed yet.": "Դեռ ոչինչ ավարտված չէ։",
   "None yet.": "Դեռ չկա։",
   "Also completed lessons that are no longer on the site: {0}": "Ավարտել է նաև դասեր, որոնք այլևս կայքում չկան՝ {0}",
-  "A reset link is on its way to {0}.": "Վերականգնման հղումն ուղարկվում է {0} հասցեին։",
-  "Email isn't set up on this server, so give this link to the learner yourself. It works once, for one hour:":
-    "Այս սերվերում էլ. փոստը կարգավորված չէ, ուստի այս հղումը սովորողին տո՛ւր ինքդ։ Այն աշխատում է մեկ անգամ, մեկ ժամվա ընթացքում՝",
   "Copy": "Պատճենել",
   "Copied.": "Պատճենվեց։",
   "Sign {0} out on every device?": "Դուրս հանե՞լ {0}-ին բոլոր սարքերից։",
@@ -125,8 +121,6 @@ I18N.extend({
   "{0} link": "{0} հղում",
   "{0} links": "{0} հղում",
 
-  "Students can't sign up themselves. One per line: an email, and optionally a username after a comma (otherwise it is made from the email). Each gets a temporary password: send it from your own email. The site sends no email.":
-    "Ուսանողներն իրենք չեն կարող գրանցվել։ Ամեն տողում՝ էլ. փոստ, և ցանկության դեպքում ստորակետից հետո՝ օգտանուն (հակառակ դեպքում այն կազմվում է էլ. փոստից)։ Յուրաքանչյուրը ստանում է ժամանակավոր գաղտնաբառ. ուղարկի՛ր այն քո էլ. փոստից։ Կայքը նամակներ չի ուղարկում։",
   "Added {0}. Send each of them their message: the passwords are shown only now, and work for {1} days.":
     "Ավելացվեց՝ {0}։ Յուրաքանչյուրին ուղարկի՛ր իր նամակը. գաղտնաբառերը ցույց են տրվում միայն հիմա և գործում են {1} օր։",
   "Nobody was added.": "Ոչ ոք չավելացվեց։",
@@ -148,36 +142,10 @@ I18N.extend({
   "This address starts with": "Այս հասցեն սկսվում է",
   "An admin's password is reset on the server (make password NAME=…), not here.": "Ադմինի գաղտնաբառը փոխվում է սերվերում (make password NAME=…), ոչ թե այստեղ։",
 
-  /* legacy invitation strings */
-  "Invite students": "Հրավիրել ուսանողների",
-  "Only invited students can sign in. One per line: an email, and optionally a username after a comma (otherwise it is made from the email).":
-    "Մուտք գործել կարող են միայն հրավիրված ուսանողները։ Ամեն տողում՝ էլ. փոստ, և ցանկության դեպքում ստորակետից հետո՝ օգտանուն (հակառակ դեպքում այն կազմվում է էլ. փոստից)։",
+  /* invitations */
   "Invite": "Հրավիրել",
-  "Invited {0}. Each got an email with a link to choose a password.": "Հրավիրվեց՝ {0}։ Յուրաքանչյուրը ստացավ նամակ՝ գաղտնաբառ ընտրելու հղումով։",
-  "Invited {0}. Email isn't set up on this server, so send each student their link (valid for 7 days):":
-    "Հրավիրվեց՝ {0}։ Այս սերվերում էլ. փոստը կարգավորված չէ, ուստի յուրաքանչյուր ուսանողին ուղարկի՛ր իր հղումը (գործում է 7 օր)՝",
   "Link": "Հղում",
   "Copy all": "Պատճենել բոլորը",
-  "Not invited:": "Չհրավիրվեցին՝",
-  "Nobody was invited.": "Ոչ ոք չհրավիրվեց։",
-  "Sending the invitations…": "Հրավերներն ուղարկվում են…",
-  "Invited {0}, but only {1} of the emails could be sent.": "Հրավիրվեց՝ {0}, բայց նամակներից միայն {1}-ը հնարավոր եղավ ուղարկել։",
-  "These accounts were created, but their email wasn't sent. Fix the problem, then use “Resend the invitation” on each:":
-    "Այս հաշիվները ստեղծվեցին, բայց նամակները չուղարկվեցին։ Շտկի՛ր խնդիրը, ապա յուրաքանչյուրի համար սեղմի՛ր «Կրկին ուղարկել հրավերը»՝",
-  "The mail server refused this address.": "Փոստային սերվերը մերժեց այս հասցեն։",
-  "The mail server refused the site's mailbox login (ACADEMY_SMTP_USER / _PASS).": "Փոստային սերվերը մերժեց կայքի փոստարկղի մուտքը (ACADEMY_SMTP_USER / _PASS)։",
-  "The mail server's certificate isn't trusted.": "Փոստային սերվերի վկայականը վստահելի չէ։",
-  "The mail server couldn't be reached.": "Փոստային սերվերին հնարավոր չեղավ միանալ։",
-  "The mail server didn't accept the email.": "Փոստային սերվերը չընդունեց նամակը։",
-  "This student was sent several links in the last hour. Wait before sending another.": "Վերջին ժամում այս ուսանողին արդեն մի քանի հղում է ուղարկվել։ Սպասի՛ր՝ նորն ուղարկելուց առաջ։",
-  "Already invited? To send a new link, open the student below and click “Resend the invitation”.":
-    "Արդեն հրավիրվա՞ծ է։ Նոր հղում ուղարկելու համար բացի՛ր ուսանողին ստորև և սեղմի՛ր «Կրկին ուղարկել հրավերը»։",
-  "invited": "հրավիրված",
-  "invited, not signed in yet": "հրավիրված, դեռ մուտք չի գործել",
-  "Resend the invitation": "Կրկին ուղարկել հրավերը",
-  "A new invitation is on its way to {0}.": "Նոր հրավերն ուղարկվում է {0} հասցեին։",
-  "Email isn't set up on this server, so give this invitation link to the student yourself. It works once, for 7 days:":
-    "Այս սերվերում էլ. փոստը կարգավորված չէ, ուստի այս հրավերի հղումը ուսանողին տո՛ւր ինքդ։ Այն աշխատում է մեկ անգամ, 7 օրվա ընթացքում՝",
   "Invited a student": "Հրավիրեց ուսանողի",
   "Username must be 3-20 characters: letters, digits, underscore.": "Օգտանունը՝ 3-20 նիշ. տառեր, թվեր, ընդգծում։",
   "That doesn't look like an email address.": "Սա էլ. փոստի հասցե չի թվում։",
@@ -261,7 +229,7 @@ I18N.extend({
   "Video": "Տեսանյութ",
   "Lesson": "Դաս",
   "Here": "Այստեղ",
-  "To host one: {0}, then {1} (README.md → Lesson videos).": "Մեկը այստեղ պահելու համար՝ {0}, ապա {1} (README.md → Lesson videos)։",
+  "To host one: {0}, then {1} (see docs/content.md).": "Մեկը այստեղ պահելու համար՝ {0}, ապա {1} (տե՛ս docs/content.md)։",
 
   /* announcements */
   "New announcement": "Նոր հայտարարություն",

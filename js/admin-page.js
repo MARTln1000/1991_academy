@@ -740,7 +740,7 @@
         "<td><code>" + esc(r.v.id) + "</code></td>" +
         "<td>" + (r.hosted ? "✅ " + mb(r.size) : "—") + "</td></tr>").join("") +
       "</tbody></table></div></details>" +
-      '<p class="admin-hint">' + t("To host one: {0}, then {1} (README.md → Lesson videos).",
+      '<p class="admin-hint">' + t("To host one: {0}, then {1} (see docs/content.md).",
         "<code>make video SRC=… ID=&lt;YouTube id&gt;</code>", "<code>make media-upload TO=root@SERVER</code>") + "</p>");
   }
 
